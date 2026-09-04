@@ -8,6 +8,7 @@
 - [順位条件の扱い](docs/order-condition.md)
 - [M1 の結果](docs/m1-report.md)
 - [M2 の結果](docs/m2-report.md)
+- [M3 の結果](docs/m3-report.md)
 
 ## 開発
 
@@ -17,7 +18,10 @@ pnpm test        # 本家との突き合わせとスキル条件の網羅
 pnpm typecheck
 pnpm sim --count 1000 --location 10006 --course 10606
 pnpm bench --count 10000       # 並列実行の実測
+pnpm dev                       # UI の開発サーバ
+pnpm build                     # UI のビルド
+pnpm e2e                       # ビルドした UI を実際のブラウザで確認
 ```
 
-`packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータである。
+`packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータ、`apps/web` が UI である。
 計算モデルは [mee1080/umasim](https://github.com/mee1080/umasim) からの移植であり、本リポジトリも AGPL v3 とする。

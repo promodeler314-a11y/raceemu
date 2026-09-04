@@ -53,6 +53,24 @@ export function toSummaryEntry(results: readonly RaceSimulationResult[]): Summar
   };
 }
 
+/** 実行済みの結果から統計をまとめる。 */
+export function summarize(
+  results: readonly RaceSimulationResult[],
+  elapsedMs = Number.NaN,
+): SimulationSummary {
+  const spurt = results.filter((r) => r.maxSpurt);
+  const notSpurt = results.filter((r) => !r.maxSpurt);
+  return {
+    all: toSummaryEntry(results),
+    spurt: toSummaryEntry(spurt),
+    notSpurt: toSummaryEntry(notSpurt),
+    spurtRate: results.length === 0 ? Number.NaN : spurt.length / results.length,
+    finishRate:
+      results.length === 0 ? Number.NaN : results.filter((r) => r.goalSp >= 0).length / results.length,
+    elapsedMs,
+  };
+}
+
 export interface RunOptions {
   readonly count: number;
   readonly seed?: number;
@@ -76,18 +94,5 @@ export function runSimulations(
     results.push(calculator.simulate(setting, { seed, trial }).result);
   }
   const elapsedMs = performance.now() - started;
-  const spurt = results.filter((r) => r.maxSpurt);
-  const notSpurt = results.filter((r) => !r.maxSpurt);
-  return {
-    summary: {
-      all: toSummaryEntry(results),
-      spurt: toSummaryEntry(spurt),
-      notSpurt: toSummaryEntry(notSpurt),
-      spurtRate: results.length === 0 ? Number.NaN : spurt.length / results.length,
-      finishRate:
-        results.length === 0 ? Number.NaN : results.filter((r) => r.goalSp >= 0).length / results.length,
-      elapsedMs,
-    },
-    results,
-  };
+  return { summary: summarize(results, elapsedMs), results };
 }
