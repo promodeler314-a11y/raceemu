@@ -12,6 +12,7 @@
 - [M4 の結果](docs/m4-report.md)
 - [M5 の結果](docs/m5-report.md)
 - [M6 の結果](docs/m6-report.md)
+- [M7 の結果](docs/m7-report.md)
 
 ## 開発
 
@@ -25,6 +26,7 @@ pnpm dev                       # UI の開発サーバ
 pnpm build                     # UI のビルド
 pnpm e2e                       # ビルドした UI を実際のブラウザで確認
 pnpm monotonicity --trials 60  # 逆算の前提（単調性）の検査
+pnpm optimize --budget 600 --style SEN  # 組み合わせ探索の実測
 ```
 
 `packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータ、`packages/solver` が逆算と探索、`apps/web` が UI である。

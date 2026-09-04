@@ -4,6 +4,7 @@ import { SummaryOutput } from './components/Summary.tsx';
 import { FrameCharts } from './components/Charts.tsx';
 import { CompareOutput, ShareButton, SkillSummaryOutput } from './components/Compare.tsx';
 import { InversePanel } from './components/Inverse.tsx';
+import { OptimizePanel } from './components/Optimize.tsx';
 import { useStore } from './store.ts';
 
 export default function App() {
@@ -19,7 +20,7 @@ export default function App() {
           <div>
             <h1 className="text-base font-semibold">レースエミュレータ</h1>
             <p className="text-xs text-neutral-500 dark:text-neutral-400">
-              mee1080/umasim の計算モデルを移植したもの。順位条件は満たしている前提で扱う。
+              mee1080/umasim の計算モデルを移植したもの。順位条件の判定、逆算、組み合わせ探索を足してある。
             </p>
           </div>
           <ShareButton />
@@ -32,6 +33,7 @@ export default function App() {
           <SkillInput />
           <RunPanel />
           <InversePanel />
+          <OptimizePanel />
         </div>
         <div className="space-y-4">
           <SummaryOutput />

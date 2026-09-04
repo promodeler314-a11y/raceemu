@@ -122,6 +122,37 @@ for (let i = 1; i < values.length; i++) {
   if (values[i] < values[i - 1]) fail('達成率が上がったのに必要な値が下がっている');
 }
 
+// 組み合わせ探索: 候補を選び、予算に収まる構成が返ることを確かめる
+await page.click('button:has-text("すべて外す")');
+for (const skillName of ['中距離コーナー○', '中距離直線○', '一匹狼']) {
+  await page.fill('input[placeholder="スキル名で検索"]', skillName);
+  await page.click(`button:has-text("${skillName}")`);
+  await page.fill('input[placeholder="スキル名で検索"]', '');
+}
+await page.fill('input[type=number][max="20000"][step="50"]', '250');
+await page.click('button:has-text("探索する")');
+await page.waitForFunction(
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('探索中')),
+  null,
+  { timeout: 300000 },
+);
+await page.waitForTimeout(300);
+const optimizeSection = 'section:has(h2:text("組み合わせ探索"))';
+const bestText = await page.textContent(`${optimizeSection} p:has(strong)`);
+const bestCost = Number(/（(\d+) pt/.exec(await page.textContent(`${optimizeSection} h3`))[1]);
+console.log('--- 組み合わせ探索');
+console.log(' ', (await page.textContent(`${optimizeSection} h3`)).trim());
+console.log(' ', bestText.trim());
+const singleRows = await page.$$eval(
+  `${optimizeSection} table >> nth=1 >> tr`,
+  (trs) => trs.slice(1).map((tr) => [...tr.querySelectorAll('td')].map((c) => c.textContent?.trim())),
+);
+for (const row of singleRows) console.log('  単体', row.join(' | '));
+if (!(bestCost <= 250)) fail(`予算を超えた構成が返った: ${bestCost} pt`);
+if (singleRows.length !== 3) fail(`単体評価の行数が想定と違う: ${singleRows.length}`);
+await page.locator(optimizeSection).screenshot({ path: 'docs/images/m7-optimize.png' });
+await page.click('button:has-text("すべて外す")');
+
 // 比較: 設定を変えてもう一度実行し、2 列並ぶことを確かめる
 await page.click('button:has-text("いまの結果を保存")');
 await page.fill('input[type=number][max="2500"] >> nth=0', '1400');

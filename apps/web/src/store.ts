@@ -13,6 +13,8 @@ import {
 import { summarize, type SimulationSummary } from '../../../packages/sim/src/summary.ts';
 import { buildFieldBundle, defaultFieldProfile } from '../../../packages/sim/src/field/field.ts';
 import { resolveMethod } from '../../../packages/solver/src/critical.ts';
+import { createCostModel } from '../../../packages/solver/src/cost.ts';
+import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
@@ -21,6 +23,9 @@ export const gameData = loadGameData();
 const system = defaultSystemSetting();
 
 /** 名前ごとに 1 つだけ持つスキル一覧。UI の選択肢に使う。 */
+/** スキルポイントの費用。ヒントによる割引は今のところ扱わない。 */
+export const costModel = createCostModel(gameData.skillsById);
+
 export const skillChoices = [...gameData.skillsByName.entries()]
   .map(([name, list]) => ({ name, skill: list[0]! }))
   .sort((a, b) => a.name.localeCompare(b.name, 'ja'));
@@ -82,6 +87,11 @@ interface AppState {
   /** 順位条件を実際に判定するか。false なら本家と同じく満たしている前提。 */
   useField: boolean;
 
+  optimizeBudget: number;
+  optimizeResult: OptimizeResult | null;
+  optimizeLog: string[];
+  optimizeRunning: boolean;
+
   setUma: (patch: Partial<UmaStatus>) => void;
   setTrack: (patch: Partial<TrackRef>) => void;
   toggleSkill: (id: string) => void;
@@ -97,6 +107,8 @@ interface AppState {
   saveSnapshot: () => void;
   removeSnapshot: (id: number) => void;
   restoreSnapshot: (id: number) => void;
+  setOptimizeBudget: (budget: number) => void;
+  runOptimize: () => Promise<void>;
   shareUrl: () => string;
   applyShared: () => boolean;
 }
@@ -140,6 +152,11 @@ export const useStore = create<AppState>((set, get) => ({
   inverseResult: null,
   useField: false,
 
+  optimizeBudget: 600,
+  optimizeResult: null,
+  optimizeLog: [],
+  optimizeRunning: false,
+
   setUma: (patch) => set((s) => ({ uma: { ...s.uma, ...patch } })),
   setTrack: (patch) => set((s) => ({ track: { ...s.track, ...patch } })),
   toggleSkill: (id) =>
@@ -150,6 +167,7 @@ export const useStore = create<AppState>((set, get) => ({
   setCount: (count) => set({ count }),
   setUseField: (useField) => set({ useField }),
   setSeed: (seed) => set({ seed }),
+  setOptimizeBudget: (optimizeBudget) => set({ optimizeBudget }),
 
   run: async () => {
     const state = get();
@@ -289,6 +307,50 @@ export const useStore = create<AppState>((set, get) => ({
     const snapshot = get().snapshots.find((x) => x.id === id);
     if (snapshot === undefined) return;
     set({ uma: snapshot.uma, track: snapshot.track, skillIds: [...snapshot.skillIds] });
+  },
+
+  /**
+   * いま選んでいるスキルを候補の集合として、予算に収まる最良の組み合わせを探す。
+   *
+   * 候補どうしの比較は同じ試行番号どうしの引き算で行う。
+   * 効かないスキルを足したときの差は厳密に 0 になるので、
+   * 何千本も走らせなくても順序が付く。
+   */
+  runOptimize: async () => {
+    const state = get();
+    if (state.running || state.optimizeRunning) return;
+    if (state.skillIds.length < 2) {
+      set({ error: '候補にするスキルを 2 つ以上選ぶ' });
+      return;
+    }
+    controller = new AbortController();
+    set({ optimizeRunning: true, error: null, optimizeResult: null, optimizeLog: [] });
+    try {
+      const result = await optimizeSkills(
+        {
+          pool: getPool(),
+          system,
+          base: toSerializable({ ...buildSetting(state), skills: [] }),
+          cost: costModel,
+          seed: state.seed,
+          field: fieldSpec(state),
+        },
+        {
+          candidates: [...state.skillIds],
+          budget: state.optimizeBudget,
+          signal: controller.signal,
+          onProgress: (message) => set((s) => ({ optimizeLog: [...s.optimizeLog, message] })),
+        },
+      );
+      set({ optimizeResult: result });
+    } catch (error) {
+      if (!(error instanceof SimulationCancelled)) {
+        set({ error: error instanceof Error ? error.message : String(error) });
+      }
+    } finally {
+      set({ optimizeRunning: false });
+      controller = null;
+    }
   },
 
   shareUrl: () => {
