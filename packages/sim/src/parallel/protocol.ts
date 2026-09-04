@@ -159,5 +159,38 @@ export interface ErrorResponse {
   readonly message: string;
 }
 
-export type WorkerRequest = ChunkRequest;
-export type WorkerResponse = ChunkResponse | ErrorResponse;
+/**
+ * 逆算の依頼。ステータスを動かして目標を満たす最小値を試行ごとに求める。
+ * 探し方は solver 側で決めて渡す。
+ */
+export interface CriticalRequest {
+  readonly kind: 'critical';
+  readonly id: number;
+  readonly setting: SerializableRaceSetting;
+  readonly system: SystemSetting;
+  readonly seed: number;
+  readonly from: number;
+  readonly count: number;
+  readonly critical: CriticalSpec;
+}
+
+export interface CriticalSpec {
+  readonly status: 'speed' | 'stamina' | 'power' | 'guts' | 'wisdom';
+  readonly goalKind: 'maxSpurt' | 'finish' | 'goalSp';
+  readonly goalValue?: number;
+  readonly from: number;
+  readonly to: number;
+  readonly step: number;
+  readonly method: 'bisect' | 'scan';
+}
+
+export interface CriticalResponse {
+  readonly kind: 'critical';
+  readonly id: number;
+  /** 試行ごとの臨界値。達成できなければ NaN。 */
+  readonly values: Float64Array;
+  readonly races: number;
+}
+
+export type WorkerRequest = ChunkRequest | CriticalRequest;
+export type WorkerResponse = ChunkResponse | CriticalResponse | ErrorResponse;

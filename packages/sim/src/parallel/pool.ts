@@ -4,7 +4,10 @@ import {
   SKILL_STAT_FIELDS,
   unpackResults,
   type ChunkRequest,
+  type CriticalRequest,
+  type CriticalSpec,
   type SerializableRaceSetting,
+  type WorkerRequest,
   type WorkerResponse,
 } from './protocol.ts';
 
@@ -13,7 +16,7 @@ import {
  * 生成と破棄の書き方が違うだけなので、この 3 つのメソッドで吸収する。
  */
 export interface WorkerHandle {
-  post(request: ChunkRequest): void;
+  post(request: WorkerRequest): void;
   onMessage(handler: (response: WorkerResponse) => void): void;
   terminate(): Promise<void> | void;
 }
@@ -31,6 +34,11 @@ export interface RunOptions {
   readonly chunkSize?: number;
   readonly onProgress?: (done: number, total: number) => void;
   readonly signal?: AbortSignal;
+}
+
+export interface CriticalOutput {
+  readonly values: Float64Array;
+  readonly races: number;
 }
 
 export interface RunOutput {
@@ -82,25 +90,23 @@ export class WorkerPool {
     }
   }
 
-  /** 同じ設定を count 回走らせる。試行 i の結果は seed と i だけで決まる。 */
-  async run(
-    setting: SerializableRaceSetting,
-    system: SystemSetting,
-    options: RunOptions,
-  ): Promise<RunOutput> {
-    const total = options.count;
-    const skillStats = new Float64Array(setting.skillIds.length * SKILL_STAT_FIELDS);
-    if (total <= 0) return { results: [], skillStats };
+  /**
+   * 塊に割った仕事を、空いた Worker へ順に配る。
+   * 依頼の作り方と結果の取り込み方だけを呼び出し側から受け取る。
+   */
+  private async dispatchAll(
+    total: number,
+    chunkSize: number,
+    options: Pick<RunOptions, 'onProgress' | 'signal'>,
+    makeRequest: (id: number, from: number, count: number) => WorkerRequest,
+    collect: (response: Exclude<WorkerResponse, { kind: 'error' }>, from: number, count: number) => void,
+  ): Promise<void> {
     this.ensureWorkers();
-
-    const seed = options.seed ?? 1;
-    const chunkSize = Math.max(1, options.chunkSize ?? 256);
     const chunks: Pending[] = [];
     for (let from = 0; from < total; from += chunkSize) {
       chunks.push({ from, count: Math.min(chunkSize, total - from) });
     }
 
-    const results: RaceSimulationResult[] = new Array(total);
     let nextChunk = 0;
     let done = 0;
     let active = 0;
@@ -140,22 +146,84 @@ export class WorkerPool {
             return;
           }
           const target = chunks[response.id]!;
-          const unpacked = unpackResults(response.packed);
-          for (let j = 0; j < unpacked.length; j++) results[target.from + j] = unpacked[j]!;
-          for (let j = 0; j < skillStats.length; j++) skillStats[j] += response.skillStats[j] ?? 0;
+          collect(response, target.from, target.count);
           done += target.count;
           options.onProgress?.(done, total);
           dispatch(worker);
         });
-        worker.post({ kind: 'chunk', id, setting, system, seed, from: chunk.from, count: chunk.count });
+        worker.post(makeRequest(id, chunk.from, chunk.count));
       };
 
       const available = this.idle.splice(0, this.idle.length);
       for (const worker of available) dispatch(worker);
       if (active === 0 && !settled) finish();
     });
+  }
+
+  /** 同じ設定を count 回走らせる。試行 i の結果は seed と i だけで決まる。 */
+  async run(
+    setting: SerializableRaceSetting,
+    system: SystemSetting,
+    options: RunOptions,
+  ): Promise<RunOutput> {
+    const total = options.count;
+    const skillStats = new Float64Array(setting.skillIds.length * SKILL_STAT_FIELDS);
+    if (total <= 0) return { results: [], skillStats };
+    const seed = options.seed ?? 1;
+    const results: RaceSimulationResult[] = new Array(total);
+
+    await this.dispatchAll(
+      total,
+      Math.max(1, options.chunkSize ?? 256),
+      options,
+      (id, from, count): ChunkRequest => ({ kind: 'chunk', id, setting, system, seed, from, count }),
+      (response, from) => {
+        if (response.kind !== 'chunk') return;
+        const unpacked = unpackResults(response.packed);
+        for (let j = 0; j < unpacked.length; j++) results[from + j] = unpacked[j]!;
+        for (let j = 0; j < skillStats.length; j++) skillStats[j] += response.skillStats[j] ?? 0;
+      },
+    );
 
     return { results, skillStats };
+  }
+
+  /** 試行ごとの臨界値を求める。 */
+  async runCritical(
+    setting: SerializableRaceSetting,
+    system: SystemSetting,
+    spec: CriticalSpec,
+    options: RunOptions,
+  ): Promise<CriticalOutput> {
+    const total = options.count;
+    if (total <= 0) return { values: new Float64Array(0), races: 0 };
+    const seed = options.seed ?? 1;
+    const values = new Float64Array(total);
+    let races = 0;
+
+    await this.dispatchAll(
+      total,
+      // 1 試行あたり十数本から百数十本走るので、塊は小さめにする
+      Math.max(1, options.chunkSize ?? 32),
+      options,
+      (id, from, count): CriticalRequest => ({
+        kind: 'critical',
+        id,
+        setting,
+        system,
+        seed,
+        from,
+        count,
+        critical: spec,
+      }),
+      (response, from) => {
+        if (response.kind !== 'critical') return;
+        values.set(response.values, from);
+        races += response.races;
+      },
+    );
+
+    return { values, races };
   }
 
   async dispose(): Promise<void> {

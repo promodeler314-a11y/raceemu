@@ -3,6 +3,7 @@ import { CourseInput, RunPanel, SkillInput, UmaInput } from './components/Inputs
 import { SummaryOutput } from './components/Summary.tsx';
 import { FrameCharts } from './components/Charts.tsx';
 import { CompareOutput, ShareButton, SkillSummaryOutput } from './components/Compare.tsx';
+import { InversePanel } from './components/Inverse.tsx';
 import { useStore } from './store.ts';
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
           <UmaInput />
           <SkillInput />
           <RunPanel />
+          <InversePanel />
         </div>
         <div className="space-y-4">
           <SummaryOutput />

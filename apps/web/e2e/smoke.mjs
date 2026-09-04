@@ -77,6 +77,25 @@ if (skillRows.length !== 3) fail(`スキルの行数が想定と違う: ${skillR
 
 console.log('uPlot の図の数:', await page.locator('.u-wrap').count());
 
+// 逆算: 最大スパートに必要なスタミナを求める
+await page.selectOption('select:below(:text("目標"))', { index: 0 }).catch(() => {});
+await page.fill('input[type=number][max="20000"]', '300');
+await page.click('button:has-text("逆算する")');
+await page.waitForFunction(
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('計算中')),
+  null,
+  { timeout: 180000 },
+);
+await page.waitForTimeout(300);
+const inverseRows = await readTable('逆算');
+console.log('--- 逆算（最大スパートに必要なスタミナ）');
+for (const row of inverseRows) console.log(' ', row.join(' | '));
+if (inverseRows.length < 5) fail('逆算の表が出ていない');
+const values = inverseRows.slice(1).map((r) => Number(r[1]));
+for (let i = 1; i < values.length; i++) {
+  if (values[i] < values[i - 1]) fail('達成率が上がったのに必要な値が下がっている');
+}
+
 // 比較: 設定を変えてもう一度実行し、2 列並ぶことを確かめる
 await page.click('button:has-text("いまの結果を保存")');
 await page.fill('input[type=number][max="2500"] >> nth=0', '1400');

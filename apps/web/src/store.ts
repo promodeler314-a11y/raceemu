@@ -11,6 +11,8 @@ import {
   type UmaStatus,
 } from '../../../packages/sim/src/setting.ts';
 import { summarize, type SimulationSummary } from '../../../packages/sim/src/summary.ts';
+import { resolveMethod } from '../../../packages/solver/src/critical.ts';
+import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
@@ -38,6 +40,18 @@ export interface Snapshot {
   readonly skillSummaries: readonly SkillSummary[];
 }
 
+export interface InverseResult {
+  readonly status: TargetStatus;
+  readonly goal: Goal;
+  readonly values: Float64Array;
+  readonly races: number;
+  readonly elapsedMs: number;
+  readonly from: number;
+  readonly to: number;
+  readonly step: number;
+  readonly method: 'bisect' | 'scan';
+}
+
 export interface DetailData {
   readonly trial: number;
   readonly frames: readonly RaceFrame[];
@@ -60,6 +74,10 @@ interface AppState {
   skillSummaries: SkillSummary[];
   detail: DetailData | null;
   snapshots: Snapshot[];
+  inverseStatus: TargetStatus;
+  inverseGoal: Goal;
+  inverseCount: number;
+  inverseResult: InverseResult | null;
 
   setUma: (patch: Partial<UmaStatus>) => void;
   setTrack: (patch: Partial<TrackRef>) => void;
@@ -70,6 +88,8 @@ interface AppState {
   run: () => Promise<void>;
   cancel: () => void;
   showTrial: (trial: number) => void;
+  setInverse: (patch: { status?: TargetStatus; goal?: Goal; count?: number }) => void;
+  solveInverse: () => Promise<void>;
   saveSnapshot: () => void;
   removeSnapshot: (id: number) => void;
   restoreSnapshot: (id: number) => void;
@@ -110,6 +130,10 @@ export const useStore = create<AppState>((set, get) => ({
   skillSummaries: [],
   detail: null,
   snapshots: [],
+  inverseStatus: 'stamina',
+  inverseGoal: { kind: 'maxSpurt' },
+  inverseCount: 500,
+  inverseResult: null,
 
   setUma: (patch) => set((s) => ({ uma: { ...s.uma, ...patch } })),
   setTrack: (patch) => set((s) => ({ track: { ...s.track, ...patch } })),
@@ -165,6 +189,68 @@ export const useStore = create<AppState>((set, get) => ({
       recordFrames: true,
     });
     set({ detail: { trial, frames: raceState.simulation.frames, state: raceState } });
+  },
+
+  setInverse: (patch) =>
+    set((s) => ({
+      inverseStatus: patch.status ?? s.inverseStatus,
+      inverseGoal: patch.goal ?? s.inverseGoal,
+      inverseCount: patch.count ?? s.inverseCount,
+    })),
+
+  solveInverse: async () => {
+    const state = get();
+    if (state.running) return;
+    controller = new AbortController();
+    set({ running: true, progress: 0, error: null, inverseResult: null });
+    const started = performance.now();
+    // 探索範囲は 200 から 1600 まで 10 刻み。ステータスの現実的な幅に合わせる。
+    const from = 200;
+    const to = 1600;
+    const step = 10;
+    const goal = state.inverseGoal;
+    const method = resolveMethod({ status: state.inverseStatus, goal, from, to, step });
+    try {
+      const { values, races } = await getPool().runCritical(
+        toSerializable(buildSetting(state)),
+        system,
+        {
+          status: state.inverseStatus,
+          goalKind: goal.kind,
+          goalValue: goal.kind === 'goalSp' ? goal.atLeast : undefined,
+          from,
+          to,
+          step,
+          method,
+        },
+        {
+          count: state.inverseCount,
+          seed: state.seed,
+          onProgress: (done) => set({ progress: done }),
+          signal: controller.signal,
+        },
+      );
+      set({
+        inverseResult: {
+          status: state.inverseStatus,
+          goal,
+          values,
+          races,
+          elapsedMs: performance.now() - started,
+          from,
+          to,
+          step,
+          method,
+        },
+      });
+    } catch (error) {
+      if (!(error instanceof SimulationCancelled)) {
+        set({ error: error instanceof Error ? error.message : String(error) });
+      }
+    } finally {
+      set({ running: false, progress: 0 });
+      controller = null;
+    }
   },
 
   saveSnapshot: () => {

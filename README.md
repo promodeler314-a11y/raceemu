@@ -10,6 +10,7 @@
 - [M2 の結果](docs/m2-report.md)
 - [M3 の結果](docs/m3-report.md)
 - [M4 の結果](docs/m4-report.md)
+- [M5 の結果](docs/m5-report.md)
 
 ## 開発
 
@@ -22,7 +23,8 @@ pnpm bench --count 10000       # 並列実行の実測
 pnpm dev                       # UI の開発サーバ
 pnpm build                     # UI のビルド
 pnpm e2e                       # ビルドした UI を実際のブラウザで確認
+pnpm monotonicity --trials 60  # 逆算の前提（単調性）の検査
 ```
 
-`packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータ、`apps/web` が UI である。
+`packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータ、`packages/solver` が逆算と探索、`apps/web` が UI である。
 計算モデルは [mee1080/umasim](https://github.com/mee1080/umasim) からの移植であり、本リポジトリも AGPL v3 とする。
