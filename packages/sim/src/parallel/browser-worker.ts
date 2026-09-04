@@ -8,7 +8,7 @@ const data = loadGameData();
 self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   try {
-    const packed = runChunk(
+    const { packed, skillStats } = runChunk(
       data,
       request.setting,
       request.system,
@@ -16,7 +16,10 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
       request.from,
       request.count,
     );
-    (self as unknown as Worker).postMessage({ kind: 'chunk', id: request.id, packed }, [packed.buffer as ArrayBuffer]);
+    (self as unknown as Worker).postMessage(
+      { kind: 'chunk', id: request.id, packed, skillStats },
+      [packed.buffer as ArrayBuffer, skillStats.buffer as ArrayBuffer],
+    );
   } catch (error) {
     (self as unknown as Worker).postMessage({
       kind: 'error',

@@ -15,6 +15,14 @@ import type { DerivedSetting, DebuffType, SystemSetting } from './setting.ts';
 import { approximateConditions } from './skill/approximate.ts';
 import type { Invoke, SkillData } from './skill/types.ts';
 
+/** スキルごとの発動記録。フレーム列を残さずに集計するために持つ。 */
+export interface SkillTraceEntry {
+  count: number;
+  firstPosition: number;
+  secondPosition: number;
+  firstPhase: number;
+}
+
 export interface SpurtParameters {
   readonly distance: number;
   readonly speed: number;
@@ -176,6 +184,8 @@ export class RaceSimulationState {
   fullSpurtRandomPosition = new Map<string, number>();
 
   invokedSkills: InvokedSkill[] = [];
+  /** スキル ID から発動記録へ。発動は稀なので、記録の費用は無視できる。 */
+  skillTrace = new Map<string, SkillTraceEntry>();
   coolDownMap = new Map<string, number>();
   skillTriggerCount = new SkillTriggerCount();
   passiveTriggered = 0;

@@ -33,7 +33,7 @@ export function CourseInput() {
 
   return (
     <Panel title="コース">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="レース場">
           <select
             className={fieldCls}
@@ -143,14 +143,14 @@ export function UmaInput() {
 
   return (
     <Panel title="ウマ娘">
-      <div className="grid grid-cols-5 gap-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {stat('speed', 'スピード')}
         {stat('stamina', 'スタミナ')}
         {stat('power', 'パワー')}
         {stat('guts', '根性')}
         {stat('wisdom', '賢さ')}
       </div>
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
         <Field label="脚質">
           <select
             className={fieldCls}
@@ -264,7 +264,7 @@ export function RunPanel() {
   const { count, seed, running, progress, setCount, setSeed, run, cancel, error } = useStore();
   return (
     <Panel title="実行">
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="試行回数">
           <input
             type="number"

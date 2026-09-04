@@ -1017,6 +1017,19 @@ export function triggerSkill(state: RaceState, skill: InvokedSkill): TriggeredSk
   simulation.skillTriggerCount.increment(state);
   simulation.coolDownMap.set(skill.invoke.coolDownId, simulation.frameElapsed);
 
+  const traced = simulation.skillTrace.get(skill.skill.id);
+  if (traced === undefined) {
+    simulation.skillTrace.set(skill.skill.id, {
+      count: 1,
+      firstPosition: simulation.startPosition,
+      secondPosition: Number.NaN,
+      firstPhase: state.currentPhase,
+    });
+  } else {
+    traced.count++;
+    if (traced.count === 2) traced.secondPosition = simulation.startPosition;
+  }
+
   const result: TriggeredSkill[] = [{ invoke: skill, operating, heal, waste }];
   for (const other of skill.invoke.invokeOtherSkill(state)) {
     const otherInvoke = other.invokes[0];

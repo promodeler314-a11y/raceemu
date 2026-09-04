@@ -1,6 +1,7 @@
 import type { SystemSetting } from '../setting.ts';
 import type { RaceSimulationResult } from '../state.ts';
 import {
+  SKILL_STAT_FIELDS,
   unpackResults,
   type ChunkRequest,
   type SerializableRaceSetting,
@@ -30,6 +31,12 @@ export interface RunOptions {
   readonly chunkSize?: number;
   readonly onProgress?: (done: number, total: number) => void;
   readonly signal?: AbortSignal;
+}
+
+export interface RunOutput {
+  readonly results: RaceSimulationResult[];
+  /** スキルごとの集計。設定のスキル順に並ぶ。 */
+  readonly skillStats: Float64Array;
 }
 
 export class SimulationCancelled extends Error {
@@ -80,9 +87,10 @@ export class WorkerPool {
     setting: SerializableRaceSetting,
     system: SystemSetting,
     options: RunOptions,
-  ): Promise<RaceSimulationResult[]> {
+  ): Promise<RunOutput> {
     const total = options.count;
-    if (total <= 0) return [];
+    const skillStats = new Float64Array(setting.skillIds.length * SKILL_STAT_FIELDS);
+    if (total <= 0) return { results: [], skillStats };
     this.ensureWorkers();
 
     const seed = options.seed ?? 1;
@@ -134,6 +142,7 @@ export class WorkerPool {
           const target = chunks[response.id]!;
           const unpacked = unpackResults(response.packed);
           for (let j = 0; j < unpacked.length; j++) results[target.from + j] = unpacked[j]!;
+          for (let j = 0; j < skillStats.length; j++) skillStats[j] += response.skillStats[j] ?? 0;
           done += target.count;
           options.onProgress?.(done, total);
           dispatch(worker);
@@ -146,7 +155,7 @@ export class WorkerPool {
       if (active === 0 && !settled) finish();
     });
 
-    return results;
+    return { results, skillStats };
   }
 
   async dispose(): Promise<void> {

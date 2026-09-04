@@ -9,6 +9,7 @@
 - [M1 の結果](docs/m1-report.md)
 - [M2 の結果](docs/m2-report.md)
 - [M3 の結果](docs/m3-report.md)
+- [M4 の結果](docs/m4-report.md)
 
 ## 開発
 

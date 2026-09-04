@@ -3,7 +3,12 @@ import { loadGameData } from '../../data/src/node.ts';
 import { RaceCalculator } from '../src/calculator.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { SimulationCancelled, WorkerPool } from '../src/parallel/pool.ts';
-import { toSerializable } from '../src/parallel/protocol.ts';
+import {
+  SKILL_STAT,
+  SKILL_STAT_FIELDS,
+  toSerializable,
+  toSkillSummaries,
+} from '../src/parallel/protocol.ts';
 import { defaultSystemSetting, type RaceSetting } from '../src/setting.ts';
 
 const data = loadGameData();
@@ -56,7 +61,7 @@ describe('並列実行', () => {
     const expected = runSingle(count, seed);
     const pool = new WorkerPool(nodeWorkerFactory, 3);
     try {
-      const results = await pool.run(serializable, system, { count, seed, chunkSize: 64 });
+      const { results } = await pool.run(serializable, system, { count, seed, chunkSize: 64 });
       expect(results.map((r) => r.raceTime)).toEqual(expected);
     } finally {
       await pool.dispose();
@@ -68,8 +73,8 @@ describe('並列実行', () => {
     const seed = 777;
     const pool = new WorkerPool(nodeWorkerFactory, 2);
     try {
-      const a = await pool.run(serializable, system, { count, seed, chunkSize: 16 });
-      const b = await pool.run(serializable, system, { count, seed, chunkSize: 256 });
+      const a = (await pool.run(serializable, system, { count, seed, chunkSize: 16 })).results;
+      const b = (await pool.run(serializable, system, { count, seed, chunkSize: 256 })).results;
       expect(a.map((r) => r.raceTime)).toEqual(b.map((r) => r.raceTime));
     } finally {
       await pool.dispose();
@@ -79,9 +84,9 @@ describe('並列実行', () => {
   it('プールを使い回しても結果が変わらない', async () => {
     const pool = new WorkerPool(nodeWorkerFactory, 2);
     try {
-      const a = await pool.run(serializable, system, { count: 120, seed: 5, chunkSize: 32 });
+      const a = (await pool.run(serializable, system, { count: 120, seed: 5, chunkSize: 32 })).results;
       await pool.run(serializable, system, { count: 50, seed: 99 });
-      const b = await pool.run(serializable, system, { count: 120, seed: 5, chunkSize: 32 });
+      const b = (await pool.run(serializable, system, { count: 120, seed: 5, chunkSize: 32 })).results;
       expect(a.map((r) => r.goalSp)).toEqual(b.map((r) => r.goalSp));
     } finally {
       await pool.dispose();
@@ -104,6 +109,46 @@ describe('並列実行', () => {
       });
       expect(seen[seen.length - 1]).toBe(count);
       expect([...seen].sort((a, b) => a - b)).toEqual(seen);
+    } finally {
+      await pool.dispose();
+    }
+  });
+
+  it('スキルごとの集計が試行数と整合する', async () => {
+    const count = 500;
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const { skillStats } = await pool.run(serializable, system, { count, seed: 3, chunkSize: 64 });
+      const summaries = toSkillSummaries(serializable.skillIds, skillStats, count);
+      expect(summaries).toHaveLength(2);
+      for (const summary of summaries) {
+        expect(summary.triggerRate).toBeGreaterThan(0);
+        expect(summary.triggerRate).toBeLessThanOrEqual(1);
+        expect(summary.doubleTriggerRate).toBeLessThanOrEqual(summary.triggerRate);
+        const phaseSum = summary.phaseRates.reduce((a, b) => a + b, 0);
+        expect(phaseSum).toBeCloseTo(1, 6);
+      }
+    } finally {
+      await pool.dispose();
+    }
+  });
+
+  it('塊の分け方でスキル集計が変わらない', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 3);
+    try {
+      const a = await pool.run(serializable, system, { count: 300, seed: 8, chunkSize: 16 });
+      const b = await pool.run(serializable, system, { count: 300, seed: 8, chunkSize: 300 });
+      // 発動回数は整数なので完全に一致する。
+      // 位置の合計は加算の順序が変わるぶん最下位の桁がずれるため、相対誤差で見る。
+      for (let i = 0; i < a.skillStats.length; i++) {
+        const field = i % SKILL_STAT_FIELDS;
+        const isCount =
+          field === SKILL_STAT.triggered ||
+          field === SKILL_STAT.doubleTriggered ||
+          field >= SKILL_STAT.phase0;
+        if (isCount) expect(a.skillStats[i]).toBe(b.skillStats[i]);
+        else expect(a.skillStats[i]!).toBeCloseTo(b.skillStats[i]!, 6);
+      }
     } finally {
       await pool.dispose();
     }

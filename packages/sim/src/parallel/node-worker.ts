@@ -10,7 +10,7 @@ const data = loadGameData();
 
 port.on('message', (request: WorkerRequest) => {
   try {
-    const packed = runChunk(
+    const { packed, skillStats } = runChunk(
       data,
       request.setting,
       request.system,
@@ -18,7 +18,10 @@ port.on('message', (request: WorkerRequest) => {
       request.from,
       request.count,
     );
-    port.postMessage({ kind: 'chunk', id: request.id, packed }, [packed.buffer as ArrayBuffer]);
+    port.postMessage(
+      { kind: 'chunk', id: request.id, packed, skillStats },
+      [packed.buffer as ArrayBuffer, skillStats.buffer as ArrayBuffer],
+    );
   } catch (error) {
     port.postMessage({
       kind: 'error',

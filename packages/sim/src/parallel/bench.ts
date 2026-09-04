@@ -65,11 +65,11 @@ for (const concurrency of levels) {
   const pool = new WorkerPool(nodeWorkerFactory, concurrency);
   try {
     const coldStart = performance.now();
-    const first = await pool.run(serializable, system, { count, seed: 1 });
+    const first = (await pool.run(serializable, system, { count, seed: 1 })).results;
     const cold = performance.now() - coldStart;
 
     const warmStart = performance.now();
-    const second = await pool.run(serializable, system, { count, seed: 1 });
+    const second = (await pool.run(serializable, system, { count, seed: 1 })).results;
     const warm = performance.now() - warmStart;
 
     const summary = toSummaryEntry(first);

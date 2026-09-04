@@ -98,6 +98,59 @@ export interface ChunkResponse {
   readonly kind: 'chunk';
   readonly id: number;
   readonly packed: Float64Array;
+  /** スキルごとの集計。設定のスキル順に SKILL_STAT_FIELDS 個ずつ並ぶ。 */
+  readonly skillStats: Float64Array;
+}
+
+/** スキル 1 つあたりに集計する値の数 */
+export const SKILL_STAT_FIELDS = 8;
+
+export const SKILL_STAT = {
+  triggered: 0,
+  sumFirstPosition: 1,
+  doubleTriggered: 2,
+  sumSecondPosition: 3,
+  phase0: 4,
+  phase1: 5,
+  phase2: 6,
+  phase3: 7,
+} as const;
+
+export interface SkillSummary {
+  readonly skillId: string;
+  readonly trials: number;
+  readonly triggerRate: number;
+  readonly averageFirstPosition: number;
+  readonly doubleTriggerRate: number;
+  readonly averageSecondPosition: number;
+  /** 初回発動がどのフェーズだったかの割合。添字はフェーズ番号。 */
+  readonly phaseRates: readonly number[];
+}
+
+export function toSkillSummaries(
+  skillIds: readonly string[],
+  stats: Float64Array,
+  trials: number,
+): SkillSummary[] {
+  return skillIds.map((skillId, i) => {
+    const at = (field: number) => stats[i * SKILL_STAT_FIELDS + field] ?? 0;
+    const triggered = at(SKILL_STAT.triggered);
+    const doubled = at(SKILL_STAT.doubleTriggered);
+    return {
+      skillId,
+      trials,
+      triggerRate: trials === 0 ? 0 : triggered / trials,
+      averageFirstPosition: triggered === 0 ? Number.NaN : at(SKILL_STAT.sumFirstPosition) / triggered,
+      doubleTriggerRate: trials === 0 ? 0 : doubled / trials,
+      averageSecondPosition: doubled === 0 ? Number.NaN : at(SKILL_STAT.sumSecondPosition) / doubled,
+      phaseRates: [
+        triggered === 0 ? 0 : at(SKILL_STAT.phase0) / triggered,
+        triggered === 0 ? 0 : at(SKILL_STAT.phase1) / triggered,
+        triggered === 0 ? 0 : at(SKILL_STAT.phase2) / triggered,
+        triggered === 0 ? 0 : at(SKILL_STAT.phase3) / triggered,
+      ],
+    };
+  });
 }
 
 export interface ErrorResponse {
