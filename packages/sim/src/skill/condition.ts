@@ -1,4 +1,5 @@
 import { horseLane, styleValue, conditionValue } from '../data/constants.ts';
+import { orderRateBoundaries } from '../data/orderRate.ts';
 import type { Corner, Straight } from '../data/track.ts';
 import type { Rng, RngSet } from '../rng.ts';
 import type { DerivedSetting, RandomPosition } from '../setting.ts';
@@ -359,6 +360,33 @@ function compileCondition(
 
     case 'is_activate_other_skill_detail':
       return withAssert(condition, '==', 1, () => (s) => s.simulation.coolDownMap.has(skill.id));
+
+    case 'order':
+      // フィールドが無いときは、本家と同じく満たしている前提にする。
+      return (state) => {
+        const order = state.order;
+        return order === null ? true : condition.check(order);
+      };
+
+    case 'order_rate': {
+      const gateCount = base.track.gateCount;
+      const boundary = orderRateBoundaries[`${condition.operator}:${condition.value}:${gateCount}`];
+      if (boundary === undefined) {
+        // 対応表は 9 頭立てと 12 頭立てだけを埋めてある。
+        // それ以外の頭数や未知の条件は、従来どおり満たしている前提にする。
+        unsupportedConditions.add(`order_rate ${condition.operator} ${condition.value} (${gateCount}頭)`);
+        return () => true;
+      }
+      const atLeast = boundary.atLeast;
+      const atMost = boundary.atMost;
+      return (state) => {
+        const order = state.order;
+        if (order === null) return true;
+        if (atLeast !== undefined) return order >= atLeast;
+        if (atMost !== undefined) return order <= atMost;
+        return true;
+      };
+    }
 
     case 'popularity':
       return preChecked(condition, base.uma.popularity);

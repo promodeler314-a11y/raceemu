@@ -13,3 +13,5 @@ export * from './parallel/protocol.ts';
 export * from './parallel/runner.ts';
 export { WorkerPool, SimulationCancelled } from './parallel/pool.ts';
 export type { WorkerFactory, WorkerHandle, RunOptions } from './parallel/pool.ts';
+export * from './field/field.ts';
+export { orderRateBoundaries } from './data/orderRate.ts';

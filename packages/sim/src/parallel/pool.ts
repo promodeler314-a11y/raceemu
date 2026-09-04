@@ -6,6 +6,7 @@ import {
   type ChunkRequest,
   type CriticalRequest,
   type CriticalSpec,
+  type FieldSpec,
   type SerializableRaceSetting,
   type WorkerRequest,
   type WorkerResponse,
@@ -34,6 +35,8 @@ export interface RunOptions {
   readonly chunkSize?: number;
   readonly onProgress?: (done: number, total: number) => void;
   readonly signal?: AbortSignal;
+  /** 他のウマ娘の位置。渡すと順位条件を実際に判定する。 */
+  readonly field?: FieldSpec | null;
 }
 
 export interface CriticalOutput {
@@ -176,7 +179,16 @@ export class WorkerPool {
       total,
       Math.max(1, options.chunkSize ?? 256),
       options,
-      (id, from, count): ChunkRequest => ({ kind: 'chunk', id, setting, system, seed, from, count }),
+      (id, from, count): ChunkRequest => ({
+        kind: 'chunk',
+        id,
+        setting,
+        system,
+        seed,
+        from,
+        count,
+        field: options.field ?? null,
+      }),
       (response, from) => {
         if (response.kind !== 'chunk') return;
         const unpacked = unpackResults(response.packed);

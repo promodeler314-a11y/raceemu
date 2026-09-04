@@ -261,7 +261,9 @@ export function SkillInput() {
 }
 
 export function RunPanel() {
-  const { count, seed, running, progress, setCount, setSeed, run, cancel, error } = useStore();
+  const { count, seed, running, progress, setCount, setSeed, run, cancel, error, useField, setUseField } =
+    useStore();
+  const gateCount = useStore((s) => s.track.gateCount);
   return (
     <Panel title="実行">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -285,6 +287,20 @@ export function RunPanel() {
           />
         </Field>
       </div>
+      <label className="mt-3 flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={useField}
+          onChange={(e) => setUseField(e.target.checked)}
+        />
+        <span>
+          順位条件を判定する
+          <span className="block text-xs text-neutral-500 dark:text-neutral-400">
+            相手 {gateCount - 1} 頭の位置を先に計算して順位を出す。外すと本家と同じく、順位条件は満たしている前提になる。
+          </span>
+        </span>
+      </label>
       <div className="mt-3 flex items-center gap-3">
         <button
           type="button"

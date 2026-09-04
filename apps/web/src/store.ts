@@ -11,6 +11,7 @@ import {
   type UmaStatus,
 } from '../../../packages/sim/src/setting.ts';
 import { summarize, type SimulationSummary } from '../../../packages/sim/src/summary.ts';
+import { buildFieldBundle, defaultFieldProfile } from '../../../packages/sim/src/field/field.ts';
 import { resolveMethod } from '../../../packages/solver/src/critical.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
@@ -78,12 +79,15 @@ interface AppState {
   inverseGoal: Goal;
   inverseCount: number;
   inverseResult: InverseResult | null;
+  /** 順位条件を実際に判定するか。false なら本家と同じく満たしている前提。 */
+  useField: boolean;
 
   setUma: (patch: Partial<UmaStatus>) => void;
   setTrack: (patch: Partial<TrackRef>) => void;
   toggleSkill: (id: string) => void;
   clearSkills: () => void;
   setCount: (count: number) => void;
+  setUseField: (useField: boolean) => void;
   setSeed: (seed: number) => void;
   run: () => Promise<void>;
   cancel: () => void;
@@ -134,6 +138,7 @@ export const useStore = create<AppState>((set, get) => ({
   inverseGoal: { kind: 'maxSpurt' },
   inverseCount: 500,
   inverseResult: null,
+  useField: false,
 
   setUma: (patch) => set((s) => ({ uma: { ...s.uma, ...patch } })),
   setTrack: (patch) => set((s) => ({ track: { ...s.track, ...patch } })),
@@ -143,6 +148,7 @@ export const useStore = create<AppState>((set, get) => ({
     })),
   clearSkills: () => set({ skillIds: [] }),
   setCount: (count) => set({ count }),
+  setUseField: (useField) => set({ useField }),
   setSeed: (seed) => set({ seed }),
 
   run: async () => {
@@ -159,6 +165,7 @@ export const useStore = create<AppState>((set, get) => ({
         seed: state.seed,
         onProgress: (done) => set({ progress: done }),
         signal: controller.signal,
+        field: fieldSpec(state),
       });
       const elapsedMs = performance.now() - started;
       set({
@@ -187,6 +194,7 @@ export const useStore = create<AppState>((set, get) => ({
       seed: state.seed,
       trial,
       recordFrames: true,
+      field: state.useField ? getDetailField(state) : null,
     });
     set({ detail: { trial, frames: raceState.simulation.frames, state: raceState } });
   },
@@ -311,6 +319,17 @@ export const useStore = create<AppState>((set, get) => ({
   },
 }));
 
+/** 順位条件を判定するときの相手の想定。頭数は 9 と 12 だけを扱う。 */
+function fieldSpec(state: AppState) {
+  if (!state.useField) return null;
+  return {
+    profile: defaultFieldProfile(state.track.gateCount),
+    track: state.track,
+    seed: 9001,
+    samples: 64,
+  };
+}
+
 function buildSetting(state: AppState): RaceSetting {
   return {
     uma: state.uma,
@@ -322,6 +341,23 @@ function buildSetting(state: AppState): RaceSetting {
     positionKeepMode: 'APPROXIMATE',
     positionKeepRate: 100,
   };
+}
+
+/** 詳細表示は UI スレッドで走らせるので、束もこちら側で作って使い回す。 */
+let detailFieldKey = '';
+let detailField: ReturnType<typeof buildFieldBundle> | null = null;
+function getDetailField(state: AppState) {
+  const spec = fieldSpec(state);
+  if (spec === null) return null;
+  const key = JSON.stringify(spec);
+  if (key !== detailFieldKey) {
+    detailField = buildFieldBundle(spec.profile, spec.track, system, gameData.trackData, {
+      samples: spec.samples,
+      seed: spec.seed,
+    });
+    detailFieldKey = key;
+  }
+  return detailField;
 }
 
 export function currentTrackDetail(track: TrackRef) {

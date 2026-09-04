@@ -12,6 +12,7 @@ import {
 import { getSlope, type Corner } from './data/track.ts';
 import type { RngSet } from './rng.ts';
 import type { DerivedSetting, DebuffType, SystemSetting } from './setting.ts';
+import type { FieldView } from './field/field.ts';
 import { approximateConditions } from './skill/approximate.ts';
 import type { Invoke, SkillData } from './skill/types.ts';
 
@@ -251,7 +252,18 @@ export class RaceState {
     readonly paceMaker: RaceState | null,
     /** フレーム列を記録するか。統計だけが要る試行では false にして割り当てを減らす。 */
     readonly recordFrames: boolean,
+    /**
+     * 他のウマ娘の位置。無ければ順位条件は満たしている前提のままになる。
+     * docs/order-condition.md を参照。
+     */
+    readonly field: FieldView | null = null,
   ) {}
+
+  /** 1 位を 1 とする順位。フィールドが無ければ null。 */
+  get order(): number | null {
+    if (this.field === null) return null;
+    return this.field.order(this.simulation.frameElapsed, this.simulation.startPosition);
+  }
 
   getPhase(position: number): number {
     if (position < 0) return -1;

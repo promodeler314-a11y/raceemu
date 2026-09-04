@@ -1,5 +1,6 @@
 import type { RaceTrack } from '../data/track.ts';
-import type { RaceSetting, SystemSetting } from '../setting.ts';
+import type { FieldProfile } from '../field/field.ts';
+import type { RaceSetting, SystemSetting, TrackRef } from '../setting.ts';
 import type { SkillData } from '../skill/types.ts';
 import type { RaceSimulationResult } from '../state.ts';
 
@@ -92,6 +93,18 @@ export interface ChunkRequest {
   /** この塊が担当する最初の試行番号 */
   readonly from: number;
   readonly count: number;
+  readonly field?: FieldSpec | null;
+}
+
+/**
+ * フィールドの指定。束そのものは数 MB になるので送らない。
+ * 指定は決定論的なので、Worker 側で同じ束を作って使い回せる。
+ */
+export interface FieldSpec {
+  readonly profile: FieldProfile;
+  readonly track: TrackRef;
+  readonly seed: number;
+  readonly samples: number;
 }
 
 export interface ChunkResponse {

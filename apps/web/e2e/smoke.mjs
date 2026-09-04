@@ -77,6 +77,32 @@ if (skillRows.length !== 3) fail(`スキルの行数が想定と違う: ${skillR
 
 console.log('uPlot の図の数:', await page.locator('.u-wrap').count());
 
+// 順位条件: フィールドを入れると、脚質と噛み合わないスキルの発動率が落ちる
+await page.fill('input[placeholder="スキル名で検索"]', '真骨頂');
+await page.click('button:has-text("真骨頂")');
+await page.fill('input[placeholder="スキル名で検索"]', '');
+await page.selectOption('select >> nth=4', 'NIGE');
+const runOnce = async () => {
+  await page.click('button:has-text("実行")');
+  await page.waitForFunction(
+    () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('実行中')),
+    null,
+    { timeout: 180000 },
+  );
+  await page.waitForTimeout(200);
+  const rows = await readTable('スキルごとの発動');
+  const row = rows.find((r) => r[0] === '真骨頂');
+  return row === undefined ? NaN : Number.parseFloat(row[1]);
+};
+const withoutField = await runOnce();
+await page.check('input[type=checkbox]');
+const withField = await runOnce();
+console.log(`--- 逃げ + 真骨頂（後方寄り条件）の発動率: 順位無視 ${withoutField}% → フィールドあり ${withField}%`);
+if (!(withoutField > 80)) fail('順位を無視したときの発動率が低すぎる');
+if (!(withField < 10)) fail('フィールドを入れても発動率が落ちていない');
+await page.uncheck('input[type=checkbox]');
+await page.click('button:has-text("真骨頂 ×")');
+
 // 逆算: 最大スパートに必要なスタミナを求める
 await page.selectOption('select:below(:text("目標"))', { index: 0 }).catch(() => {});
 await page.fill('input[type=number][max="20000"]', '300');

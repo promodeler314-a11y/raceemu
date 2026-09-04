@@ -11,6 +11,7 @@
 - [M3 の結果](docs/m3-report.md)
 - [M4 の結果](docs/m4-report.md)
 - [M5 の結果](docs/m5-report.md)
+- [M6 の結果](docs/m6-report.md)
 
 ## 開発
 

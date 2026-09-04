@@ -10,6 +10,7 @@ import {
   type Style,
 } from './data/constants.ts';
 import type { RaceTrack } from './data/track.ts';
+import { FieldView, type FieldBundle } from './field/field.ts';
 import { RngSet } from './rng.ts';
 import {
   DerivedSetting,
@@ -38,6 +39,11 @@ export interface SimulateOptions {
   readonly seed: number;
   readonly trial: number;
   readonly recordFrames?: boolean;
+  /**
+   * 他のウマ娘の位置。渡すと順位条件を実際に判定する。
+   * 渡さなければ本家と同じく、順位条件は満たしている前提になる。
+   */
+  readonly field?: FieldBundle | null;
 }
 
 export interface SimulateOutput {
@@ -53,7 +59,11 @@ export class RaceCalculator {
 
   simulate(setting: RaceSetting, options: SimulateOptions): SimulateOutput {
     const rng = new RngSet(options.seed, options.trial);
-    const state = this.initializeState(setting, rng, options.recordFrames ?? false, false);
+    const bundle = options.field ?? null;
+    // 束の中から試行番号で 1 本選ぶ。同じ試行番号なら同じフィールドになるので、
+    // 共通乱数によるペア比較がフィールドを含めて成立する。
+    const field = bundle === null ? null : new FieldView(bundle, options.trial);
+    const state = this.initializeState(setting, rng, options.recordFrames ?? false, false, field);
     const result = progressRace(state);
     return { result, state };
   }
@@ -63,6 +73,7 @@ export class RaceCalculator {
     rng: RngSet,
     recordFrames: boolean,
     isVirtualLeader: boolean,
+    field: FieldView | null = null,
   ): RaceState {
     const emptyDerived = new DerivedSetting(setting, emptyPassiveBonus(), this.trackData);
     const invokedSkills = invokeSkills(setting, emptyDerived, rng);
@@ -109,7 +120,7 @@ export class RaceCalculator {
       virtualLeader = this.initializeState(leaderSetting, new RngSet(rng.seed ^ 0x5bf03635, rng.trial), false, true);
     }
 
-    const state = new RaceState(derived, simulation, this.system, rng, virtualLeader, recordFrames);
+    const state = new RaceState(derived, simulation, this.system, rng, virtualLeader, recordFrames, field);
 
     if (!derived.fixRandom) {
       simulation.startDelay = rng.stream('startDelay').nextDouble() * 0.1;

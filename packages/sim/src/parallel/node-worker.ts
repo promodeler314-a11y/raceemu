@@ -30,6 +30,7 @@ port.on('message', (request: WorkerRequest) => {
       request.seed,
       request.from,
       request.count,
+      request.field,
     );
     port.postMessage(
       { kind: 'chunk', id: request.id, packed, skillStats },

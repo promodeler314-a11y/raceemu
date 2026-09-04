@@ -1,7 +1,8 @@
 import { RaceCalculator } from '../calculator.ts';
 import type { SystemSetting } from '../setting.ts';
 import type { RaceSimulationResult } from '../state.ts';
-import type { CriticalSpec } from './protocol.ts';
+import { buildFieldBundle, type FieldBundle } from '../field/field.ts';
+import type { CriticalSpec, FieldSpec } from './protocol.ts';
 import {
   fromSerializable,
   packResults,
@@ -10,6 +11,30 @@ import {
   type SerializableRaceSetting,
   type SimData,
 } from './protocol.ts';
+
+/**
+ * フィールドの束は指定が同じなら同じものになるので、Worker ごとに作り置きする。
+ * 生成には数百ミリ秒かかるため、塊のたびに作り直すと計算時間を上回る。
+ */
+const fieldCache = new Map<string, FieldBundle>();
+
+function resolveField(
+  data: SimData,
+  system: SystemSetting,
+  spec: FieldSpec | null | undefined,
+): FieldBundle | null {
+  if (spec === null || spec === undefined) return null;
+  const key = JSON.stringify(spec);
+  let bundle = fieldCache.get(key);
+  if (bundle === undefined) {
+    bundle = buildFieldBundle(spec.profile, spec.track, system, data.trackData, {
+      samples: spec.samples,
+      seed: spec.seed,
+    });
+    fieldCache.set(key, bundle);
+  }
+  return bundle;
+}
 
 /**
  * 1 つの塊を計算する。Worker の中でも UI スレッドでも同じ関数を使う。
@@ -27,8 +52,10 @@ export function runChunk(
   seed: number,
   from: number,
   count: number,
+  fieldSpec?: FieldSpec | null,
 ): ChunkOutput {
   const resolved = fromSerializable(setting, data);
+  const field = resolveField(data, system, fieldSpec);
   const calculator = new RaceCalculator(system, data.trackData);
   const results: RaceSimulationResult[] = new Array(count);
   const skillIds = setting.skillIds;
@@ -36,7 +63,7 @@ export function runChunk(
   const skillStats = new Float64Array(skillIds.length * SKILL_STAT_FIELDS);
 
   for (let i = 0; i < count; i++) {
-    const { result, state } = calculator.simulate(resolved, { seed, trial: from + i });
+    const { result, state } = calculator.simulate(resolved, { seed, trial: from + i, field });
     results[i] = result;
     for (const [skillId, trace] of state.simulation.skillTrace) {
       const slot = index.get(skillId);

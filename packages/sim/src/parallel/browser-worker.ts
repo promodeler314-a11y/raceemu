@@ -28,6 +28,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
       request.seed,
       request.from,
       request.count,
+      request.field,
     );
     (self as unknown as Worker).postMessage(
       { kind: 'chunk', id: request.id, packed, skillStats },
