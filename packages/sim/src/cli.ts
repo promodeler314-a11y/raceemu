@@ -2,7 +2,7 @@
  * 動作確認用のコマンドライン。
  *   node --experimental-strip-types packages/sim/src/cli.ts [--count 1000] [--course 10101]
  */
-import { loadGameData } from '../../data/src/index.ts';
+import { loadGameData } from '../../data/src/node.ts';
 import { defaultSystemSetting, type RaceSetting } from './setting.ts';
 import { runSimulations } from './summary.ts';
 import { unsupportedConditions } from './skill/condition.ts';

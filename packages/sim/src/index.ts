@@ -9,3 +9,7 @@ export type { RawSkillData, RawInvoke, RawSkillEffect, RawSkillCondition } from 
 export { approximateConditions, ignoreConditions, approximateTypeToState } from './skill/approximate.ts';
 export { unsupportedConditions } from './skill/condition.ts';
 export * from './summary.ts';
+export * from './parallel/protocol.ts';
+export * from './parallel/runner.ts';
+export { WorkerPool, SimulationCancelled } from './parallel/pool.ts';
+export type { WorkerFactory, WorkerHandle, RunOptions } from './parallel/pool.ts';

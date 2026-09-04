@@ -6,7 +6,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc -b",
-    "sim": "tsx packages/sim/src/cli.ts"
+    "sim": "tsx packages/sim/src/cli.ts",
+    "bench": "tsx packages/sim/src/parallel/bench.ts"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",

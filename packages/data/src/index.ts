@@ -1,6 +1,3 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { buildTrackData, type RaceTrack } from '../../sim/src/data/track.ts';
 import { SkillData, type RawSkillData } from '../../sim/src/skill/types.ts';
 
@@ -23,17 +20,4 @@ export function buildGameData(coursesJson: unknown, skillsJson: unknown): GameDa
     else list.push(skill);
   }
   return { trackData, skills, skillsById, skillsByName };
-}
-
-const assetsDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'assets');
-
-let cached: GameData | null = null;
-
-/** Node 上でアセットを読み込む。ブラウザ側ではバンドルした JSON を buildGameData に渡す。 */
-export function loadGameData(): GameData {
-  if (cached !== null) return cached;
-  const courses = JSON.parse(readFileSync(join(assetsDir, 'courses.json'), 'utf8'));
-  const skills = JSON.parse(readFileSync(join(assetsDir, 'skills.json'), 'utf8'));
-  cached = buildGameData(courses, skills);
-  return cached;
 }

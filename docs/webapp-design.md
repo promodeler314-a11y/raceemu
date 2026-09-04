@@ -110,6 +110,7 @@ UI スレッド ── SimulationController ──┬── Worker 1 (packages/s
                                       └── Worker N   N = hardwareConcurrency - 1
 ```
 
+- Worker は常駐させ、実行のたびに立ち上げ直さない。探索は同じ設定を少しずつ変えて何千回も評価するため、起動とデータ読み込みが計算時間を上回る（[M2 の結果](m2-report.md)の 2 節）。
 - 試行を固定サイズのチャンク（既定 256 試行）に割り、空いた Worker へ順に配る。
 - 各 Worker は自分のチャンクの結果を `Float64Array` にまとめ、転送可能オブジェクトとして返す。
 - 進捗はチャンク完了ごとに UI へ通知する。UI 側では 100 ミリ秒程度に間引いて再描画する。

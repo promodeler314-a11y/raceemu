@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadGameData } from '../../data/src/index.ts';
+import { loadGameData } from '../../data/src/node.ts';
 import { RngSet } from '../src/rng.ts';
 import { DerivedSetting, emptyPassiveBonus, type RaceSetting } from '../src/setting.ts';
 import { compileConditions, unsupportedConditions, type RandomEntry } from '../src/skill/condition.ts';

@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { loadGameData } from '../../data/src/index.ts';
+import { loadGameData } from '../../data/src/node.ts';
 import { RaceCalculator } from '../src/calculator.ts';
 import { getWisdomSkillBuff } from '../src/data/constants.ts';
 import {
