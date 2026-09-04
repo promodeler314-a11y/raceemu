@@ -5,3 +5,4 @@
 - [ウマ娘レースエミュレータ（mee1080/umasim）の解析](docs/race-emulator-analysis.md)
 - [レースエミュレータ改良版の設計](docs/webapp-design.md)
 - [逆算と組み合わせ探索の設計](docs/solver-design.md)
+- [順位条件の扱い](docs/order-condition.md)
