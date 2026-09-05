@@ -101,7 +101,7 @@ console.log(`--- 逃げ + 真骨頂（後方寄り条件）の発動率: 順位�
 if (!(withoutField > 80)) fail('順位を無視したときの発動率が低すぎる');
 if (!(withField < 10)) fail('フィールドを入れても発動率が落ちていない');
 await page.uncheck('input[type=checkbox]');
-await page.click('button:has-text("真骨頂 ×")');
+await page.click('button[aria-label="真骨頂 を外す"]');
 
 // 逆算: 最大スパートに必要なスタミナを求める
 await page.selectOption('select:below(:text("目標"))', { index: 0 }).catch(() => {});
@@ -168,6 +168,16 @@ console.log('--- 比較');
 for (const row of compareRows.slice(0, 8)) console.log(' ', row.join(' | '));
 if (compareRows[0].length !== 3) fail('比較の列数が想定と違う');
 
+// 実行オプション: 画面から変えられることと、共有 URL に載ることを確かめる
+await page.selectOption('label:has-text("スキル発動率") select', 'ALL');
+await page.fill('input[type=number][max="12"] >> nth=0', '2');
+const optionState = await page.evaluate(() => ({
+  adjust: [...document.querySelectorAll('select')]
+    .map((el) => el.value)
+    .filter((v) => v === 'ALL').length,
+}));
+if (optionState.adjust === 0) fail('スキル発動率の選択が反映されていない');
+
 // 共有: URL に載せて開き直し、設定が戻ることを確かめる
 await page.click('button:has-text("設定を URL に")');
 const shared = page.url();
@@ -177,7 +187,19 @@ await fresh.goto(shared, { waitUntil: 'load' });
 const restored = await fresh.inputValue('input[type=number][max="2500"] >> nth=0');
 console.log('--- 共有 URL から復元したスピード:', restored);
 if (restored !== '1400') fail(`復元した値が違う: ${restored}`);
+const restoredDebuff = await fresh.inputValue('input[type=number][max="12"] >> nth=0');
+const restoredAdjust = await fresh.evaluate(
+  () => [...document.querySelectorAll('select')].filter((el) => el.value === 'ALL').length,
+);
+console.log('--- 共有 URL から復元したデバフ個数:', restoredDebuff, '/ 発動率固定:', restoredAdjust > 0);
+if (restoredDebuff !== '2') fail(`デバフの個数が復元されていない: ${restoredDebuff}`);
+if (restoredAdjust === 0) fail('スキル発動率の設定が復元されていない');
 await fresh.close();
+
+// ライセンス: ソースへのリンクが画面にあること（AGPL v3 の要求）
+const sourceLink = await page.locator('footer a[href*="github.com"]').count();
+console.log('--- フッタのソースリンク:', sourceLink, '件');
+if (sourceLink < 2) fail('フッタに移植元とソースへのリンクが揃っていない');
 
 await page.click('button:has-text("最遅")');
 await page.waitForTimeout(400);

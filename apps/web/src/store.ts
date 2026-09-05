@@ -5,8 +5,12 @@ import { SimulationCancelled, WorkerPool } from '../../../packages/sim/src/paral
 import { toSerializable, toSkillSummaries, type SkillSummary } from '../../../packages/sim/src/parallel/protocol.ts';
 import { RaceCalculator } from '../../../packages/sim/src/calculator.ts';
 import {
+  DEBUFF_TYPES,
   defaultSystemSetting,
+  type PositionKeepMode,
   type RaceSetting,
+  type RandomPosition,
+  type SkillActivateAdjustment,
   type TrackRef,
   type UmaStatus,
 } from '../../../packages/sim/src/setting.ts';
@@ -22,9 +26,39 @@ import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packag
 export const gameData = loadGameData();
 const system = defaultSystemSetting();
 
-/** 名前ごとに 1 つだけ持つスキル一覧。UI の選択肢に使う。 */
-/** スキルポイントの費用。ヒントによる割引は今のところ扱わない。 */
-export const costModel = createCostModel(gameData.skillsById);
+/**
+ * スキルポイントの費用。ヒントレベルで割引が変わるので、レベルの組ごとに作る。
+ * 同じレベルの組で何度も呼ばれるため、直前のものだけ覚えておく。
+ */
+let cachedCostKey = '';
+let cachedCost: ReturnType<typeof createCostModel> | null = null;
+export function costModelFor(hintLevels: Readonly<Record<string, number>>) {
+  const key = JSON.stringify(hintLevels);
+  if (cachedCost === null || key !== cachedCostKey) {
+    cachedCost = createCostModel(gameData.skillsById, { hintLevels });
+    cachedCostKey = key;
+  }
+  return cachedCost;
+}
+
+/** 実行オプション。計算モデルは前から受け取っていたが、画面から変える口が無かった。 */
+export interface RunOptions {
+  readonly skillActivateAdjustment: SkillActivateAdjustment;
+  readonly randomPosition: RandomPosition;
+  readonly positionKeepMode: PositionKeepMode;
+  readonly positionKeepRate: number;
+}
+
+export function defaultRunOptions(): RunOptions {
+  return {
+    skillActivateAdjustment: 'NONE',
+    randomPosition: 'RANDOM',
+    positionKeepMode: 'APPROXIMATE',
+    positionKeepRate: 100,
+  };
+}
+
+export const debuffTypes = DEBUFF_TYPES;
 
 export const skillChoices = [...gameData.skillsByName.entries()]
   .map(([name, list]) => ({ name, skill: list[0]! }))
@@ -42,6 +76,8 @@ export interface Snapshot {
   readonly uma: UmaStatus;
   readonly track: TrackRef;
   readonly skillIds: readonly string[];
+  readonly options: RunOptions;
+  readonly debuffCounts: Readonly<Record<string, number>>;
   readonly summary: SimulationSummary;
   readonly skillSummaries: readonly SkillSummary[];
 }
@@ -86,6 +122,11 @@ interface AppState {
   inverseResult: InverseResult | null;
   /** 順位条件を実際に判定するか。false なら本家と同じく満たしている前提。 */
   useField: boolean;
+  options: RunOptions;
+  /** デバフの種類ごとの個数。0 の項目は持たない。 */
+  debuffCounts: Record<string, number>;
+  /** スキル ID からヒントレベル（0 から 5）。0 の項目は持たない。 */
+  hintLevels: Record<string, number>;
 
   optimizeBudget: number;
   optimizeResult: OptimizeResult | null;
@@ -99,6 +140,9 @@ interface AppState {
   setCount: (count: number) => void;
   setUseField: (useField: boolean) => void;
   setSeed: (seed: number) => void;
+  setOptions: (patch: Partial<RunOptions>) => void;
+  setDebuffCount: (id: string, count: number) => void;
+  setHintLevel: (skillId: string, level: number) => void;
   run: () => Promise<void>;
   cancel: () => void;
   showTrial: (trial: number) => void;
@@ -151,6 +195,9 @@ export const useStore = create<AppState>((set, get) => ({
   inverseCount: 500,
   inverseResult: null,
   useField: false,
+  options: defaultRunOptions(),
+  debuffCounts: {},
+  hintLevels: {},
 
   optimizeBudget: 600,
   optimizeResult: null,
@@ -168,6 +215,21 @@ export const useStore = create<AppState>((set, get) => ({
   setUseField: (useField) => set({ useField }),
   setSeed: (seed) => set({ seed }),
   setOptimizeBudget: (optimizeBudget) => set({ optimizeBudget }),
+  setOptions: (patch) => set((s) => ({ options: { ...s.options, ...patch } })),
+  setDebuffCount: (id, count) =>
+    set((s) => {
+      const next = { ...s.debuffCounts };
+      if (count > 0) next[id] = count;
+      else delete next[id];
+      return { debuffCounts: next };
+    }),
+  setHintLevel: (skillId, level) =>
+    set((s) => {
+      const next = { ...s.hintLevels };
+      if (level > 0) next[skillId] = level;
+      else delete next[skillId];
+      return { hintLevels: next };
+    }),
 
   run: async () => {
     const state = get();
@@ -293,6 +355,8 @@ export const useStore = create<AppState>((set, get) => ({
           uma: state.uma,
           track: state.track,
           skillIds: [...state.skillIds],
+          options: state.options,
+          debuffCounts: { ...state.debuffCounts },
           summary: state.summary,
           skillSummaries: state.skillSummaries,
         },
@@ -306,7 +370,13 @@ export const useStore = create<AppState>((set, get) => ({
   restoreSnapshot: (id) => {
     const snapshot = get().snapshots.find((x) => x.id === id);
     if (snapshot === undefined) return;
-    set({ uma: snapshot.uma, track: snapshot.track, skillIds: [...snapshot.skillIds] });
+    set({
+      uma: snapshot.uma,
+      track: snapshot.track,
+      skillIds: [...snapshot.skillIds],
+      options: snapshot.options,
+      debuffCounts: { ...snapshot.debuffCounts },
+    });
   },
 
   /**
@@ -331,7 +401,7 @@ export const useStore = create<AppState>((set, get) => ({
           pool: getPool(),
           system,
           base: toSerializable({ ...buildSetting(state), skills: [] }),
-          cost: costModel,
+          cost: costModelFor(state.hintLevels),
           seed: state.seed,
           field: fieldSpec(state),
         },
@@ -361,6 +431,10 @@ export const useStore = create<AppState>((set, get) => ({
       skillIds: state.skillIds,
       count: state.count,
       seed: state.seed,
+      options: state.options,
+      debuffCounts: state.debuffCounts,
+      hintLevels: state.hintLevels,
+      useField: state.useField,
     });
     return `${location.origin}${location.pathname}#s=${encoded}`;
   },
@@ -376,6 +450,10 @@ export const useStore = create<AppState>((set, get) => ({
       skillIds: [...shared.skillIds],
       count: shared.count,
       seed: shared.seed,
+      options: shared.options,
+      debuffCounts: { ...shared.debuffCounts },
+      hintLevels: { ...shared.hintLevels },
+      useField: shared.useField,
     });
     return true;
   },
@@ -397,11 +475,11 @@ function buildSetting(state: AppState): RaceSetting {
     uma: state.uma,
     track: state.track,
     skills: state.skillIds.map((id) => gameData.skillsById.get(id)!),
-    skillActivateAdjustment: 'NONE',
-    randomPosition: 'RANDOM',
-    debuffCounts: {},
-    positionKeepMode: 'APPROXIMATE',
-    positionKeepRate: 100,
+    skillActivateAdjustment: state.options.skillActivateAdjustment,
+    randomPosition: state.options.randomPosition,
+    debuffCounts: state.debuffCounts,
+    positionKeepMode: state.options.positionKeepMode,
+    positionKeepRate: state.options.positionKeepRate,
   };
 }
 

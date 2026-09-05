@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { CourseInput, RunPanel, SkillInput, UmaInput } from './components/Inputs.tsx';
+import { CourseInput, OptionsInput, RunPanel, SkillInput, UmaInput } from './components/Inputs.tsx';
 import { SummaryOutput } from './components/Summary.tsx';
 import { FrameCharts } from './components/Charts.tsx';
 import { CompareOutput, ShareButton, SkillSummaryOutput } from './components/Compare.tsx';
@@ -31,6 +31,7 @@ export default function App() {
           <CourseInput />
           <UmaInput />
           <SkillInput />
+          <OptionsInput />
           <RunPanel />
           <InversePanel />
           <OptimizePanel />
@@ -42,6 +43,27 @@ export default function App() {
           <FrameCharts />
         </div>
       </main>
+      <footer className="mt-4 border-t border-neutral-200 px-4 py-3 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+        計算モデルは{' '}
+        <a
+          className="underline"
+          href="https://github.com/mee1080/umasim"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          mee1080/umasim
+        </a>{' '}
+        からの移植です。本アプリは AGPL v3 で公開しており、
+        <a
+          className="underline"
+          href="https://github.com/promodeler314-a11y/raceemu"
+          target="_blank"
+          rel="noreferrer noopener"
+        >
+          ソースはこちら
+        </a>
+        から取得できます。
+      </footer>
     </div>
   );
 }
