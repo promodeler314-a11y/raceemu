@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../data/src/node.ts';
 import { RaceCalculator } from '../src/calculator.ts';
-import { orderRateBoundaries } from '../src/data/orderRate.ts';
+import {
+  ORDER_RATE_CONTINUE_TYPES,
+  orderRateBoundaries,
+  resolveOrderRateContinue,
+} from '../src/data/orderRate.ts';
 import { buildFieldBundle, defaultFieldProfile, FieldView } from '../src/field/field.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { WorkerPool } from '../src/parallel/pool.ts';
@@ -109,5 +113,53 @@ describe('フィールド軌跡モデル', () => {
     } finally {
       await pool.dispose();
     }
+  });
+});
+
+describe('順位率の帯の維持', () => {
+  const bundle = buildFieldBundle(defaultFieldProfile(9), track, system, data.trackData, {
+    samples: 16,
+    seed: 99,
+  });
+  const calculator = new RaceCalculator(system, data.trackData);
+
+  const run = (style: 'NIGE' | 'OI', trial: number, withField: boolean) =>
+    calculator.simulate(setting(style), {
+      seed: 7,
+      trial,
+      field: withField ? bundle : null,
+    }).state.simulation.specialState;
+
+  it('9 頭立てと 12 頭立てのすべての帯が対応表にある', () => {
+    for (const type of ORDER_RATE_CONTINUE_TYPES) {
+      expect(resolveOrderRateContinue(type, 9), type).toBeDefined();
+      expect(resolveOrderRateContinue(type, 12), type).toBeDefined();
+    }
+    // 対応表に無い頭数では引けない。その場合は満たしている前提に戻す。
+    expect(resolveOrderRateContinue('order_rate_in20_continue', 18)).toBeUndefined();
+  });
+
+  it('フィールドが無ければ、本家と同じく満たしている前提のまま', () => {
+    const state = run('OI', 0, false);
+    for (const type of ORDER_RATE_CONTINUE_TYPES) expect(state[type], type).toBe(1);
+  });
+
+  it('後方から進む脚質は、上位の帯を維持できない', () => {
+    // 追込は序盤を最後方で進むので、順位率 20 以前を維持しているはずがない。
+    const oi = run('OI', 0, true);
+    expect(oi['order_rate_in20_continue']).toBe(0);
+    expect(oi['order_rate_in40_continue']).toBe(0);
+  });
+
+  it('前方から進む脚質は、後方の帯を維持できない', () => {
+    const nige = run('NIGE', 0, true);
+    expect(nige['order_rate_out50_continue']).toBe(0);
+    expect(nige['order_rate_out70_continue']).toBe(0);
+  });
+
+  it('同じ試行番号なら同じ結果になる', () => {
+    const a = run('OI', 3, true);
+    const b = run('OI', 3, true);
+    for (const type of ORDER_RATE_CONTINUE_TYPES) expect(a[type], type).toBe(b[type]);
   });
 });

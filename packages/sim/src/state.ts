@@ -13,6 +13,7 @@ import { getSlope, type Corner } from './data/track.ts';
 import type { RngSet } from './rng.ts';
 import type { DerivedSetting, DebuffType, SystemSetting } from './setting.ts';
 import type { FieldView } from './field/field.ts';
+import { ORDER_RATE_CONTINUE_TYPES } from './data/orderRate.ts';
 import { approximateConditions } from './skill/approximate.ts';
 import type { Invoke, SkillData } from './skill/types.ts';
 
@@ -211,6 +212,8 @@ export class RaceSimulationState {
 
   constructor() {
     for (const key of Object.keys(approximateConditions)) this.specialState[key] = 0;
+    // 順位率の帯は「まだ一度も外れていない」から始まる。
+    for (const key of ORDER_RATE_CONTINUE_TYPES) this.specialState[key] = 1;
   }
 
   get totalSpeed(): number {

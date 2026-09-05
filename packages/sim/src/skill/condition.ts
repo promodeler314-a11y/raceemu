@@ -1,5 +1,5 @@
 import { horseLane, styleValue, conditionValue } from '../data/constants.ts';
-import { orderRateBoundaries } from '../data/orderRate.ts';
+import { ORDER_RATE_CONTINUE_TYPES, orderRateBoundaries, resolveOrderRateContinue } from '../data/orderRate.ts';
 import type { Corner, Straight } from '../data/track.ts';
 import type { Rng, RngSet } from '../rng.ts';
 import type { DerivedSetting, RandomPosition } from '../setting.ts';
@@ -386,6 +386,24 @@ function compileCondition(
         if (atMost !== undefined) return order <= atMost;
         return true;
       };
+    }
+
+    case 'order_rate_in20_continue':
+    case 'order_rate_in40_continue':
+    case 'order_rate_in50_continue':
+    case 'order_rate_in80_continue':
+    case 'order_rate_out20_continue':
+    case 'order_rate_out40_continue':
+    case 'order_rate_out50_continue':
+    case 'order_rate_out70_continue': {
+      const type = condition.type;
+      if (resolveOrderRateContinue(type, base.track.gateCount) === undefined) {
+        // 対応表に無い頭数。従来どおり満たしている前提にする。
+        unsupportedConditions.add(`${type} (${base.track.gateCount}頭)`);
+        return () => true;
+      }
+      // 状態はフレームごとに calculator が落としていく。1 なら一度も外れていない。
+      return (s) => (s.simulation.specialState[type] ?? 1) > 0;
     }
 
     case 'popularity':

@@ -9,6 +9,7 @@ import {
   type PositionKeepState,
   type Style,
 } from './data/constants.ts';
+import { ORDER_RATE_CONTINUE_TYPES, resolveOrderRateContinue } from './data/orderRate.ts';
 import type { RaceTrack } from './data/track.ts';
 import { FieldView, type FieldBundle } from './field/field.ts';
 import { RngSet } from './rng.ts';
@@ -312,6 +313,27 @@ function progressRace(state: RaceState): RaceSimulationResult {
   return goal(state);
 }
 
+/**
+ * 「順位率の帯をずっと維持しているか」を落としていく。
+ *
+ * フィールドを持たない実行では順位が分からないので、本家と同じく
+ * 満たしている前提のまま（1 のまま）にする。
+ */
+function updateOrderRateContinue(state: RaceState): void {
+  const order = state.order;
+  if (order === null) return;
+  const specialState = state.simulation.specialState;
+  const gateCount = state.setting.base.track.gateCount;
+  for (const type of ORDER_RATE_CONTINUE_TYPES) {
+    if ((specialState[type] ?? 1) === 0) continue;
+    const boundary = resolveOrderRateContinue(type, gateCount);
+    if (boundary === undefined) continue;
+    const inside =
+      boundary.atMost !== undefined ? order <= boundary.atMost : order >= boundary.atLeast!;
+    if (!inside) specialState[type] = 0;
+  }
+}
+
 function updateFrame(state: RaceState): boolean {
   const simulation = state.simulation;
   const setting = state.setting;
@@ -502,6 +524,10 @@ function updateFrame(state: RaceState): boolean {
   }
 
   if (simulation.position >= setting.courseLength) return true;
+
+  // 順位率の帯を維持できているかを更新する。
+  // 一度でも外れたら戻らないので、外れた時点で 0 に落として以降は見ない。
+  updateOrderRateContinue(state);
 
   // スキル条件の近似状態を更新
   if (changeSecond) {
