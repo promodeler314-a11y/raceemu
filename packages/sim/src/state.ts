@@ -268,6 +268,38 @@ export class RaceState {
     return this.field.order(this.simulation.frameElapsed, this.simulation.startPosition);
   }
 
+  /**
+   * 距離差の条件に使う量。フィールドが無ければ null で、
+   * 呼び出し側は本家と同じく満たしている前提にする。
+   */
+  get distanceFromTop(): number | null {
+    if (this.field === null) return null;
+    return this.field.distanceFromTop(this.simulation.frameElapsed, this.simulation.startPosition);
+  }
+
+  get distanceToFront(): number | null {
+    if (this.field === null) return null;
+    return this.field.distanceToFront(this.simulation.frameElapsed, this.simulation.startPosition);
+  }
+
+  get distanceToBehind(): number | null {
+    if (this.field === null) return null;
+    return this.field.distanceToBehind(this.simulation.frameElapsed, this.simulation.startPosition);
+  }
+
+  /**
+   * 先頭を 0、最後方を 100 とした位置。スキルデータの注記では「相対位置」と書かれる。
+   * 全員が同じ位置なら 0（先頭と同じ）とする。
+   */
+  get distanceDiffRate(): number | null {
+    if (this.field === null) return null;
+    const frame = this.simulation.frameElapsed;
+    const position = this.simulation.startPosition;
+    const spread = this.field.spread(frame, position);
+    if (spread <= 0) return 0;
+    return (this.field.distanceFromTop(frame, position) / spread) * 100;
+  }
+
   getPhase(position: number): number {
     if (position < 0) return -1;
     if (position < this.setting.phase1Start) return 0;

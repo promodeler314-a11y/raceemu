@@ -204,6 +204,21 @@ export class FieldView {
     }
     return best;
   }
+
+  /** 先頭から最後方までの隔たり。全員が同じ位置なら 0。 */
+  spread(frameElapsed: number, position: number): number {
+    const { frames, opponents, positions } = this.sample;
+    const frame = Math.min(frameElapsed, frames - 1);
+    const offset = frame * opponents;
+    let top = position;
+    let last = position;
+    for (let i = 0; i < opponents; i++) {
+      const other = positions[offset + i]!;
+      if (other > top) top = other;
+      if (other < last) last = other;
+    }
+    return top - last;
+  }
 }
 
 export const FRAMES_PER_SECOND = framePerSecond;
