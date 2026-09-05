@@ -60,13 +60,16 @@ export function CompareOutput() {
         <table className="w-full min-w-[28rem] text-sm">
           <thead>
             <tr>
-              <th className="py-1 text-left font-normal text-neutral-500 dark:text-neutral-400">項目</th>
+              <th scope="col" className="py-1 text-left font-normal text-neutral-500 dark:text-neutral-400">
+                項目
+              </th>
               {columns.map((snapshot) => (
-                <th key={snapshot.id} className="py-1 text-right font-medium">
+                <th key={snapshot.id} scope="col" className="py-1 text-right font-medium">
                   <button
                     type="button"
                     className="underline decoration-dotted"
                     onClick={() => restoreSnapshot(snapshot.id)}
+                    aria-label={`スナップショット ${snapshot.id} の設定を入力欄に戻す`}
                     title="この設定を入力欄に戻す"
                   >
                     #{snapshot.id}
@@ -75,6 +78,7 @@ export function CompareOutput() {
                     type="button"
                     className="ml-1 text-neutral-400"
                     onClick={() => removeSnapshot(snapshot.id)}
+                    aria-label={`スナップショット ${snapshot.id} を削除する`}
                     title="削除"
                   >
                     ×
@@ -146,11 +150,11 @@ export function SkillSummaryOutput() {
         <table className="w-full min-w-[30rem] text-sm">
           <thead>
             <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-              <th className="py-1 text-left font-normal">スキル</th>
-              <th className="py-1 text-right font-normal">発動率</th>
-              <th className="py-1 text-right font-normal">平均発動位置</th>
-              <th className="py-1 text-right font-normal">2 回発動率</th>
-              <th className="py-1 text-right font-normal">初回のフェーズ</th>
+              <th scope="col" className="py-1 text-left font-normal">スキル</th>
+              <th scope="col" className="py-1 text-right font-normal">発動率</th>
+              <th scope="col" className="py-1 text-right font-normal">平均発動位置</th>
+              <th scope="col" className="py-1 text-right font-normal">2 回発動率</th>
+              <th scope="col" className="py-1 text-right font-normal">初回のフェーズ</th>
             </tr>
           </thead>
           <tbody>
@@ -159,7 +163,9 @@ export function SkillSummaryOutput() {
               const topPhase = skill.phaseRates.indexOf(Math.max(...skill.phaseRates));
               return (
                 <tr key={skill.skillId} className="border-b border-neutral-100 last:border-0 dark:border-neutral-800">
-                  <td className="py-1">{data?.name ?? skill.skillId}</td>
+                  <th scope="row" className="py-1 text-left font-normal">
+                    {data?.name ?? skill.skillId}
+                  </th>
                   <td className="py-1 text-right tabular-nums">
                     {(skill.triggerRate * 100).toFixed(1)} %
                   </td>

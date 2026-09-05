@@ -13,6 +13,7 @@ import { getSlope, type Corner } from './data/track.ts';
 import type { RngSet } from './rng.ts';
 import type { DerivedSetting, DebuffType, SystemSetting } from './setting.ts';
 import type { FieldView } from './field/field.ts';
+import { ORDER_RATE_CONTINUE_TYPES } from './data/orderRate.ts';
 import { approximateConditions } from './skill/approximate.ts';
 import type { Invoke, SkillData } from './skill/types.ts';
 
@@ -211,6 +212,8 @@ export class RaceSimulationState {
 
   constructor() {
     for (const key of Object.keys(approximateConditions)) this.specialState[key] = 0;
+    // 順位率の帯は「まだ一度も外れていない」から始まる。
+    for (const key of ORDER_RATE_CONTINUE_TYPES) this.specialState[key] = 1;
   }
 
   get totalSpeed(): number {
@@ -263,6 +266,38 @@ export class RaceState {
   get order(): number | null {
     if (this.field === null) return null;
     return this.field.order(this.simulation.frameElapsed, this.simulation.startPosition);
+  }
+
+  /**
+   * 距離差の条件に使う量。フィールドが無ければ null で、
+   * 呼び出し側は本家と同じく満たしている前提にする。
+   */
+  get distanceFromTop(): number | null {
+    if (this.field === null) return null;
+    return this.field.distanceFromTop(this.simulation.frameElapsed, this.simulation.startPosition);
+  }
+
+  get distanceToFront(): number | null {
+    if (this.field === null) return null;
+    return this.field.distanceToFront(this.simulation.frameElapsed, this.simulation.startPosition);
+  }
+
+  get distanceToBehind(): number | null {
+    if (this.field === null) return null;
+    return this.field.distanceToBehind(this.simulation.frameElapsed, this.simulation.startPosition);
+  }
+
+  /**
+   * 先頭を 0、最後方を 100 とした位置。スキルデータの注記では「相対位置」と書かれる。
+   * 全員が同じ位置なら 0（先頭と同じ）とする。
+   */
+  get distanceDiffRate(): number | null {
+    if (this.field === null) return null;
+    const frame = this.simulation.frameElapsed;
+    const position = this.simulation.startPosition;
+    const spread = this.field.spread(frame, position);
+    if (spread <= 0) return 0;
+    return (this.field.distanceFromTop(frame, position) / spread) * 100;
   }
 
   getPhase(position: number): number {

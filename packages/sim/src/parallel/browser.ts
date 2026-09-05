@@ -23,6 +23,14 @@ class BrowserWorkerHandle implements WorkerHandle {
     this.worker.onmessage = (event: MessageEvent<WorkerResponse>) => handler(event.data);
   }
 
+  onError(handler: (error: Error) => void): void {
+    // 読み込みや実行に失敗したとき。message は空のことがある。
+    this.worker.onerror = (event: ErrorEvent) =>
+      handler(new Error(event.message === '' ? '読み込みに失敗した' : event.message));
+    // 構造化クローンできない値を送り返そうとしたとき。
+    this.worker.onmessageerror = () => handler(new Error('結果を受け取れなかった'));
+  }
+
   terminate(): void {
     this.worker.terminate();
   }

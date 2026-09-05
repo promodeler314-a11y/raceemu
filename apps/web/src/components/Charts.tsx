@@ -228,10 +228,25 @@ export function TimeHistogram() {
   if (bins === null) return null;
 
   const barWidth = 100 / bins.counts.length;
+  const peakIndex = bins.counts.indexOf(bins.peak);
+  const peakFrom = bins.min + peakIndex * bins.width;
+  // 図を見られない場合に、形の要点だけでも伝える。
+  // 数値そのものは「結果」の表に出ているので、ここでは重ならない情報に絞る。
+  const description =
+    `${results.length} 試行のタイムの分布。` +
+    `${bins.min.toFixed(2)} 秒から ${bins.max.toFixed(2)} 秒に広がり、` +
+    `最も多いのは ${peakFrom.toFixed(2)} 秒あたりで ${bins.peak} 件。`;
+
   return (
     <div>
       <h3 className="text-sm font-medium">タイムの分布</h3>
-      <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="mt-2 h-32 w-full">
+      <svg
+        viewBox="0 0 100 30"
+        preserveAspectRatio="none"
+        className="mt-2 h-32 w-full"
+        role="img"
+        aria-label={description}
+      >
         {bins.counts.map((count, i) => {
           const height = (count / bins.peak) * 28;
           return (

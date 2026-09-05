@@ -322,3 +322,18 @@ export function getWisdomSkillBuff(wisdom: number, baseStyle: Style): Record<num
 
 /** ヒントレベルからスキルポイント割引率 */
 export const skillLvToFactor = [1.0, 0.9, 0.8, 0.7, 0.65, 0.6];
+
+/**
+ * 1 バ身の長さ（メートル）。
+ *
+ * スキルデータの注記から導いた。距離差の条件には二つの書き方があり、
+ * `distance_diff_top` は「先頭とのバ身差<=5」、`distance_diff_top_float` は
+ * 「先頭との距離×10m<=25」と書かれている。後者は値を 0.1 m 単位で持つので、
+ * 25 は 2.5 m を指す。float 版は 1 バ身刻みでは粗すぎる場面のために
+ * 用意されたものなので、その刻み幅がちょうど 1 バ身に当たると読める。
+ *
+ * ゲーム内での実測は取れていない。ここが違っていれば距離差の条件は
+ * まとめてずれるので、値は 1 か所に置いてある。
+ * docs/order-condition.md 7 節を参照。
+ */
+export const bashinMeters = 2.5;

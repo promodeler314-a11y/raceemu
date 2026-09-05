@@ -19,6 +19,12 @@ import {
 export interface WorkerHandle {
   post(request: WorkerRequest): void;
   onMessage(handler: (response: WorkerResponse) => void): void;
+  /**
+   * Worker が返事をせずに死んだときに呼ばれる。
+   * 読み込みに失敗した、例外で落ちた、メモリを使い果たした、など。
+   * これを見ないと、返事待ちのまま実行が終わらなくなる。
+   */
+  onError(handler: (error: Error) => void): void;
   terminate(): Promise<void> | void;
 }
 
@@ -73,6 +79,7 @@ export class WorkerPool {
   private readonly workers: WorkerHandle[] = [];
   private readonly idle: WorkerHandle[] = [];
   private readonly handlers = new Map<WorkerHandle, (response: WorkerResponse) => void>();
+  private readonly errorHandlers = new Map<WorkerHandle, (error: Error) => void>();
   private disposed = false;
 
   constructor(
@@ -88,8 +95,29 @@ export class WorkerPool {
         const handler = this.handlers.get(worker);
         if (handler !== undefined) handler(response);
       });
+      worker.onError((error) => {
+        // 先に取り出す。drop() が控えを消すため、順序を逆にすると誰にも伝わらない。
+        const handler = this.errorHandlers.get(worker);
+        this.drop(worker);
+        if (handler !== undefined) handler(error);
+      });
       this.workers.push(worker);
       this.idle.push(worker);
+    }
+  }
+
+  /** 死んだ Worker をプールから外す。次の実行で作り直される。 */
+  private drop(worker: WorkerHandle): void {
+    const index = this.workers.indexOf(worker);
+    if (index >= 0) this.workers.splice(index, 1);
+    const idleIndex = this.idle.indexOf(worker);
+    if (idleIndex >= 0) this.idle.splice(idleIndex, 1);
+    this.handlers.delete(worker);
+    this.errorHandlers.delete(worker);
+    try {
+      void worker.terminate();
+    } catch {
+      // 既に死んでいる。
     }
   }
 
@@ -119,7 +147,10 @@ export class WorkerPool {
       const finish = (error?: Error) => {
         if (settled) return;
         settled = true;
-        for (const worker of this.workers) this.handlers.delete(worker);
+        for (const worker of this.workers) {
+          this.handlers.delete(worker);
+          this.errorHandlers.delete(worker);
+        }
         if (error === undefined) resolve();
         else reject(error);
       };
@@ -141,6 +172,14 @@ export class WorkerPool {
         const id = nextChunk++;
         const chunk = chunks[id]!;
         active++;
+        this.errorHandlers.set(worker, (error) => {
+          active--;
+          finish(
+            new Error(
+              `計算用の Worker が停止した（${error.message}）。試行回数を減らすか、ページを開き直す。`,
+            ),
+          );
+        });
         this.handlers.set(worker, (response) => {
           active--;
           if (settled) return;
@@ -243,6 +282,7 @@ export class WorkerPool {
     const workers = this.workers.splice(0, this.workers.length);
     this.idle.length = 0;
     this.handlers.clear();
+    this.errorHandlers.clear();
     await Promise.all(workers.map((worker) => worker.terminate()));
   }
 }

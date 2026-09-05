@@ -9,6 +9,11 @@ import { extname, join, normalize } from 'node:path';
 
 const root = 'apps/web/dist';
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+const fail = (message) => {
+  console.error('失敗:', message);
+  process.exitCode = 1;
+};
+
 const server = createServer(async (req, res) => {
   try {
     const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
@@ -23,21 +28,36 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(4173, r));
 
+// バンドルの大きさ。減らしたものが黙って戻らないように上限を置く。
+// 2026-09 時点で本体 1.44 MB、Worker 1.14 MB。
+{
+  const { readdir, stat } = await import('node:fs/promises');
+  const files = await readdir(join(root, 'assets'));
+  const sizeOf = async (match) => {
+    const name = files.find((f) => f.startsWith(match) && f.endsWith('.js'));
+    return name === undefined ? 0 : (await stat(join(root, 'assets', name))).size;
+  };
+  const main = await sizeOf('index-');
+  const worker = await sizeOf('browser-worker-');
+  const mb = (n) => (n / 1024 / 1024).toFixed(2);
+  console.log(`--- バンドル: 本体 ${mb(main)} MB / Worker ${mb(worker)} MB`);
+  if (main > 1.7 * 1024 * 1024) fail(`本体のバンドルが大きい: ${mb(main)} MB`);
+  if (worker > 1.4 * 1024 * 1024) fail(`Worker のバンドルが大きい: ${mb(worker)} MB`);
+}
+
 const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium',
   args: ['--no-sandbox'],
 });
-const page = await browser.newPage({ viewport: { width: 1280, height: 1600 } });
+// 永続化を確かめるため、主画面のタブは 1 つのコンテキストにまとめる。
+// browser.newPage() はタブごとにコンテキストが分かれ、IndexedDB を共有しない。
+const context = await browser.newContext({ viewport: { width: 1280, height: 1600 } });
+const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
-
-const fail = (message) => {
-  console.error('失敗:', message);
-  process.exitCode = 1;
-};
 
 await page.goto('http://localhost:4173/', { waitUntil: 'load' });
 console.log('タイトル:', await page.textContent('h1'));
@@ -101,7 +121,7 @@ console.log(`--- 逃げ + 真骨頂（後方寄り条件）の発動率: 順位�
 if (!(withoutField > 80)) fail('順位を無視したときの発動率が低すぎる');
 if (!(withField < 10)) fail('フィールドを入れても発動率が落ちていない');
 await page.uncheck('input[type=checkbox]');
-await page.click('button:has-text("真骨頂 ×")');
+await page.click('button[aria-label="真骨頂 を外す"]');
 
 // 逆算: 最大スパートに必要なスタミナを求める
 await page.selectOption('select:below(:text("目標"))', { index: 0 }).catch(() => {});
@@ -168,6 +188,33 @@ console.log('--- 比較');
 for (const row of compareRows.slice(0, 8)) console.log(' ', row.join(' | '));
 if (compareRows[0].length !== 3) fail('比較の列数が想定と違う');
 
+// 永続化: 別のタブで開き直しても設定とスナップショットが残ること
+await page.waitForTimeout(800); // 書き込みはまとめてから行う
+const reopened = await context.newPage();
+await reopened.goto('http://localhost:4173/', { waitUntil: 'load' });
+await reopened.waitForTimeout(600);
+const keptSpeed = await reopened.inputValue('input[type=number][max="2500"] >> nth=0');
+const keptColumns = await reopened.evaluate(() => {
+  const section = [...document.querySelectorAll('section')].find((el) =>
+    el.querySelector('h2')?.textContent?.includes('比較'),
+  );
+  return section?.querySelectorAll('thead th').length ?? 0;
+});
+console.log('--- 開き直したときのスピード:', keptSpeed, '/ 比較の列数:', keptColumns);
+if (keptSpeed !== '1400') fail(`設定が残っていない: ${keptSpeed}`);
+if (keptColumns !== 3) fail(`スナップショットが残っていない: 列数 ${keptColumns}`);
+await reopened.close();
+
+// 実行オプション: 画面から変えられることと、共有 URL に載ることを確かめる
+await page.selectOption('label:has-text("スキル発動率") select', 'ALL');
+await page.fill('input[type=number][max="12"] >> nth=0', '2');
+const optionState = await page.evaluate(() => ({
+  adjust: [...document.querySelectorAll('select')]
+    .map((el) => el.value)
+    .filter((v) => v === 'ALL').length,
+}));
+if (optionState.adjust === 0) fail('スキル発動率の選択が反映されていない');
+
 // 共有: URL に載せて開き直し、設定が戻ることを確かめる
 await page.click('button:has-text("設定を URL に")');
 const shared = page.url();
@@ -177,7 +224,54 @@ await fresh.goto(shared, { waitUntil: 'load' });
 const restored = await fresh.inputValue('input[type=number][max="2500"] >> nth=0');
 console.log('--- 共有 URL から復元したスピード:', restored);
 if (restored !== '1400') fail(`復元した値が違う: ${restored}`);
+const restoredDebuff = await fresh.inputValue('input[type=number][max="12"] >> nth=0');
+const restoredAdjust = await fresh.evaluate(
+  () => [...document.querySelectorAll('select')].filter((el) => el.value === 'ALL').length,
+);
+console.log('--- 共有 URL から復元したデバフ個数:', restoredDebuff, '/ 発動率固定:', restoredAdjust > 0);
+if (restoredDebuff !== '2') fail(`デバフの個数が復元されていない: ${restoredDebuff}`);
+if (restoredAdjust === 0) fail('スキル発動率の設定が復元されていない');
 await fresh.close();
+
+// 壊れた共有 URL: 黙って既定値で開かず、読み取れなかったことを伝える
+const broken = await browser.newPage();
+await broken.goto('http://localhost:4173/#s=zzzz-not-a-real-state', { waitUntil: 'load' });
+await broken.waitForTimeout(500);
+const alertText = (await broken.locator('[role=alert]').first().textContent()) ?? '';
+console.log('--- 壊れた共有 URL の知らせ:', alertText.slice(0, 40));
+if (!alertText.includes('読み取れませんでした')) fail('壊れた共有 URL が黙って無視されている');
+await broken.close();
+
+// キーボード操作: Ctrl+Enter で実行できる
+await page.keyboard.press('Control+Enter');
+await page.waitForTimeout(300);
+const startedByKey = await page.evaluate(() =>
+  [...document.querySelectorAll('button')].some((b) => b.textContent?.includes('実行中')),
+);
+console.log('--- Ctrl+Enter で実行が始まった:', startedByKey);
+if (!startedByKey) fail('Ctrl+Enter で実行が始まらない');
+await page.keyboard.press('Escape');
+await page.waitForFunction(
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('実行中')),
+  null,
+  { timeout: 60000 },
+);
+console.log('--- Esc で中断できた');
+
+// 名前のないボタンが残っていないこと
+const unnamed = await page.evaluate(
+  () =>
+    [...document.querySelectorAll('button')].filter(
+      (b) => (b.getAttribute('aria-label') ?? b.textContent ?? '').trim().length <= 1,
+    ).length,
+);
+console.log('--- 名前のないボタン:', unnamed, '件');
+if (unnamed > 0) fail(`読み上げで区別できないボタンが ${unnamed} 件ある`);
+
+// ライセンス: ソースへのリンクが画面にあること（AGPL v3 の要求）
+const sourceLink = await page.locator('footer a[href*="github.com"]').count();
+console.log('--- フッタのソースリンク:', sourceLink, '件');
+if (sourceLink < 2) fail('フッタに移植元とソースへのリンクが揃っていない');
 
 await page.click('button:has-text("最遅")');
 await page.waitForTimeout(400);

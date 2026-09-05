@@ -64,3 +64,37 @@ export const orderRateBoundaries: Readonly<Record<string, OrderRateBoundary>> = 
   '<:80:9': { atMost: 8 },
   '<:80:12': { atMost: 10 },
 };
+
+/**
+ * 順位率の帯を「ずっと維持しているか」で見る条件。
+ *
+ * `order_rate_in20_continue` は順位率 20 以前を、`order_rate_out40_continue` は
+ * 順位率 40 以降を、レースの開始からその時点まで一度も外れていないことを指す。
+ * 値は常に 1 で、真偽として使われる。
+ *
+ * 実際にスキルデータに現れるのは次の 8 種類である。
+ */
+export const ORDER_RATE_CONTINUE_TYPES: readonly string[] = [
+  'order_rate_in20_continue',
+  'order_rate_in40_continue',
+  'order_rate_in50_continue',
+  'order_rate_in80_continue',
+  'order_rate_out20_continue',
+  'order_rate_out40_continue',
+  'order_rate_out50_continue',
+  'order_rate_out70_continue',
+];
+
+/**
+ * 帯の条件から順位の境界を引く。
+ * `in` は順位率がその値以前、`out` は以降。対応表は 9 頭立てと 12 頭立てだけを埋めてある。
+ */
+export function resolveOrderRateContinue(
+  type: string,
+  gateCount: number,
+): OrderRateBoundary | undefined {
+  const matched = /^order_rate_(in|out)(\d+)_continue$/.exec(type);
+  if (matched === null) return undefined;
+  const operator = matched[1] === 'in' ? '<=' : '>=';
+  return orderRateBoundaries[`${operator}:${matched[2]}:${gateCount}`];
+}

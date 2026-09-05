@@ -5,8 +5,12 @@ import { SimulationCancelled, WorkerPool } from '../../../packages/sim/src/paral
 import { toSerializable, toSkillSummaries, type SkillSummary } from '../../../packages/sim/src/parallel/protocol.ts';
 import { RaceCalculator } from '../../../packages/sim/src/calculator.ts';
 import {
+  DEBUFF_TYPES,
   defaultSystemSetting,
+  type PositionKeepMode,
   type RaceSetting,
+  type RandomPosition,
+  type SkillActivateAdjustment,
   type TrackRef,
   type UmaStatus,
 } from '../../../packages/sim/src/setting.ts';
@@ -17,14 +21,45 @@ import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
+import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
 export const gameData = loadGameData();
 const system = defaultSystemSetting();
 
-/** 名前ごとに 1 つだけ持つスキル一覧。UI の選択肢に使う。 */
-/** スキルポイントの費用。ヒントによる割引は今のところ扱わない。 */
-export const costModel = createCostModel(gameData.skillsById);
+/**
+ * スキルポイントの費用。ヒントレベルで割引が変わるので、レベルの組ごとに作る。
+ * 同じレベルの組で何度も呼ばれるため、直前のものだけ覚えておく。
+ */
+let cachedCostKey = '';
+let cachedCost: ReturnType<typeof createCostModel> | null = null;
+export function costModelFor(hintLevels: Readonly<Record<string, number>>) {
+  const key = JSON.stringify(hintLevels);
+  if (cachedCost === null || key !== cachedCostKey) {
+    cachedCost = createCostModel(gameData.skillsById, { hintLevels });
+    cachedCostKey = key;
+  }
+  return cachedCost;
+}
+
+/** 実行オプション。計算モデルは前から受け取っていたが、画面から変える口が無かった。 */
+export interface RunOptions {
+  readonly skillActivateAdjustment: SkillActivateAdjustment;
+  readonly randomPosition: RandomPosition;
+  readonly positionKeepMode: PositionKeepMode;
+  readonly positionKeepRate: number;
+}
+
+export function defaultRunOptions(): RunOptions {
+  return {
+    skillActivateAdjustment: 'NONE',
+    randomPosition: 'RANDOM',
+    positionKeepMode: 'APPROXIMATE',
+    positionKeepRate: 100,
+  };
+}
+
+export const debuffTypes = DEBUFF_TYPES;
 
 export const skillChoices = [...gameData.skillsByName.entries()]
   .map(([name, list]) => ({ name, skill: list[0]! }))
@@ -36,12 +71,27 @@ function getPool(): WorkerPool {
   return pool;
 }
 
+/** 保存する設定。結果は含めない。 */
+export interface PersistedSettings {
+  readonly uma: UmaStatus;
+  readonly track: TrackRef;
+  readonly skillIds: readonly string[];
+  readonly count: number;
+  readonly seed: number;
+  readonly options: RunOptions;
+  readonly debuffCounts: Readonly<Record<string, number>>;
+  readonly hintLevels: Readonly<Record<string, number>>;
+  readonly useField: boolean;
+}
+
 export interface Snapshot {
   readonly id: number;
   readonly label: string;
   readonly uma: UmaStatus;
   readonly track: TrackRef;
   readonly skillIds: readonly string[];
+  readonly options: RunOptions;
+  readonly debuffCounts: Readonly<Record<string, number>>;
   readonly summary: SimulationSummary;
   readonly skillSummaries: readonly SkillSummary[];
 }
@@ -75,6 +125,8 @@ interface AppState {
   progress: number;
   elapsedMs: number;
   error: string | null;
+  /** 失敗ではないが伝えたいこと。保存できない環境など。 */
+  notice: string | null;
   summary: SimulationSummary | null;
   results: RaceSimulationResult[];
   skillSummaries: SkillSummary[];
@@ -86,12 +138,19 @@ interface AppState {
   inverseResult: InverseResult | null;
   /** 順位条件を実際に判定するか。false なら本家と同じく満たしている前提。 */
   useField: boolean;
+  options: RunOptions;
+  /** デバフの種類ごとの個数。0 の項目は持たない。 */
+  debuffCounts: Record<string, number>;
+  /** スキル ID からヒントレベル（0 から 5）。0 の項目は持たない。 */
+  hintLevels: Record<string, number>;
 
   optimizeBudget: number;
   optimizeResult: OptimizeResult | null;
   optimizeLog: string[];
   optimizeRunning: boolean;
 
+  dismissError: () => void;
+  dismissNotice: () => void;
   setUma: (patch: Partial<UmaStatus>) => void;
   setTrack: (patch: Partial<TrackRef>) => void;
   toggleSkill: (id: string) => void;
@@ -99,6 +158,9 @@ interface AppState {
   setCount: (count: number) => void;
   setUseField: (useField: boolean) => void;
   setSeed: (seed: number) => void;
+  setOptions: (patch: Partial<RunOptions>) => void;
+  setDebuffCount: (id: string, count: number) => void;
+  setHintLevel: (skillId: string, level: number) => void;
   run: () => Promise<void>;
   cancel: () => void;
   showTrial: (trial: number) => void;
@@ -111,7 +173,12 @@ interface AppState {
   runOptimize: () => Promise<void>;
   shareUrl: () => string;
   applyShared: () => boolean;
+  /** 保存してある設定とスナップショットを読み、そのあと共有 URL を当てる。 */
+  bootstrap: () => Promise<void>;
 }
+
+const saveSettings = debounceSave<PersistedSettings>('settings');
+const saveSnapshots = debounceSave<Snapshot[]>('snapshots', 200);
 
 let controller: AbortController | null = null;
 
@@ -141,6 +208,7 @@ export const useStore = create<AppState>((set, get) => ({
   progress: 0,
   elapsedMs: 0,
   error: null,
+  notice: null,
   summary: null,
   results: [],
   skillSummaries: [],
@@ -151,12 +219,17 @@ export const useStore = create<AppState>((set, get) => ({
   inverseCount: 500,
   inverseResult: null,
   useField: false,
+  options: defaultRunOptions(),
+  debuffCounts: {},
+  hintLevels: {},
 
   optimizeBudget: 600,
   optimizeResult: null,
   optimizeLog: [],
   optimizeRunning: false,
 
+  dismissError: () => set({ error: null }),
+  dismissNotice: () => set({ notice: null }),
   setUma: (patch) => set((s) => ({ uma: { ...s.uma, ...patch } })),
   setTrack: (patch) => set((s) => ({ track: { ...s.track, ...patch } })),
   toggleSkill: (id) =>
@@ -168,6 +241,21 @@ export const useStore = create<AppState>((set, get) => ({
   setUseField: (useField) => set({ useField }),
   setSeed: (seed) => set({ seed }),
   setOptimizeBudget: (optimizeBudget) => set({ optimizeBudget }),
+  setOptions: (patch) => set((s) => ({ options: { ...s.options, ...patch } })),
+  setDebuffCount: (id, count) =>
+    set((s) => {
+      const next = { ...s.debuffCounts };
+      if (count > 0) next[id] = count;
+      else delete next[id];
+      return { debuffCounts: next };
+    }),
+  setHintLevel: (skillId, level) =>
+    set((s) => {
+      const next = { ...s.hintLevels };
+      if (level > 0) next[skillId] = level;
+      else delete next[skillId];
+      return { hintLevels: next };
+    }),
 
   run: async () => {
     const state = get();
@@ -293,6 +381,8 @@ export const useStore = create<AppState>((set, get) => ({
           uma: state.uma,
           track: state.track,
           skillIds: [...state.skillIds],
+          options: state.options,
+          debuffCounts: { ...state.debuffCounts },
           summary: state.summary,
           skillSummaries: state.skillSummaries,
         },
@@ -306,7 +396,13 @@ export const useStore = create<AppState>((set, get) => ({
   restoreSnapshot: (id) => {
     const snapshot = get().snapshots.find((x) => x.id === id);
     if (snapshot === undefined) return;
-    set({ uma: snapshot.uma, track: snapshot.track, skillIds: [...snapshot.skillIds] });
+    set({
+      uma: snapshot.uma,
+      track: snapshot.track,
+      skillIds: [...snapshot.skillIds],
+      options: snapshot.options,
+      debuffCounts: { ...snapshot.debuffCounts },
+    });
   },
 
   /**
@@ -331,7 +427,7 @@ export const useStore = create<AppState>((set, get) => ({
           pool: getPool(),
           system,
           base: toSerializable({ ...buildSetting(state), skills: [] }),
-          cost: costModel,
+          cost: costModelFor(state.hintLevels),
           seed: state.seed,
           field: fieldSpec(state),
         },
@@ -361,21 +457,69 @@ export const useStore = create<AppState>((set, get) => ({
       skillIds: state.skillIds,
       count: state.count,
       seed: state.seed,
+      options: state.options,
+      debuffCounts: state.debuffCounts,
+      hintLevels: state.hintLevels,
+      useField: state.useField,
     });
     return `${location.origin}${location.pathname}#s=${encoded}`;
+  },
+
+  bootstrap: async () => {
+    // 共有 URL はハッシュから同期で読めるので先に当てる。
+    // IndexedDB を待つと、リンクを開いた人に既定値が一瞬見えてしまう。
+    // 保存してある設定より共有 URL のほうが強い、という順序でもある。
+    const shared = get().applyShared();
+    const [settings, snapshots] = await Promise.all([
+      loadPersisted<PersistedSettings>('settings'),
+      loadPersisted<Snapshot[]>('snapshots'),
+    ]);
+    if (!shared && settings !== null) {
+      set({
+        uma: settings.uma,
+        track: settings.track,
+        skillIds: [...settings.skillIds],
+        count: settings.count,
+        seed: settings.seed,
+        options: settings.options,
+        debuffCounts: { ...settings.debuffCounts },
+        hintLevels: { ...settings.hintLevels },
+        useField: settings.useField,
+      });
+    }
+    if (snapshots !== null) set({ snapshots });
+    if (!(await isPersistenceAvailable())) {
+      set({
+        notice:
+          'このブラウザでは設定を保存できません。閉じると入力は消えます。共有リンクを作っておくと戻せます。',
+      });
+    }
+    hydrated = true;
   },
 
   applyShared: () => {
     const match = /[#&]s=([^&]+)/.exec(location.hash);
     if (match === null) return false;
     const shared = decodeShareState(match[1]!);
-    if (shared === null) return false;
+    if (shared === null) {
+      // 途中で切れたリンクや、古すぎる書式。黙って既定値で開くと、
+      // 送った側と違う設定を見ていることに気付けない。
+      set({
+        error:
+          '共有リンクの設定を読み取れませんでした。リンクが途中で切れているか、書式が古い可能性があります。既定の設定で開いています。',
+      });
+      return false;
+    }
     set({
       uma: shared.uma,
       track: shared.track,
       skillIds: [...shared.skillIds],
       count: shared.count,
       seed: shared.seed,
+      options: shared.options,
+      debuffCounts: { ...shared.debuffCounts },
+      hintLevels: { ...shared.hintLevels },
+      useField: shared.useField,
     });
     return true;
   },
@@ -397,11 +541,11 @@ function buildSetting(state: AppState): RaceSetting {
     uma: state.uma,
     track: state.track,
     skills: state.skillIds.map((id) => gameData.skillsById.get(id)!),
-    skillActivateAdjustment: 'NONE',
-    randomPosition: 'RANDOM',
-    debuffCounts: {},
-    positionKeepMode: 'APPROXIMATE',
-    positionKeepRate: 100,
+    skillActivateAdjustment: state.options.skillActivateAdjustment,
+    randomPosition: state.options.randomPosition,
+    debuffCounts: state.debuffCounts,
+    positionKeepMode: state.options.positionKeepMode,
+    positionKeepRate: state.options.positionKeepRate,
   };
 }
 
@@ -425,3 +569,42 @@ function getDetailField(state: AppState) {
 export function currentTrackDetail(track: TrackRef) {
   return gameData.trackData[track.location]?.courses[track.course];
 }
+
+/**
+ * 読み込みが終わるまでは書かない。既定値で上書きしてしまうためである。
+ */
+let hydrated = false;
+
+function settingsOf(state: AppState): PersistedSettings {
+  return {
+    uma: state.uma,
+    track: state.track,
+    skillIds: state.skillIds,
+    count: state.count,
+    seed: state.seed,
+    options: state.options,
+    debuffCounts: state.debuffCounts,
+    hintLevels: state.hintLevels,
+    useField: state.useField,
+  };
+}
+
+const SETTING_KEYS = [
+  'uma',
+  'track',
+  'skillIds',
+  'count',
+  'seed',
+  'options',
+  'debuffCounts',
+  'hintLevels',
+  'useField',
+] as const;
+
+useStore.subscribe((state, previous) => {
+  if (!hydrated) return;
+  if (SETTING_KEYS.some((key) => state[key] !== previous[key])) {
+    saveSettings(settingsOf(state));
+  }
+  if (state.snapshots !== previous.snapshots) saveSnapshots(state.snapshots);
+});

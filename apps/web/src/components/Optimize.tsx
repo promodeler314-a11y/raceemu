@@ -1,4 +1,5 @@
-import { gameData, costModel, useStore } from '../store.ts';
+import { useMemo } from 'react';
+import { costModelFor, gameData, useStore } from '../store.ts';
 import { Panel } from './Inputs.tsx';
 
 const fieldCls =
@@ -18,7 +19,9 @@ export function OptimizePanel() {
   const log = useStore((s) => s.optimizeLog);
   const result = useStore((s) => s.optimizeResult);
   const useField = useStore((s) => s.useField);
+  const hintLevels = useStore((s) => s.hintLevels);
 
+  const costModel = useMemo(() => costModelFor(hintLevels), [hintLevels]);
   const poolCost = costModel.totalCost(skillIds);
 
   return (

@@ -460,6 +460,11 @@ export class SkillData {
     readonly sp: number,
     readonly activateLot: number,
     invokes: Invoke[],
+    /**
+     * 条件と効果を日本語で書いた説明。
+     * ブラウザ向けのバンドルでは容量のため落としてあり、空になる
+     * （apps/web/vite.config.ts の trimSkillData）。
+     */
     readonly info: readonly string[],
   ) {
     this.invokes = invokes;

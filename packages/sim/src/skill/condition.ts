@@ -1,5 +1,5 @@
-import { horseLane, styleValue, conditionValue } from '../data/constants.ts';
-import { orderRateBoundaries } from '../data/orderRate.ts';
+import { bashinMeters, horseLane, styleValue, conditionValue } from '../data/constants.ts';
+import { orderRateBoundaries, resolveOrderRateContinue } from '../data/orderRate.ts';
 import type { Corner, Straight } from '../data/track.ts';
 import type { Rng, RngSet } from '../rng.ts';
 import type { DerivedSetting, RandomPosition } from '../setting.ts';
@@ -387,6 +387,66 @@ function compileCondition(
         return true;
       };
     }
+
+    case 'order_rate_in20_continue':
+    case 'order_rate_in40_continue':
+    case 'order_rate_in50_continue':
+    case 'order_rate_in80_continue':
+    case 'order_rate_out20_continue':
+    case 'order_rate_out40_continue':
+    case 'order_rate_out50_continue':
+    case 'order_rate_out70_continue': {
+      const type = condition.type;
+      if (resolveOrderRateContinue(type, base.track.gateCount) === undefined) {
+        // 対応表に無い頭数。従来どおり満たしている前提にする。
+        unsupportedConditions.add(`${type} (${base.track.gateCount}頭)`);
+        return () => true;
+      }
+      // 状態はフレームごとに calculator が落としていく。1 なら一度も外れていない。
+      return (s) => (s.simulation.specialState[type] ?? 1) > 0;
+    }
+
+    /**
+     * 距離差の条件。単位はスキルデータの注記から確定した。
+     * バ身は constants.ts の bashinMeters で換算する。
+     * フィールドが無いときは、順位条件と同じく満たしている前提にする。
+     */
+    case 'distance_diff_top':
+      return (s) => {
+        const distance = s.distanceFromTop;
+        return distance === null ? true : condition.check(distance / bashinMeters);
+      };
+
+    case 'distance_diff_top_float':
+      // 「先頭との距離×10m」。値は 0.1 m 単位である。
+      return (s) => {
+        const distance = s.distanceFromTop;
+        return distance === null ? true : condition.check(distance * 10);
+      };
+
+    case 'bashin_diff_infront':
+      return (s) => {
+        const distance = s.distanceToFront;
+        if (distance === null) return true;
+        // 前に誰もいなければ差は定義できない。先頭にいるということなので満たさない。
+        if (!Number.isFinite(distance)) return false;
+        return condition.check(distance / bashinMeters);
+      };
+
+    case 'bashin_diff_behind':
+      return (s) => {
+        const distance = s.distanceToBehind;
+        if (distance === null) return true;
+        if (!Number.isFinite(distance)) return false;
+        return condition.check(distance / bashinMeters);
+      };
+
+    case 'distance_diff_rate':
+      // 注記の「相対位置」。先頭を 0、最後方を 100 とする。
+      return (s) => {
+        const rate = s.distanceDiffRate;
+        return rate === null ? true : condition.check(rate);
+      };
 
     case 'popularity':
       return preChecked(condition, base.uma.popularity);
