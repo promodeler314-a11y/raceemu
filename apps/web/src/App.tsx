@@ -14,6 +14,25 @@ export default function App() {
     void bootstrap();
   }, [bootstrap]);
 
+  // 実行と中断だけは手を止めずに叩けるようにする。
+  // 入力欄に文字を打っている最中でも困らない組み合わせを選んである。
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const { run, cancel, running, optimizeRunning } = useStore.getState();
+      if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        if (!running && !optimizeRunning) void run();
+        return;
+      }
+      if (event.key === 'Escape' && (running || optimizeRunning)) {
+        event.preventDefault();
+        cancel();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">
       <header className="border-b border-neutral-200 bg-white px-4 py-3 dark:border-neutral-800 dark:bg-neutral-900">

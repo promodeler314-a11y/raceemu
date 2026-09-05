@@ -225,6 +225,32 @@ console.log('--- 壊れた共有 URL の知らせ:', alertText.slice(0, 40));
 if (!alertText.includes('読み取れませんでした')) fail('壊れた共有 URL が黙って無視されている');
 await broken.close();
 
+// キーボード操作: Ctrl+Enter で実行できる
+await page.keyboard.press('Control+Enter');
+await page.waitForTimeout(300);
+const startedByKey = await page.evaluate(() =>
+  [...document.querySelectorAll('button')].some((b) => b.textContent?.includes('実行中')),
+);
+console.log('--- Ctrl+Enter で実行が始まった:', startedByKey);
+if (!startedByKey) fail('Ctrl+Enter で実行が始まらない');
+await page.keyboard.press('Escape');
+await page.waitForFunction(
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('実行中')),
+  null,
+  { timeout: 60000 },
+);
+console.log('--- Esc で中断できた');
+
+// 名前のないボタンが残っていないこと
+const unnamed = await page.evaluate(
+  () =>
+    [...document.querySelectorAll('button')].filter(
+      (b) => (b.getAttribute('aria-label') ?? b.textContent ?? '').trim().length <= 1,
+    ).length,
+);
+console.log('--- 名前のないボタン:', unnamed, '件');
+if (unnamed > 0) fail(`読み上げで区別できないボタンが ${unnamed} 件ある`);
+
 // ライセンス: ソースへのリンクが画面にあること（AGPL v3 の要求）
 const sourceLink = await page.locator('footer a[href*="github.com"]').count();
 console.log('--- フッタのソースリンク:', sourceLink, '件');

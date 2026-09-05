@@ -255,10 +255,10 @@ export function SkillInput() {
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-                  <th className="py-1 text-left font-normal">スキル</th>
-                  <th className="py-1 text-right font-normal">ヒント</th>
-                  <th className="py-1 text-right font-normal">必要 pt</th>
-                  <th className="py-1 text-right font-normal">
+                  <th scope="col" className="py-1 text-left font-normal">スキル</th>
+                  <th scope="col" className="py-1 text-right font-normal">ヒント</th>
+                  <th scope="col" className="py-1 text-right font-normal">必要 pt</th>
+                  <th scope="col" className="py-1 text-right font-normal">
                     <span className="sr-only">操作</span>
                   </th>
                 </tr>
@@ -269,7 +269,9 @@ export function SkillInput() {
                     key={skill.id}
                     className="border-b border-neutral-100 last:border-0 dark:border-neutral-800"
                   >
-                    <td className="py-1">{skill.name}</td>
+                    <th scope="row" className="py-1 text-left font-normal">
+                      {skill.name}
+                    </th>
                     <td className="py-1 text-right">
                       <select
                         className="rounded border border-neutral-300 bg-white px-1 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
@@ -481,6 +483,7 @@ export function RunPanel() {
           className="rounded bg-neutral-900 px-4 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
           onClick={() => void run()}
           disabled={running}
+          title="Ctrl+Enter（Mac は Cmd+Enter）でも実行できる"
         >
           {running ? '実行中' : '実行'}
         </button>
@@ -490,14 +493,18 @@ export function RunPanel() {
               type="button"
               className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
               onClick={cancel}
+              title="Esc でも中断できる"
             >
               中断
             </button>
-            <span className="text-sm text-neutral-500">
+            <span className="text-sm text-neutral-500" role="status" aria-live="polite">
               {progress} / {count}
             </span>
           </>
         )}
+        <span className="ml-auto text-xs text-neutral-500 dark:text-neutral-400">
+          Ctrl+Enter で実行、Esc で中断
+        </span>
       </div>
     </Panel>
   );
