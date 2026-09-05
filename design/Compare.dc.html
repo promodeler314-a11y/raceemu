@@ -1,0 +1,202 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #2a78d6; text-decoration: none; }
+    a:hover { color: #1c5cab; text-decoration: underline; }
+    .app {
+      --paper: #f5f4f1; --surface: #fcfcfb; --sunken: #eeece7;
+      --rule: #dedbd3; --rule2: #c6c2b8;
+      --ink: #12120f; --ink2: #52514e; --ink3: #8a877e;
+      --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+      --sans: "IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+      font-family: var(--sans); color: var(--ink); background: var(--paper);
+      font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    }
+    .app * { box-sizing: border-box; }
+    .lbl { font-size: 11px; color: var(--ink3); letter-spacing: 0.02em; }
+    .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .ctl { height: 30px; border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface);
+      color: var(--ink); font-size: 12px; padding: 0 8px; display: flex; align-items: center; }
+    .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; }
+    .ptitle { font-size: 13px; font-weight: 600; }
+    .dot { width: 8px; height: 8px; border-radius: 2px; flex: none; }
+    .ct { border-collapse: collapse; width: 100%; font-size: 12px; }
+    .ct th { padding: 0 12px 8px; border-bottom: 1px solid var(--rule2); text-align: right; vertical-align: bottom; }
+    .ct th:first-child { text-align: left; }
+    .ct td { padding: 8px 12px; border-bottom: 1px solid var(--rule); text-align: right;
+      font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .ct td:first-child { text-align: left; font-family: var(--sans); color: var(--ink2); }
+    .ct tr.grp td { background: var(--sunken); font-family: var(--sans); font-size: 11px;
+      color: var(--ink3); padding: 5px 12px; border-bottom: 1px solid var(--rule2); }
+    .ct tr.diff td { background: #f3f7fd; }
+    .ct tr.diff td:first-child { color: var(--ink); font-weight: 600; box-shadow: inset 2px 0 0 var(--s1); }
+    .ct tr.same td { color: var(--ink3); }
+    .d { display: block; font-size: 11px; color: var(--ink2); font-weight: 400; }
+  </style>
+</helmet>
+
+<div class="app" style="width: 1440px; height: 1180px; display: flex; flex-direction: column;">
+
+  <header style="height: 52px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--rule2);">
+    <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink2);">RACE EMULATOR</div>
+    <nav style="display: flex; gap: 2px; align-self: stretch;">
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">設定</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">結果</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; font-weight: 600; color: var(--ink); box-shadow: inset 0 -2px 0 var(--s1);">比較</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">詳細</span>
+    </nav>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; flex: none;">
+      <span class="ctl" style="color: var(--ink2);">共有リンク</span>
+      <span class="ctl" style="background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600;">現在の設定を追加</span>
+    </div>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex;">
+
+    <aside style="width: 280px; flex: none; background: var(--surface); border-right: 1px solid var(--rule2); padding: 16px; display: flex; flex-direction: column; gap: 14px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 8px;"><span class="ptitle">スナップショット</span><span class="lbl num">6</span></div>
+      <div style="display: flex; flex-direction: column; gap: 6px;">
+        <div style="border: 1px solid var(--s1); border-radius: 3px; padding: 8px 10px; display: flex; align-items: flex-start; gap: 8px; background: #f3f7fd;">
+          <span class="dot" style="background: var(--s1); margin-top: 5px;"></span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+            <span style="font-size: 12px; font-weight: 600;">基準</span>
+            <span class="lbl num">2:24.526 ・ 14:02</span>
+          </div>
+        </div>
+        <div style="border: 1px solid var(--rule2); border-radius: 3px; padding: 8px 10px; display: flex; align-items: flex-start; gap: 8px;">
+          <span class="dot" style="background: var(--s2); margin-top: 5px;"></span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+            <span style="font-size: 12px; font-weight: 600;">案 A ／ 末脚を外す</span>
+            <span class="lbl num">2:25.104 ・ 14:05</span>
+          </div>
+        </div>
+        <div style="border: 1px solid var(--rule2); border-radius: 3px; padding: 8px 10px; display: flex; align-items: flex-start; gap: 8px;">
+          <span class="dot" style="background: var(--s3); margin-top: 5px;"></span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+            <span style="font-size: 12px; font-weight: 600;">案 B ／ スタミナ +100</span>
+            <span class="lbl num">2:24.188 ・ 14:07</span>
+          </div>
+        </div>
+        <div style="border: 1px solid var(--rule); border-radius: 3px; padding: 8px 10px; display: flex; align-items: flex-start; gap: 8px; opacity: 0.55;">
+          <span class="dot" style="background: var(--rule2); margin-top: 5px;"></span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+            <span style="font-size: 12px;">案 C ／ 賢さ +150</span>
+            <span class="lbl num">2:24.402 ・ 13:48</span>
+          </div>
+        </div>
+        <div style="border: 1px solid var(--rule); border-radius: 3px; padding: 8px 10px; display: flex; align-items: flex-start; gap: 8px; opacity: 0.55;">
+          <span class="dot" style="background: var(--rule2); margin-top: 5px;"></span>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 1px;">
+            <span style="font-size: 12px;">案 D ／ 重馬場</span>
+            <span class="lbl num">2:27.910 ・ 13:31</span>
+          </div>
+        </div>
+      </div>
+      <span class="lbl">最大 3 件まで同時に並べられます</span>
+    </aside>
+
+    <section style="flex: 1; min-width: 0; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 18px; font-weight: 600;">比較</span>
+        <span class="lbl">3 件 ・ 各 10,000 試行 ・ 共通乱数で対応付け</span>
+        <span style="flex: 1;"></span>
+        <span class="ctl" style="gap: 8px;">
+          <span style="width: 26px; height: 15px; border-radius: 8px; background: var(--s1); position: relative;"><span style="position: absolute; right: 2px; top: 2px; width: 11px; height: 11px; border-radius: 50%; background: #fff;"></span></span>
+          差のある項目だけ表示
+        </span>
+        <span class="ctl" style="justify-content: space-between; width: 168px; color: var(--ink2);">基準 ／ 基準
+          <svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#8a877e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg>
+        </span>
+      </div>
+
+      <div class="panel" style="padding: 14px 16px 8px; display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span class="ptitle">タイム分布の重ね合わせ</span>
+          <span style="flex: 1;"></span>
+          <div style="display: flex; align-items: center; gap: 14px;">
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink2);"><span class="dot" style="background: var(--s1);"></span>基準</span>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink2);"><span class="dot" style="background: var(--s2);"></span>案 A</span>
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--ink2);"><span class="dot" style="background: var(--s3);"></span>案 B</span>
+          </div>
+        </div>
+        <svg width="1080" height="182" viewBox="0 0 1080 182">
+          <rect x="66" y="26" width="980" height="132" fill="#fcfcfb"/>
+          <line x1="159.3" y1="26" x2="159.3" y2="158" stroke="#e6e3dc" stroke-width="1"/><text x="159.3" y="174" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:23.0</text><line x1="392.7" y1="26" x2="392.7" y2="158" stroke="#e6e3dc" stroke-width="1"/><text x="392.7" y="174" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:24.0</text><line x1="626" y1="26" x2="626" y2="158" stroke="#e6e3dc" stroke-width="1"/><text x="626" y="174" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:25.0</text><line x1="859.3" y1="26" x2="859.3" y2="158" stroke="#e6e3dc" stroke-width="1"/><text x="859.3" y="174" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:26.0</text>
+          <line x1="66" y1="158" x2="1046" y2="158" stroke="#c6c2b8" stroke-width="1"/>
+          <path d="M66 157.9 L70.9 157.9 L75.8 157.8 L80.7 157.8 L85.6 157.8 L90.5 157.7 L95.4 157.7 L100.3 157.7 L105.2 157.6 L110.1 157.5 L115 157.5 L119.9 157.4 L124.8 157.3 L129.7 157.2 L134.6 157.1 L139.5 157 L144.4 156.9 L149.3 156.7 L154.2 156.6 L159.1 156.4 L164 156.2 L168.9 156 L173.8 155.7 L178.7 155.4 L183.6 155.1 L188.5 154.8 L193.4 154.4 L198.3 154 L203.2 153.6 L208.1 153.1 L213 152.6 L217.9 152 L222.8 151.4 L227.7 150.7 L232.6 150 L237.5 149.2 L242.4 148.4 L247.3 147.5 L252.2 146.5 L257.1 145.5 L262 144.4 L266.9 143.2 L271.8 141.9 L276.7 140.6 L281.6 139.2 L286.5 137.6 L291.4 136.1 L296.3 134.4 L301.2 132.6 L306.1 130.8 L311 128.8 L315.9 126.8 L320.8 124.7 L325.7 122.5 L330.6 120.2 L335.5 117.8 L340.4 115.4 L345.3 112.8 L350.2 110.3 L355.1 107.6 L360 104.9 L364.9 102.1 L369.8 99.3 L374.7 96.4 L379.6 93.5 L384.5 90.6 L389.4 87.6 L394.3 84.7 L399.2 81.7 L404.1 78.8 L409 75.9 L413.9 73 L418.8 70.1 L423.7 67.3 L428.6 64.6 L433.5 61.9 L438.4 59.4 L443.3 56.9 L448.2 54.5 L453.1 52.3 L458 50.1 L462.9 48.1 L467.8 46.3 L472.7 44.6 L477.6 43.1 L482.5 41.7 L487.4 40.5 L492.3 39.5 L497.2 38.7 L502.1 38.1 L507 37.7 L511.9 37.4 L516.8 37.4 L521.7 37.5 L526.6 37.9 L531.5 38.4 L536.4 39.2 L541.3 40.1 L546.2 41.2 L551.1 42.5 L556 43.9 L560.9 45.6 L565.8 47.3 L570.7 49.3 L575.6 51.3 L580.5 53.5 L585.4 55.9 L590.3 58.3 L595.2 60.8 L600.1 63.5 L605 66.2 L609.9 68.9 L614.8 71.8 L619.7 74.6 L624.6 77.5 L629.5 80.5 L634.4 83.4 L639.3 86.4 L644.2 89.3 L649.1 92.3 L654 95.2 L658.9 98.1 L663.8 100.9 L668.7 103.7 L673.6 106.4 L678.5 109.1 L683.4 111.7 L688.3 114.3 L693.2 116.8 L698.1 119.2 L703 121.5 L707.9 123.7 L712.8 125.9 L717.7 128 L722.6 129.9 L727.5 131.8 L732.4 133.6 L737.3 135.3 L742.2 137 L747.1 138.5 L752 140 L756.9 141.4 L761.8 142.7 L766.7 143.9 L771.6 145 L776.5 146.1 L781.4 147.1 L786.3 148 L791.2 148.9 L796.1 149.7 L801 150.4 L805.9 151.1 L810.8 151.8 L815.7 152.4 L820.6 152.9 L825.5 153.4 L830.4 153.9 L835.3 154.3 L840.2 154.6 L845.1 155 L850 155.3 L854.9 155.6 L859.8 155.9 L864.7 156.1 L869.6 156.3 L874.5 156.5 L879.4 156.7 L884.3 156.8 L889.2 157 L894.1 157.1 L899 157.2 L903.9 157.3 L908.8 157.4 L913.7 157.4 L918.6 157.5 L923.5 157.6 L928.4 157.6 L933.3 157.7 L938.2 157.7 L943.1 157.8 L948 157.8 L952.9 157.8 L957.8 157.8 L962.7 157.9 L967.6 157.9 L972.5 157.9 L977.4 157.9 L982.3 157.9 L987.2 157.9 L992.1 157.9 L997 158 L1001.9 158 L1006.8 158 L1011.7 158 L1016.6 158 L1021.5 158 L1026.4 158 L1031.3 158 L1036.2 158 L1041.1 158 L1046 158" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round"/><path d="M66 158 L70.9 158 L75.8 158 L80.7 158 L85.6 158 L90.5 158 L95.4 158 L100.3 158 L105.2 158 L110.1 158 L115 158 L119.9 158 L124.8 158 L129.7 158 L134.6 158 L139.5 158 L144.4 158 L149.3 157.9 L154.2 157.9 L159.1 157.9 L164 157.9 L168.9 157.9 L173.8 157.9 L178.7 157.9 L183.6 157.8 L188.5 157.8 L193.4 157.8 L198.3 157.8 L203.2 157.7 L208.1 157.7 L213 157.7 L217.9 157.6 L222.8 157.6 L227.7 157.5 L232.6 157.4 L237.5 157.4 L242.4 157.3 L247.3 157.2 L252.2 157.1 L257.1 157 L262 156.8 L266.9 156.7 L271.8 156.5 L276.7 156.4 L281.6 156.2 L286.5 155.9 L291.4 155.7 L296.3 155.5 L301.2 155.2 L306.1 154.9 L311 154.5 L315.9 154.2 L320.8 153.8 L325.7 153.3 L330.6 152.9 L335.5 152.4 L340.4 151.8 L345.3 151.2 L350.2 150.6 L355.1 149.9 L360 149.2 L364.9 148.4 L369.8 147.5 L374.7 146.6 L379.6 145.7 L384.5 144.6 L389.4 143.6 L394.3 142.4 L399.2 141.2 L404.1 139.9 L409 138.5 L413.9 137.1 L418.8 135.6 L423.7 134 L428.6 132.3 L433.5 130.6 L438.4 128.8 L443.3 126.9 L448.2 125 L453.1 123 L458 120.9 L462.9 118.7 L467.8 116.5 L472.7 114.2 L477.6 111.9 L482.5 109.5 L487.4 107 L492.3 104.5 L497.2 102 L502.1 99.4 L507 96.8 L511.9 94.2 L516.8 91.6 L521.7 89 L526.6 86.3 L531.5 83.7 L536.4 81.1 L541.3 78.5 L546.2 75.9 L551.1 73.4 L556 70.9 L560.9 68.5 L565.8 66.2 L570.7 63.9 L575.6 61.7 L580.5 59.6 L585.4 57.6 L590.3 55.7 L595.2 54 L600.1 52.3 L605 50.8 L609.9 49.5 L614.8 48.2 L619.7 47.1 L624.6 46.2 L629.5 45.4 L634.4 44.8 L639.3 44.4 L644.2 44.1 L649.1 44 L654 44 L658.9 44.2 L663.8 44.6 L668.7 45.1 L673.6 45.8 L678.5 46.7 L683.4 47.7 L688.3 48.8 L693.2 50.2 L698.1 51.6 L703 53.2 L707.9 54.9 L712.8 56.7 L717.7 58.7 L722.6 60.7 L727.5 62.8 L732.4 65.1 L737.3 67.4 L742.2 69.8 L747.1 72.2 L752 74.7 L756.9 77.2 L761.8 79.8 L766.7 82.4 L771.6 85.1 L776.5 87.7 L781.4 90.3 L786.3 93 L791.2 95.6 L796.1 98.2 L801 100.8 L805.9 103.3 L810.8 105.8 L815.7 108.3 L820.6 110.7 L825.5 113.1 L830.4 115.4 L835.3 117.7 L840.2 119.9 L845.1 122 L850 124 L854.9 126 L859.8 127.9 L864.7 129.8 L869.6 131.5 L874.5 133.2 L879.4 134.8 L884.3 136.4 L889.2 137.8 L894.1 139.2 L899 140.6 L903.9 141.8 L908.8 143 L913.7 144.1 L918.6 145.2 L923.5 146.2 L928.4 147.1 L933.3 148 L938.2 148.8 L943.1 149.6 L948 150.3 L952.9 150.9 L957.8 151.5 L962.7 152.1 L967.6 152.6 L972.5 153.1 L977.4 153.6 L982.3 154 L987.2 154.4 L992.1 154.7 L997 155 L1001.9 155.3 L1006.8 155.6 L1011.7 155.8 L1016.6 156.1 L1021.5 156.3 L1026.4 156.4 L1031.3 156.6 L1036.2 156.8 L1041.1 156.9 L1046 157" fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round"/><path d="M66 157.3 L70.9 157.2 L75.8 157.1 L80.7 157 L85.6 156.8 L90.5 156.7 L95.4 156.5 L100.3 156.3 L105.2 156.1 L110.1 155.8 L115 155.5 L119.9 155.2 L124.8 154.9 L129.7 154.5 L134.6 154.1 L139.5 153.6 L144.4 153.1 L149.3 152.5 L154.2 151.9 L159.1 151.3 L164 150.5 L168.9 149.7 L173.8 148.9 L178.7 147.9 L183.6 146.9 L188.5 145.8 L193.4 144.7 L198.3 143.4 L203.2 142 L208.1 140.6 L213 139.1 L217.9 137.4 L222.8 135.7 L227.7 133.9 L232.6 131.9 L237.5 129.9 L242.4 127.7 L247.3 125.5 L252.2 123.1 L257.1 120.6 L262 118.1 L266.9 115.4 L271.8 112.7 L276.7 109.8 L281.6 106.9 L286.5 103.9 L291.4 100.8 L296.3 97.7 L301.2 94.5 L306.1 91.2 L311 87.9 L315.9 84.6 L320.8 81.3 L325.7 78 L330.6 74.7 L335.5 71.4 L340.4 68.1 L345.3 64.9 L350.2 61.7 L355.1 58.7 L360 55.7 L364.9 52.8 L369.8 50 L374.7 47.4 L379.6 44.9 L384.5 42.6 L389.4 40.4 L394.3 38.4 L399.2 36.6 L404.1 35 L409 33.6 L413.9 32.5 L418.8 31.5 L423.7 30.8 L428.6 30.3 L433.5 30 L438.4 30 L443.3 30.2 L448.2 30.6 L453.1 31.3 L458 32.2 L462.9 33.3 L467.8 34.7 L472.7 36.2 L477.6 38 L482.5 39.9 L487.4 42 L492.3 44.3 L497.2 46.8 L502.1 49.4 L507 52.1 L511.9 55 L516.8 57.9 L521.7 61 L526.6 64.1 L531.5 67.3 L536.4 70.6 L541.3 73.9 L546.2 77.2 L551.1 80.5 L556 83.8 L560.9 87.2 L565.8 90.4 L570.7 93.7 L575.6 96.9 L580.5 100.1 L585.4 103.2 L590.3 106.2 L595.2 109.1 L600.1 112 L605 114.8 L609.9 117.4 L614.8 120 L619.7 122.5 L624.6 124.9 L629.5 127.2 L634.4 129.4 L639.3 131.4 L644.2 133.4 L649.1 135.3 L654 137 L658.9 138.7 L663.8 140.2 L668.7 141.7 L673.6 143.1 L678.5 144.4 L683.4 145.6 L688.3 146.7 L693.2 147.7 L698.1 148.7 L703 149.5 L707.9 150.3 L712.8 151.1 L717.7 151.8 L722.6 152.4 L727.5 153 L732.4 153.5 L737.3 154 L742.2 154.4 L747.1 154.8 L752 155.2 L756.9 155.5 L761.8 155.8 L766.7 156 L771.6 156.3 L776.5 156.5 L781.4 156.6 L786.3 156.8 L791.2 157 L796.1 157.1 L801 157.2 L805.9 157.3 L810.8 157.4 L815.7 157.5 L820.6 157.5 L825.5 157.6 L830.4 157.7 L835.3 157.7 L840.2 157.7 L845.1 157.8 L850 157.8 L854.9 157.8 L859.8 157.9 L864.7 157.9 L869.6 157.9 L874.5 157.9 L879.4 157.9 L884.3 157.9 L889.2 157.9 L894.1 158 L899 158 L903.9 158 L908.8 158 L913.7 158 L918.6 158 L923.5 158 L928.4 158 L933.3 158 L938.2 158 L943.1 158 L948 158 L952.9 158 L957.8 158 L962.7 158 L967.6 158 L972.5 158 L977.4 158 L982.3 158 L987.2 158 L992.1 158 L997 158 L1001.9 158 L1006.8 158 L1011.7 158 L1016.6 158 L1021.5 158 L1026.4 158 L1031.3 158 L1036.2 158 L1041.1 158 L1046 158" fill="none" stroke="#1baf7a" stroke-width="2" stroke-linejoin="round"/>
+          <text x="515.4" y="30.4" text-anchor="middle" font-size="11" font-weight="600" fill="#12120f">基準</text><text x="650.3" y="37" text-anchor="middle" font-size="11" font-weight="600" fill="#12120f">案 A</text><text x="436.5" y="23" text-anchor="middle" font-size="11" font-weight="600" fill="#12120f">案 B</text>
+          <text x="66" y="176" font-size="10" fill="#8a877e">タイム</text>
+        </svg>
+      </div>
+
+      <div class="panel" style="flex: 1; min-height: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span class="ptitle">設定と結果の差</span>
+          <span style="flex: 1;"></span>
+          <span class="lbl">指標の下段は基準との差 ・ 括弧は 95% 信頼区間</span>
+        </div>
+        <table class="ct">
+          <thead>
+            <tr>
+              <th style="width: 300px;"><span class="lbl">項目</span></th>
+              <th style="width: 200px;"><div style="display: flex; align-items: center; gap: 6px; justify-content: flex-end;"><span class="dot" style="background: var(--s1);"></span><span style="font-weight: 600;">基準</span></div></th>
+              <th style="width: 220px;"><div style="display: flex; align-items: center; gap: 6px; justify-content: flex-end;"><span class="dot" style="background: var(--s2);"></span><span style="font-weight: 600;">案 A ／ 末脚を外す</span></div></th>
+              <th style="width: 220px;"><div style="display: flex; align-items: center; gap: 6px; justify-content: flex-end;"><span class="dot" style="background: var(--s3);"></span><span style="font-weight: 600;">案 B ／ スタミナ +100</span></div></th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="grp"><td colspan="4">ステータス</td></tr>
+            <tr class="diff"><td>スタミナ</td><td>1050</td><td>1050</td><td>1150</td></tr>
+            <tr class="same"><td colspan="4" style="font-family: var(--sans); font-size: 11px;">スピード・パワー・根性・賢さ・適性 の 8 項目は 3 件とも同じ</td></tr>
+
+            <tr class="grp"><td colspan="4">コース</td></tr>
+            <tr class="same"><td colspan="4" style="font-family: var(--sans); font-size: 11px;">東京 芝 2400m ・ 良 ・ 18 頭 ・ 枠 5 — 3 件とも同じ</td></tr>
+
+            <tr class="grp"><td colspan="4">スキル</td></tr>
+            <tr class="diff"><td>末脚 <span class="lbl num">Lv3</span></td><td>あり</td><td>なし</td><td>あり</td></tr>
+            <tr class="diff"><td>所持数</td><td>12</td><td>11</td><td>12</td></tr>
+            <tr class="diff"><td>消費スキル Pt</td><td>1,240</td><td>1,090</td><td>1,240</td></tr>
+            <tr class="same"><td colspan="4" style="font-family: var(--sans); font-size: 11px;">残り 11 件のスキルは 3 件とも同じ</td></tr>
+
+            <tr class="grp"><td colspan="4">結果</td></tr>
+            <tr class="diff"><td>平均タイム</td>
+              <td>2:24.526</td>
+              <td>2:25.104<span class="d">+0.578 （+0.55 … +0.61）</span></td>
+              <td>2:24.188<span class="d">−0.338 （−0.36 … −0.31）</span></td></tr>
+            <tr class="diff"><td>p95 タイム</td><td>2:25.412</td><td>2:26.021<span class="d">+0.609</span></td><td>2:25.048<span class="d">−0.364</span></td></tr>
+            <tr class="diff"><td>最大スパート率</td><td>54.0%</td><td>41.2%<span class="d">−12.8 pt</span></td><td>62.4%<span class="d">+8.4 pt</span></td></tr>
+            <tr class="diff"><td>ゴール時の残り体力</td><td>11.9%</td><td>14.8%<span class="d">+2.9 pt</span></td><td>13.6%<span class="d">+1.7 pt</span></td></tr>
+            <tr class="same"><td>完走率</td><td>100.0%</td><td>100.0%</td><td>100.0%</td></tr>
+            <tr class="diff"><td>近似条件への依存 <span style="color: var(--ink3);">△</span></td><td>3 件</td><td>3 件</td><td>3 件</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+    </section>
+  </div>
+
+  <footer style="height: 28px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 20px; background: var(--surface); border-top: 1px solid var(--rule); color: var(--ink3); font-size: 11px;">
+    <span>共通乱数 ・ 基準シード 0x4A19C2</span>
+    <span style="flex: 1;"></span>
+    <span>計算モデルは mee1080/umasim の移植 ・ AGPL v3 ・ ソース</span>
+  </footer>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1180}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

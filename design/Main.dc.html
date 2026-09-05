@@ -1,0 +1,268 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #2a78d6; text-decoration: none; }
+    a:hover { color: #1c5cab; text-decoration: underline; }
+    .app {
+      --paper: #f5f4f1; --surface: #fcfcfb; --sunken: #eeece7;
+      --rule: #dedbd3; --rule2: #c6c2b8;
+      --ink: #12120f; --ink2: #52514e; --ink3: #8a877e;
+      --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+      --sans: "IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+      font-family: var(--sans); color: var(--ink); background: var(--paper);
+      font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    }
+    .app * { box-sizing: border-box; }
+    .lbl { font-size: 11px; color: var(--ink3); letter-spacing: 0.02em; }
+    .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .ctl {
+      height: 30px; border: 1px solid var(--rule2); border-radius: 3px;
+      background: var(--surface); color: var(--ink); font: inherit; font-size: 12px;
+      padding: 0 8px; display: flex; align-items: center;
+    }
+    .seg { display: flex; border: 1px solid var(--rule2); border-radius: 3px; overflow: hidden; height: 30px; }
+    .seg > span { flex: 1; display: flex; align-items: center; justify-content: center;
+      font-size: 12px; color: var(--ink2); background: var(--surface); border-right: 1px solid var(--rule); }
+    .seg > span:last-child { border-right: 0; }
+    .seg > span.on { background: #e7effa; color: #1c5cab; font-weight: 600; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px;
+      border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface); font-size: 12px; }
+    .sec-h { display: flex; align-items: center; gap: 8px; height: 34px; border-bottom: 1px solid var(--rule); }
+    .sec-t { font-size: 13px; font-weight: 600; }
+    .fld { display: flex; flex-direction: column; gap: 4px; }
+  </style>
+</helmet>
+
+<div class="app" style="width: 1440px; height: 1080px; display: flex; flex-direction: column;">
+
+  <!-- ── header ───────────────────────────────────────────── -->
+  <header style="height: 52px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--rule2);">
+    <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink2);">RACE EMULATOR</div>
+    <nav style="display: flex; gap: 2px; align-self: stretch;">
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; font-weight: 600; color: var(--ink); box-shadow: inset 0 -2px 0 var(--s1);">設定</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">結果</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">比較</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">詳細</span>
+    </nav>
+    <div style="flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;">
+      <span style="font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">東京 芝 2400m ／ 差し・スピード寄り</span>
+      <span class="lbl" style="flex: none;">未保存</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; flex: none;">
+      <span class="ctl" style="gap: 6px; color: var(--ink2);">
+        <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6.5 9.5 9.5 6.5"/><path d="M7 4.5 8.6 2.9a2.4 2.4 0 0 1 3.4 3.4L10.4 7.9"/><path d="M9 11.5 7.4 13.1a2.4 2.4 0 0 1-3.4-3.4L5.6 8.1"/></svg>
+        共有リンク
+      </span>
+      <span class="ctl" style="background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600;">スナップショットを保存</span>
+    </div>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex;">
+
+    <!-- ── settings column ────────────────────────────────── -->
+    <section style="width: 468px; flex: none; background: var(--surface); border-right: 1px solid var(--rule2); position: relative; overflow: hidden;">
+      <div style="padding: 16px 20px 40px; display: flex; flex-direction: column; gap: 14px;">
+
+        <!-- ウマ娘 -->
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="sec-h">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#52514e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg>
+            <span class="sec-t">ウマ娘</span>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;">
+            <div class="fld"><span class="lbl">脚質</span>
+              <div class="seg"><span>逃げ</span><span>先行</span><span class="on">差し</span><span>追込</span></div>
+            </div>
+            <div class="fld"><span class="lbl">やる気</span>
+              <div class="seg"><span>絶不調</span><span>不調</span><span>普通</span><span class="on">好調</span><span>絶好調</span></div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;">
+            <div class="fld"><span class="lbl">スピード</span><div class="ctl num" style="justify-content: flex-end;">1200</div><span class="lbl num" style="text-align: right;">→ 1284</span></div>
+            <div class="fld"><span class="lbl">スタミナ</span><div class="ctl num" style="justify-content: flex-end;">1050</div><span class="lbl num" style="text-align: right;">→ 1123</span></div>
+            <div class="fld"><span class="lbl">パワー</span><div class="ctl num" style="justify-content: flex-end;">900</div><span class="lbl num" style="text-align: right;">→ 963</span></div>
+            <div class="fld"><span class="lbl">根性</span><div class="ctl num" style="justify-content: flex-end;">600</div><span class="lbl num" style="text-align: right;">→ 642</span></div>
+            <div class="fld"><span class="lbl">賢さ</span><div class="ctl num" style="justify-content: flex-end;">800</div><span class="lbl num" style="text-align: right;">→ 856</span></div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px;">
+            <div class="fld"><span class="lbl">距離適性</span><div class="ctl" style="justify-content: space-between;">A<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#8a877e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg></div></div>
+            <div class="fld"><span class="lbl">バ場適性</span><div class="ctl" style="justify-content: space-between;">A<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#8a877e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg></div></div>
+            <div class="fld"><span class="lbl">脚質適性</span><div class="ctl" style="justify-content: space-between;">A<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#8a877e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg></div></div>
+            <div class="fld"><span class="lbl">人気</span><div class="ctl num" style="justify-content: flex-end;">3</div></div>
+            <div class="fld"><span class="lbl">枠番</span><div class="ctl num" style="justify-content: flex-end;">5</div></div>
+          </div>
+        </div>
+
+        <!-- コース -->
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="sec-h">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#52514e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg>
+            <span class="sec-t">コース</span>
+          </div>
+          <div style="display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: 8px;">
+            <div class="fld"><span class="lbl">レース場</span><div class="ctl" style="justify-content: space-between;">東京<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="#8a877e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg></div></div>
+            <div class="fld"><span class="lbl">距離・バ場</span><div class="ctl" style="justify-content: space-between;"><span class="num">2400</span> 芝</div></div>
+            <div class="fld"><span class="lbl">出走人数</span><div class="ctl num" style="justify-content: flex-end;">18</div></div>
+          </div>
+          <div class="fld"><span class="lbl">バ場状態</span>
+            <div class="seg"><span class="on">良</span><span>稍重</span><span>重</span><span>不良</span></div>
+          </div>
+          <div style="border: 1px solid var(--rule); border-radius: 3px; background: var(--sunken); padding: 8px 10px; display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; justify-content: space-between;"><span class="lbl">コース形状</span><span class="lbl">左回り ・ コーナー 4 ・ 直線 525m</span></div>
+            <svg width="406" height="44" viewBox="0 0 406 44">
+              <rect x="0" y="0" width="406" height="44" fill="#fcfcfb"/>
+              <rect x="96" y="0" width="52" height="44" fill="#e6e3dc"/>
+              <rect x="176" y="0" width="46" height="44" fill="#e6e3dc"/>
+              <rect x="252" y="0" width="44" height="44" fill="#e6e3dc"/>
+              <rect x="300" y="0" width="34" height="44" fill="#e6e3dc"/>
+              <path d="M0 32 L60 32 L112 20 L180 20 L214 30 L268 30 L300 22 L340 22 L360 34 L406 34" fill="none" stroke="#8a877e" stroke-width="1.6"/>
+              <g font-family="IBM Plex Mono, monospace" font-size="8" fill="#8a877e">
+                <text x="4" y="41">0m</text><text x="118" y="41">コーナー</text><text x="360" y="41">直線</text>
+              </g>
+              <g stroke="#c6c2b8" stroke-width="1" stroke-dasharray="2 2">
+                <line x1="68" y1="0" x2="68" y2="44"/><line x1="271" y1="0" x2="271" y2="44"/><line x1="338" y1="0" x2="338" y2="44"/>
+              </g>
+            </svg>
+          </div>
+        </div>
+
+        <!-- スキル -->
+        <div style="display: flex; flex-direction: column; gap: 10px;">
+          <div class="sec-h">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#52514e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg>
+            <span class="sec-t">所持スキル</span>
+            <span class="lbl num">12</span>
+            <span style="flex: 1;"></span>
+            <span class="lbl">近似条件を含む 3 件 △</span>
+          </div>
+          <div class="ctl" style="gap: 8px; color: var(--ink3);">
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 13.5 13.5"/></svg>
+            スキル名で検索して追加
+          </div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span class="chip" style="border-color: var(--s1); background: #e7effa;">末脚 <span class="lbl num" style="color: #1c5cab;">Lv3</span></span>
+            <span class="chip">好転一息</span>
+            <span class="chip">円弧のマエストロ</span>
+            <span class="chip">直線加速</span>
+            <span class="chip">ハヤテ一文字</span>
+            <span class="chip">危険回避 △</span>
+            <span class="chip">切り拓く者</span>
+            <span class="chip">食い下がり</span>
+            <span class="chip">アガッてきた！ △</span>
+            <span class="chip">昂ぶり</span>
+            <span class="chip">positionSense △</span>
+            <span class="chip">深呼吸</span>
+            <span class="chip" style="border-style: dashed; color: var(--ink3);">
+              <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 3.5v9M3.5 8h9"/></svg>
+              追加
+            </span>
+          </div>
+        </div>
+
+        <!-- デバフ (collapsed) -->
+        <div class="sec-h" style="border-bottom: 1px solid var(--rule);">
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#52514e" stroke-width="1.6"><path d="M6.5 4 10.5 8 6.5 12"/></svg>
+          <span class="sec-t">受けるデバフ</span>
+          <span style="flex: 1;"></span>
+          <span class="lbl">速度 2 ・ 加速 1 ・ 体力 0</span>
+        </div>
+
+        <!-- 実行オプション -->
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <div class="sec-h">
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#52514e" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg>
+            <span class="sec-t">実行オプション</span>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--rule);">
+            <span style="font-size: 12px;">ポジションキープ</span>
+            <div class="seg" style="width: 180px; height: 26px;"><span class="on">有効</span><span>無効</span></div>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--rule);">
+            <span style="font-size: 12px;">スキル発動率</span>
+            <div class="seg" style="width: 180px; height: 26px;"><span class="on">抽選</span><span>100% 固定</span></div>
+          </div>
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-bottom: 1px solid var(--rule);">
+            <span style="font-size: 12px;">ランダム発動区間</span>
+            <div class="seg" style="width: 180px; height: 26px;"><span>最良</span><span class="on">平均</span><span>最悪</span></div>
+          </div>
+        </div>
+
+      </div>
+      <div style="position: absolute; top: 16px; right: 4px; width: 4px; height: 220px; border-radius: 2px; background: var(--rule2);"></div>
+    </section>
+
+    <!-- ── result column (empty state) ────────────────────── -->
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+
+      <div style="flex: none; height: 60px; display: flex; align-items: center; gap: 14px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--rule);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="lbl">試行回数</span>
+          <div class="ctl num" style="width: 96px; justify-content: flex-end; font-size: 13px;">10,000</div>
+        </div>
+        <span class="ctl" style="background: var(--s1); border-color: var(--s1); color: #fff; font-weight: 600; height: 34px; gap: 7px; padding: 0 16px;">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor"><path d="M4.5 3.2 12.6 8 4.5 12.8z"/></svg>
+          実行
+        </span>
+        <span class="lbl">8 スレッドで約 1.4 秒の見込み</span>
+        <span style="flex: 1;"></span>
+        <span class="lbl">前回の実行結果はありません</span>
+      </div>
+
+      <div style="flex: 1; display: flex; align-items: center; justify-content: center; padding: 24px;">
+        <div style="width: 560px; display: flex; flex-direction: column; gap: 20px; align-items: center; text-align: center;">
+          <svg width="52" height="52" viewBox="0 0 48 48" fill="none" stroke="#c6c2b8" stroke-width="1.6">
+            <path d="M6 40h36"/><path d="M6 40V8"/>
+            <path d="M10 33c6 0 8-14 14-14s8 8 14-6" stroke-dasharray="3 3"/>
+          </svg>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-size: 18px; font-weight: 600;">まだ実行していません</div>
+            <div style="font-size: 13px; color: var(--ink2); text-wrap: pretty;">
+              左で設定を決めて実行すると、1 万回の試行からタイムの分布とスキルごとの発動状況が出ます。<br>
+              まず試すなら、下のプリセットから始めるのが早いです。
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; width: 100%; text-align: left;">
+            <div style="border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 5px;">
+              <span style="font-size: 13px; font-weight: 600;">逃げ・スピード型</span>
+              <span class="lbl">東京 芝 2400m ／ スキル 10</span>
+            </div>
+            <div style="border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 5px;">
+              <span style="font-size: 13px; font-weight: 600;">差し・スタミナ型</span>
+              <span class="lbl">阪神 芝 3000m ／ スキル 12</span>
+            </div>
+            <div style="border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface); padding: 12px; display: flex; flex-direction: column; gap: 5px;">
+              <span style="font-size: 13px; font-weight: 600;">本家の既定値</span>
+              <span class="lbl">中山 芝 2000m ／ スキルなし</span>
+            </div>
+          </div>
+          <a href="#" style="font-size: 12px;">本家エミュレータの設定を読み込む</a>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <footer style="height: 28px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 20px; background: var(--surface); border-top: 1px solid var(--rule); color: var(--ink3); font-size: 11px;">
+    <span>設定は自動保存されます</span>
+    <span>最終更新 14:02</span>
+    <span style="flex: 1;"></span>
+    <span>計算モデルは mee1080/umasim の移植 ・ AGPL v3 ・ ソース</span>
+  </footer>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

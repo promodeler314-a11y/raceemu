@@ -1,0 +1,279 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #2a78d6; text-decoration: none; }
+    a:hover { color: #1c5cab; text-decoration: underline; }
+    .app {
+      --paper: #f5f4f1; --surface: #fcfcfb; --sunken: #eeece7;
+      --rule: #dedbd3; --rule2: #c6c2b8;
+      --ink: #12120f; --ink2: #52514e; --ink3: #8a877e;
+      --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+      --sans: "IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+      font-family: var(--sans); color: var(--ink); background: var(--paper);
+      font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    }
+    .app * { box-sizing: border-box; }
+    .lbl { font-size: 11px; color: var(--ink3); letter-spacing: 0.02em; }
+    .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .ctl { height: 30px; border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface);
+      color: var(--ink); font-size: 12px; padding: 0 8px; display: flex; align-items: center; }
+    .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; }
+    .ptitle { font-size: 13px; font-weight: 600; }
+    .tile { display: flex; flex-direction: column; gap: 2px; }
+    .tval { font-size: 20px; font-weight: 600; font-family: var(--mono); }
+    table.t { border-collapse: collapse; width: 100%; font-size: 12px; }
+    table.t th { text-align: right; font-weight: 500; color: var(--ink3); font-size: 11px;
+      padding: 0 10px 6px; border-bottom: 1px solid var(--rule2); white-space: nowrap; }
+    table.t th:first-child, table.t td:first-child { text-align: left; }
+    table.t td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--rule);
+      font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    table.t td:first-child { font-family: var(--sans); }
+  </style>
+</helmet>
+
+<div class="app" style="width: 1440px; height: 1240px; display: flex; flex-direction: column;">
+
+  <header style="height: 52px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--rule2);">
+    <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink2);">RACE EMULATOR</div>
+    <nav style="display: flex; gap: 2px; align-self: stretch;">
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">設定</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; font-weight: 600; color: var(--ink); box-shadow: inset 0 -2px 0 var(--s1);">結果</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">比較</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">詳細</span>
+    </nav>
+    <div style="flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;">
+      <span style="font-size: 13px; color: var(--ink2);">東京 芝 2400m ／ 差し・スピード寄り</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; flex: none;">
+      <span class="ctl" style="color: var(--ink2);">共有リンク</span>
+      <span class="ctl" style="background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600;">スナップショットを保存</span>
+    </div>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex;">
+
+    <!-- ── settings rail ──────────────────────────────────── -->
+    <aside style="width: 280px; flex: none; background: var(--surface); border-right: 1px solid var(--rule2); padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="ptitle">設定</span><span style="flex: 1;"></span><a href="#" style="font-size: 12px;">編集</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);">
+          <span class="lbl">ウマ娘</span>
+          <span style="font-size: 12px;">差し ・ 好調 ・ 適性 A/A/A</span>
+          <span class="num" style="font-size: 12px; color: var(--ink2);">1200 / 1050 / 900 / 600 / 800</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);">
+          <span class="lbl">コース</span>
+          <span style="font-size: 12px;">東京 芝 2400m ・ 良</span>
+          <span style="font-size: 12px; color: var(--ink2);">18 頭 ・ 左回り ・ コーナー 4</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);">
+          <span class="lbl">所持スキル</span>
+          <span style="font-size: 12px;">12 件（末脚 Lv3 ほか）</span>
+          <span style="font-size: 12px; color: var(--ink2);">近似条件を含む 3 件 △</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);">
+          <span class="lbl">デバフ ・ オプション</span>
+          <span style="font-size: 12px;">速度 2 ・ 加速 1</span>
+          <span style="font-size: 12px; color: var(--ink2);">PK 有効 ・ 抽選 ・ 区間は平均</span>
+        </div>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="ptitle">スナップショット</span><span class="lbl num">3</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="border: 1px solid var(--rule2); border-radius: 3px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 12px; font-weight: 600;">基準</span><span class="lbl">14:02</span></div>
+            <span class="num" style="font-size: 12px; color: var(--ink2);">2:24.526</span>
+          </div>
+          <div style="border: 1px solid var(--rule2); border-radius: 3px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 12px; font-weight: 600;">案 A ／ 末脚を外す</span></div>
+            <span class="num" style="font-size: 12px; color: var(--ink2);">2:25.104</span>
+          </div>
+          <div style="border: 1px solid var(--rule2); border-radius: 3px; padding: 8px 10px; display: flex; flex-direction: column; gap: 2px;">
+            <div style="display: flex; align-items: baseline; gap: 6px;"><span style="font-size: 12px; font-weight: 600;">案 B ／ スタミナ +100</span></div>
+            <span class="num" style="font-size: 12px; color: var(--ink2);">2:24.188</span>
+          </div>
+        </div>
+        <a href="#" style="font-size: 12px;">3 件を比較する</a>
+      </div>
+    </aside>
+
+    <!-- ── main ───────────────────────────────────────────── -->
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column;">
+
+      <div style="flex: none; height: 60px; display: flex; align-items: center; gap: 14px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--rule);">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="lbl">試行回数</span>
+          <div class="ctl num" style="width: 96px; justify-content: flex-end; font-size: 13px;">10,000</div>
+        </div>
+        <span class="ctl" style="gap: 7px; padding: 0 14px; height: 34px; color: var(--ink2);">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M13 8a5 5 0 1 1-1.6-3.7"/><path d="M13 2.5V5h-2.5"/></svg>
+          再実行
+        </span>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div style="width: 180px; height: 4px; border-radius: 2px; background: var(--sunken);"><div style="width: 100%; height: 4px; border-radius: 2px; background: var(--s1);"></div></div>
+          <span class="lbl num">完了 ・ 1.38 秒 ・ 8 スレッド</span>
+        </div>
+        <span style="flex: 1;"></span>
+        <span class="lbl">設定を変えると自動で再実行します</span>
+      </div>
+
+      <div style="flex: 1; min-height: 0; padding: 24px; display: flex; flex-direction: column; gap: 20px;">
+
+        <!-- hero + tiles -->
+        <div class="panel" style="padding: 16px 18px; display: flex; align-items: stretch; gap: 24px;">
+          <div style="display: flex; flex-direction: column; gap: 2px; padding-right: 24px; border-right: 1px solid var(--rule); min-width: 236px;">
+            <span class="lbl">平均タイム</span>
+            <span style="font-size: 44px; font-weight: 600; line-height: 1.1; letter-spacing: -0.01em;">2:24.312</span>
+            <span style="font-size: 12px; color: var(--ink2);">基準比 <span class="num">−0.214</span> 秒 短縮 ・ 標準誤差 <span class="num">±0.008</span> 秒</span>
+          </div>
+          <div style="flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 20px; align-items: center;">
+            <div class="tile"><span class="lbl">最速タイム</span><span class="tval">2:23.108</span></div>
+            <div class="tile"><span class="lbl">最遅タイム</span><span class="tval">2:26.004</span></div>
+            <div class="tile"><span class="lbl">完走率</span><span class="tval">100.0%</span></div>
+            <div class="tile"><span class="lbl">最大スパート率</span><span class="tval">58.7%</span><span class="lbl">基準比 +4.7 pt</span></div>
+            <div class="tile"><span class="lbl">ゴール時の残り体力</span><span class="tval">12.4%</span><span class="lbl">下位 5% で 2.1%</span></div>
+          </div>
+        </div>
+
+        <!-- distribution -->
+        <div class="panel" style="padding: 14px 16px 10px; display: flex; flex-direction: column; gap: 10px;">
+          <div style="display: flex; align-items: baseline; gap: 10px;">
+            <span class="ptitle">タイムの分布</span>
+            <span class="lbl">10,000 試行 ・ ビン幅 0.08 秒</span>
+            <span style="flex: 1;"></span>
+            <span class="lbl">バーをクリックすると、その帯の 1 本を詳細で開けます</span>
+            <span class="ctl" style="height: 24px; font-size: 11px; color: var(--ink2);">表で見る</span>
+          </div>
+          <div style="position: relative;">
+            <svg width="1080" height="250" viewBox="0 0 1080 250">
+              <rect x="60" y="24" width="1000" height="176" fill="#fcfcfb"/>
+    <line x1="60" y1="200" x2="1060" y2="200" stroke="#e6e3dc" stroke-width="1"/>
+    <text x="52" y="203.5" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">0</text>
+    <line x1="60" y1="157.5" x2="1060" y2="157.5" stroke="#e6e3dc" stroke-width="1"/>
+    <text x="52" y="161" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">200</text>
+    <line x1="60" y1="115" x2="1060" y2="115" stroke="#e6e3dc" stroke-width="1"/>
+    <text x="52" y="118.5" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">400</text>
+    <line x1="60" y1="72.5" x2="1060" y2="72.5" stroke="#e6e3dc" stroke-width="1"/>
+    <text x="52" y="76" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">600</text>
+    <line x1="60" y1="30" x2="1060" y2="30" stroke="#e6e3dc" stroke-width="1"/>
+    <text x="52" y="33.5" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">800</text>
+    <rect x="60" y="198.3" width="23" height="1.7" rx="2" fill="#2a78d6"/>
+    <rect x="85" y="197.2" width="23" height="2.8" rx="2" fill="#2a78d6"/>
+    <rect x="110" y="195.5" width="23" height="4.5" rx="2" fill="#2a78d6"/>
+    <rect x="135" y="192.8" width="23" height="7.2" rx="2" fill="#2a78d6"/>
+    <rect x="160" y="189.2" width="23" height="10.8" rx="2" fill="#2a78d6"/>
+    <rect x="185" y="183.8" width="23" height="16.1" rx="2" fill="#2a78d6"/>
+    <rect x="210" y="176.6" width="23" height="23.4" rx="2" fill="#2a78d6"/>
+    <rect x="235" y="167.5" width="23" height="32.5" rx="2" fill="#2a78d6"/>
+    <rect x="260" y="156.7" width="23" height="43.4" rx="2" fill="#2a78d6"/>
+    <rect x="285" y="144.1" width="23" height="55.9" rx="2" fill="#2a78d6"/>
+    <rect x="310" y="130.5" width="23" height="69.5" rx="2" fill="#2a78d6"/>
+    <rect x="335" y="117.1" width="23" height="82.9" rx="2" fill="#2a78d6"/>
+    <rect x="360" y="104.4" width="23" height="95.6" rx="2" fill="#2a78d6"/>
+    <rect x="385" y="93.8" width="23" height="106.3" rx="2" fill="#2a78d6"/>
+    <rect x="410" y="84.6" width="23" height="115.4" rx="2" fill="#2a78d6"/>
+    <rect x="435" y="77.4" width="23" height="122.6" rx="2" fill="#2a78d6"/>
+    <rect x="460" y="72.9" width="23" height="127.1" rx="2" fill="#2a78d6"/>
+    <rect x="485" y="71.2" width="23" height="128.8" rx="2" fill="#2a78d6"/>
+    <rect x="510" y="72.1" width="23" height="127.9" rx="2" fill="#2a78d6"/>
+    <rect x="535" y="75.7" width="23" height="124.3" rx="2" fill="#2a78d6"/>
+    <rect x="560" y="81.9" width="23" height="118.1" rx="2" fill="#2a78d6"/>
+    <rect x="585" y="90.1" width="23" height="109.9" rx="2" fill="#2a78d6"/>
+    <rect x="610" y="99.9" width="23" height="100.1" rx="2" fill="#2a78d6"/>
+    <rect x="635" y="110.8" width="23" height="89.3" rx="2" fill="#2a78d6"/>
+    <rect x="660" y="121.6" width="23" height="78.4" rx="2" fill="#2a78d6"/>
+    <rect x="685" y="132.4" width="23" height="67.6" rx="2" fill="#2a78d6"/>
+    <rect x="710" y="143.3" width="23" height="56.7" rx="2" fill="#2a78d6"/>
+    <rect x="735" y="153" width="23" height="47" rx="2" fill="#2a78d6"/>
+    <rect x="760" y="162.2" width="23" height="37.8" rx="2" fill="#2a78d6"/>
+    <rect x="785" y="169.4" width="23" height="30.6" rx="2" fill="#2a78d6"/>
+    <rect x="810" y="175.6" width="23" height="24.4" rx="2" fill="#2a78d6"/>
+    <rect x="835" y="181.1" width="23" height="18.9" rx="2" fill="#2a78d6"/>
+    <rect x="860" y="185.6" width="23" height="14.5" rx="2" fill="#2a78d6"/>
+    <rect x="885" y="189.2" width="23" height="10.8" rx="2" fill="#2a78d6"/>
+    <rect x="910" y="191.9" width="23" height="8.1" rx="2" fill="#2a78d6"/>
+    <rect x="935" y="194.7" width="23" height="5.3" rx="2" fill="#2a78d6"/>
+    <rect x="960" y="196.4" width="23" height="3.6" rx="2" fill="#2a78d6"/>
+    <rect x="985" y="197.2" width="23" height="2.8" rx="2" fill="#2a78d6"/>
+    <rect x="1010" y="198.3" width="23" height="1.7" rx="2" fill="#2a78d6"/>
+    <rect x="1035" y="199.2" width="23" height="0.8" rx="2" fill="#2a78d6"/>
+    <line x1="271.5" y1="24" x2="271.5" y2="200" stroke="#52514e" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="271.5" y="18" text-anchor="middle" font-size="10" fill="#52514e" font-family="IBM Plex Mono, monospace">p5 2:23.68</text>
+    <line x1="496.5" y1="24" x2="496.5" y2="200" stroke="#52514e" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="496.5" y="18" text-anchor="middle" font-size="10" fill="#52514e" font-family="IBM Plex Mono, monospace">p50 2:24.31</text>
+    <line x1="771.5" y1="24" x2="771.5" y2="200" stroke="#52514e" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="771.5" y="18" text-anchor="middle" font-size="10" fill="#52514e" font-family="IBM Plex Mono, monospace">p95 2:25.20</text>
+    <text x="71.5" y="218" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:23.0</text>
+    <text x="371.5" y="218" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:24.0</text>
+    <text x="696.5" y="218" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:25.0</text>
+    <text x="996.5" y="218" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:26.0</text>
+              <line x1="60" y1="200" x2="1060" y2="200" stroke="#c6c2b8" stroke-width="1"/>
+              <text x="60" y="243" font-size="10" fill="#8a877e">タイム</text>
+              <text x="1060" y="243" text-anchor="end" font-size="10" fill="#8a877e">試行数</text>
+            </svg>
+            <div style="position: absolute; left: 540px; top: 26px; background: var(--surface); border: 1px solid var(--rule2); border-radius: 3px; padding: 7px 9px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 1px 3px rgba(18,18,15,0.08);">
+              <span class="num" style="font-size: 12px; font-weight: 600;">2:24.32 – 2:24.40</span>
+              <span class="lbl num">742 試行 ・ 7.4%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- skills -->
+        <div class="panel" style="flex: 1; min-height: 0; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; overflow: hidden;">
+          <div style="display: flex; align-items: baseline; gap: 10px;">
+            <span class="ptitle">スキル別の発動状況</span>
+            <span style="flex: 1;"></span>
+            <span class="lbl">△ 発動条件に近似が含まれるスキル ・ 数値は 10,000 試行の平均</span>
+          </div>
+          <table class="t">
+            <thead><tr>
+              <th style="width: 220px;">スキル</th><th style="width: 168px;">発動率</th><th>平均発動位置</th>
+              <th>2 回発動</th><th>フェーズ接続</th><th>速度上昇の無効</th><th style="width: 130px;">発動位置の分布</th>
+            </tr></thead>
+            <tbody>
+              <tr><td>末脚 <span class="lbl num">Lv3</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 82px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>98.2%</div></td><td>1612 m</td><td>—</td><td>84.1%</td><td>6.2%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="74" y="4" width="6" height="14" fill="#2a78d6"/><rect x="80" y="1" width="6" height="17" fill="#2a78d6"/><rect x="86" y="7" width="6" height="11" fill="#2a78d6"/><rect x="92" y="12" width="6" height="6" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>好転一息</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>100.0%</div></td><td>318 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="12" y="2" width="6" height="16" fill="#2a78d6"/><rect x="18" y="6" width="6" height="12" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>直線加速</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 77px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>91.4%</div></td><td>1735 m</td><td>12.0%</td><td>61.3%</td><td>18.7%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="82" y="3" width="6" height="15" fill="#2a78d6"/><rect x="88" y="6" width="6" height="12" fill="#2a78d6"/><rect x="94" y="10" width="6" height="8" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>円弧のマエストロ</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 63px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>74.6%</div></td><td>903 m</td><td>8.1%</td><td>—</td><td>2.4%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="30" y="5" width="6" height="13" fill="#2a78d6"/><rect x="36" y="2" width="6" height="16" fill="#2a78d6"/><rect x="64" y="9" width="6" height="9" fill="#2a78d6"/><rect x="70" y="11" width="6" height="7" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>深呼吸</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>100.0%</div></td><td>655 m</td><td>—</td><td>—</td><td>—</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="28" y="1" width="6" height="17" fill="#2a78d6"/><rect x="34" y="8" width="6" height="10" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>昂ぶり</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 52px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>62.0%</div></td><td>1268 m</td><td>—</td><td>41.2%</td><td>9.8%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="54" y="6" width="6" height="12" fill="#2a78d6"/><rect x="60" y="3" width="6" height="15" fill="#2a78d6"/><rect x="66" y="10" width="6" height="8" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>食い下がり</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 46px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>55.3%</div></td><td>2042 m</td><td>—</td><td>22.7%</td><td>31.4%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="98" y="4" width="6" height="14" fill="#2a78d6"/><rect x="104" y="8" width="6" height="10" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>危険回避 <span style="color: var(--ink3);">△</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 29px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>34.8%</div></td><td>1104 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="44" y="9" width="6" height="9" fill="#2a78d6"/><rect x="50" y="7" width="6" height="11" fill="#2a78d6"/><rect x="56" y="12" width="6" height="6" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>アガッてきた！ <span style="color: var(--ink3);">△</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 18px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>21.6%</div></td><td>1489 m</td><td>—</td><td>12.3%</td><td>4.1%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="70" y="11" width="6" height="7" fill="#2a78d6"/><rect x="76" y="13" width="6" height="5" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>ハヤテ一文字</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 10px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>12.4%</div></td><td>236 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="8" y="13" width="6" height="5" fill="#2a78d6"/><rect x="14" y="14" width="6" height="4" fill="#2a78d6"/></svg></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </section>
+  </div>
+
+  <footer style="height: 28px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 20px; background: var(--surface); border-top: 1px solid var(--rule); color: var(--ink3); font-size: 11px;">
+    <span>10,000 試行 ・ 基準シード 0x4A19C2</span>
+    <span>最終実行 14:07</span>
+    <span style="flex: 1;"></span>
+    <span>計算モデルは mee1080/umasim の移植 ・ AGPL v3 ・ ソース</span>
+  </footer>
+
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>
