@@ -9,6 +9,11 @@ import { extname, join, normalize } from 'node:path';
 
 const root = 'apps/web/dist';
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json' };
+const fail = (message) => {
+  console.error('失敗:', message);
+  process.exitCode = 1;
+};
+
 const server = createServer(async (req, res) => {
   try {
     const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
@@ -23,6 +28,23 @@ const server = createServer(async (req, res) => {
 });
 await new Promise((r) => server.listen(4173, r));
 
+// バンドルの大きさ。減らしたものが黙って戻らないように上限を置く。
+// 2026-09 時点で本体 1.44 MB、Worker 1.14 MB。
+{
+  const { readdir, stat } = await import('node:fs/promises');
+  const files = await readdir(join(root, 'assets'));
+  const sizeOf = async (match) => {
+    const name = files.find((f) => f.startsWith(match) && f.endsWith('.js'));
+    return name === undefined ? 0 : (await stat(join(root, 'assets', name))).size;
+  };
+  const main = await sizeOf('index-');
+  const worker = await sizeOf('browser-worker-');
+  const mb = (n) => (n / 1024 / 1024).toFixed(2);
+  console.log(`--- バンドル: 本体 ${mb(main)} MB / Worker ${mb(worker)} MB`);
+  if (main > 1.7 * 1024 * 1024) fail(`本体のバンドルが大きい: ${mb(main)} MB`);
+  if (worker > 1.4 * 1024 * 1024) fail(`Worker のバンドルが大きい: ${mb(worker)} MB`);
+}
+
 const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium',
   args: ['--no-sandbox'],
@@ -36,11 +58,6 @@ page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text());
 });
-
-const fail = (message) => {
-  console.error('失敗:', message);
-  process.exitCode = 1;
-};
 
 await page.goto('http://localhost:4173/', { waitUntil: 'load' });
 console.log('タイトル:', await page.textContent('h1'));
