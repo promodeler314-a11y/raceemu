@@ -435,7 +435,7 @@ export function OptionsInput() {
 }
 
 export function RunPanel() {
-  const { count, seed, running, progress, setCount, setSeed, run, cancel, error, useField, setUseField } =
+  const { count, seed, running, progress, setCount, setSeed, run, cancel, useField, setUseField } =
     useStore();
   const gateCount = useStore((s) => s.track.gateCount);
   return (
@@ -499,7 +499,6 @@ export function RunPanel() {
           </>
         )}
       </div>
-      {error !== null && <p className="mt-2 text-sm text-red-600">{error}</p>}
     </Panel>
   );
 }

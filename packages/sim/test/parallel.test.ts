@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../data/src/node.ts';
 import { RaceCalculator } from '../src/calculator.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
-import { SimulationCancelled, WorkerPool } from '../src/parallel/pool.ts';
+import {
+  SimulationCancelled,
+  WorkerPool,
+  type WorkerFactory,
+  type WorkerHandle,
+} from '../src/parallel/pool.ts';
 import {
   SKILL_STAT,
   SKILL_STAT_FIELDS,
@@ -169,5 +174,42 @@ describe('並列実行', () => {
     } finally {
       await pool.dispose();
     }
+  });
+});
+
+describe('Worker が死んだとき', () => {
+  /** 依頼を受け取っても返事をせず、代わりに落ちる Worker。 */
+  function deadWorkerFactory(message: string): WorkerFactory {
+    return {
+      defaultConcurrency: 2,
+      create(): WorkerHandle {
+        let onError: ((error: Error) => void) | null = null;
+        return {
+          post: () => setTimeout(() => onError?.(new Error(message)), 0),
+          onMessage: () => {},
+          onError: (handler) => {
+            onError = handler;
+          },
+          terminate: () => {},
+        };
+      },
+    };
+  }
+
+  it('返事を待ち続けずに失敗する', async () => {
+    const pool = new WorkerPool(deadWorkerFactory('読み込みに失敗した'), 2);
+    // 返事が来ないまま止まると、この await が返ってこない。
+    await expect(
+      pool.run(toSerializable(setting), system, { count: 100, seed: 1, chunkSize: 10 }),
+    ).rejects.toThrow(/Worker が停止した/);
+    await pool.dispose();
+  });
+
+  it('落ちた理由を伝える', async () => {
+    const pool = new WorkerPool(deadWorkerFactory('メモリを使い果たした'), 1);
+    await expect(
+      pool.run(toSerializable(setting), system, { count: 10, seed: 1, chunkSize: 10 }),
+    ).rejects.toThrow(/メモリを使い果たした/);
+    await pool.dispose();
   });
 });

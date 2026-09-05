@@ -5,6 +5,7 @@ import { FrameCharts } from './components/Charts.tsx';
 import { CompareOutput, ShareButton, SkillSummaryOutput } from './components/Compare.tsx';
 import { InversePanel } from './components/Inverse.tsx';
 import { OptimizePanel } from './components/Optimize.tsx';
+import { ErrorBanner } from './components/Notices.tsx';
 import { useStore } from './store.ts';
 
 export default function App() {
@@ -26,6 +27,7 @@ export default function App() {
           <ShareButton />
         </div>
       </header>
+      <ErrorBanner />
       <main className="mx-auto grid max-w-6xl gap-4 p-4 lg:grid-cols-2">
         <div className="space-y-4">
           <CourseInput />

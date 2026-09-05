@@ -21,7 +21,7 @@ import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
-import { debounceSave, loadPersisted } from './persist.ts';
+import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
 export const gameData = loadGameData();
@@ -125,6 +125,8 @@ interface AppState {
   progress: number;
   elapsedMs: number;
   error: string | null;
+  /** 失敗ではないが伝えたいこと。保存できない環境など。 */
+  notice: string | null;
   summary: SimulationSummary | null;
   results: RaceSimulationResult[];
   skillSummaries: SkillSummary[];
@@ -147,6 +149,8 @@ interface AppState {
   optimizeLog: string[];
   optimizeRunning: boolean;
 
+  dismissError: () => void;
+  dismissNotice: () => void;
   setUma: (patch: Partial<UmaStatus>) => void;
   setTrack: (patch: Partial<TrackRef>) => void;
   toggleSkill: (id: string) => void;
@@ -204,6 +208,7 @@ export const useStore = create<AppState>((set, get) => ({
   progress: 0,
   elapsedMs: 0,
   error: null,
+  notice: null,
   summary: null,
   results: [],
   skillSummaries: [],
@@ -223,6 +228,8 @@ export const useStore = create<AppState>((set, get) => ({
   optimizeLog: [],
   optimizeRunning: false,
 
+  dismissError: () => set({ error: null }),
+  dismissNotice: () => set({ notice: null }),
   setUma: (patch) => set((s) => ({ uma: { ...s.uma, ...patch } })),
   setTrack: (patch) => set((s) => ({ track: { ...s.track, ...patch } })),
   toggleSkill: (id) =>
@@ -481,6 +488,12 @@ export const useStore = create<AppState>((set, get) => ({
       });
     }
     if (snapshots !== null) set({ snapshots });
+    if (!(await isPersistenceAvailable())) {
+      set({
+        notice:
+          'このブラウザでは設定を保存できません。閉じると入力は消えます。共有リンクを作っておくと戻せます。',
+      });
+    }
     hydrated = true;
   },
 
@@ -488,7 +501,15 @@ export const useStore = create<AppState>((set, get) => ({
     const match = /[#&]s=([^&]+)/.exec(location.hash);
     if (match === null) return false;
     const shared = decodeShareState(match[1]!);
-    if (shared === null) return false;
+    if (shared === null) {
+      // 途中で切れたリンクや、古すぎる書式。黙って既定値で開くと、
+      // 送った側と違う設定を見ていることに気付けない。
+      set({
+        error:
+          '共有リンクの設定を読み取れませんでした。リンクが途中で切れているか、書式が古い可能性があります。既定の設定で開いています。',
+      });
+      return false;
+    }
     set({
       uma: shared.uma,
       track: shared.track,

@@ -216,6 +216,15 @@ if (restoredDebuff !== '2') fail(`デバフの個数が復元されていない:
 if (restoredAdjust === 0) fail('スキル発動率の設定が復元されていない');
 await fresh.close();
 
+// 壊れた共有 URL: 黙って既定値で開かず、読み取れなかったことを伝える
+const broken = await browser.newPage();
+await broken.goto('http://localhost:4173/#s=zzzz-not-a-real-state', { waitUntil: 'load' });
+await broken.waitForTimeout(500);
+const alertText = (await broken.locator('[role=alert]').first().textContent()) ?? '';
+console.log('--- 壊れた共有 URL の知らせ:', alertText.slice(0, 40));
+if (!alertText.includes('読み取れませんでした')) fail('壊れた共有 URL が黙って無視されている');
+await broken.close();
+
 // ライセンス: ソースへのリンクが画面にあること（AGPL v3 の要求）
 const sourceLink = await page.locator('footer a[href*="github.com"]').count();
 console.log('--- フッタのソースリンク:', sourceLink, '件');

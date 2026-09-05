@@ -7,6 +7,8 @@ const workerUrl = new URL('./node-worker-bootstrap.mjs', import.meta.url);
 
 class NodeWorkerHandle implements WorkerHandle {
   private readonly worker: Worker;
+  /** terminate() を通した停止では 'exit' を落ちたとみなさない。 */
+  private terminated = false;
 
   constructor() {
     this.worker = new Worker(workerUrl);
@@ -20,7 +22,16 @@ class NodeWorkerHandle implements WorkerHandle {
     this.worker.on('message', handler);
   }
 
+  onError(handler: (error: Error) => void): void {
+    this.worker.on('error', handler);
+    this.worker.on('exit', (code) => {
+      if (this.terminated) return;
+      if (code !== 0) handler(new Error(`Worker が終了コード ${code} で停止した`));
+    });
+  }
+
   async terminate(): Promise<void> {
+    this.terminated = true;
     await this.worker.terminate();
   }
 }

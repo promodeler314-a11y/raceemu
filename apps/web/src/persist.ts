@@ -49,6 +49,11 @@ function openDb(): Promise<IDBDatabase | null> {
   return dbPromise;
 }
 
+/** 保存先が使えるか。使えない環境ではメモリ上だけで動く。 */
+export async function isPersistenceAvailable(): Promise<boolean> {
+  return (await openDb()) !== null;
+}
+
 export async function loadPersisted<T>(key: string): Promise<T | null> {
   const db = await openDb();
   if (db === null) return null;
