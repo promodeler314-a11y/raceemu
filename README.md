@@ -6,6 +6,7 @@
 - [レースエミュレータ改良版の設計](docs/webapp-design.md)
 - [逆算と組み合わせ探索の設計](docs/solver-design.md)
 - [順位条件の扱い](docs/order-condition.md)
+- [モックと実装のズレ](docs/ui-gap.md)
 - [M1 の結果](docs/m1-report.md)
 - [M2 の結果](docs/m2-report.md)
 - [M3 の結果](docs/m3-report.md)
