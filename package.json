@@ -1,0 +1,36 @@
+{
+  "name": "raceemu",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.0.0",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -b",
+    "sim": "tsx packages/sim/src/cli.ts",
+    "bench": "tsx packages/sim/src/parallel/bench.ts",
+    "dev": "vite --config apps/web/vite.config.ts apps/web",
+    "build": "vite build --config apps/web/vite.config.ts apps/web",
+    "e2e": "node apps/web/e2e/smoke.mjs",
+    "monotonicity": "tsx packages/solver/src/monotonicity-check.ts",
+    "optimize": "tsx packages/solver/src/optimize-cli.ts"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "playwright": "^1.62.1",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.13",
+    "typescript": "^5.9.3",
+    "vite": "^8.2.2",
+    "vitest": "^2.1.9"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "uplot": "^1.6.32",
+    "zustand": "^5.0.15"
+  }
+}
