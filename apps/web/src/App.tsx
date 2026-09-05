@@ -8,10 +8,10 @@ import { OptimizePanel } from './components/Optimize.tsx';
 import { useStore } from './store.ts';
 
 export default function App() {
-  const applyShared = useStore((s) => s.applyShared);
+  const bootstrap = useStore((s) => s.bootstrap);
   useEffect(() => {
-    applyShared();
-  }, [applyShared]);
+    void bootstrap();
+  }, [bootstrap]);
 
   return (
     <div className="min-h-screen bg-neutral-50 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100">

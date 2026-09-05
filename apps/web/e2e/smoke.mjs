@@ -27,7 +27,10 @@ const browser = await chromium.launch({
   executablePath: '/opt/pw-browsers/chromium',
   args: ['--no-sandbox'],
 });
-const page = await browser.newPage({ viewport: { width: 1280, height: 1600 } });
+// 永続化を確かめるため、主画面のタブは 1 つのコンテキストにまとめる。
+// browser.newPage() はタブごとにコンテキストが分かれ、IndexedDB を共有しない。
+const context = await browser.newContext({ viewport: { width: 1280, height: 1600 } });
+const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => {
@@ -167,6 +170,23 @@ const compareRows = await readTable('比較');
 console.log('--- 比較');
 for (const row of compareRows.slice(0, 8)) console.log(' ', row.join(' | '));
 if (compareRows[0].length !== 3) fail('比較の列数が想定と違う');
+
+// 永続化: 別のタブで開き直しても設定とスナップショットが残ること
+await page.waitForTimeout(800); // 書き込みはまとめてから行う
+const reopened = await context.newPage();
+await reopened.goto('http://localhost:4173/', { waitUntil: 'load' });
+await reopened.waitForTimeout(600);
+const keptSpeed = await reopened.inputValue('input[type=number][max="2500"] >> nth=0');
+const keptColumns = await reopened.evaluate(() => {
+  const section = [...document.querySelectorAll('section')].find((el) =>
+    el.querySelector('h2')?.textContent?.includes('比較'),
+  );
+  return section?.querySelectorAll('thead th').length ?? 0;
+});
+console.log('--- 開き直したときのスピード:', keptSpeed, '/ 比較の列数:', keptColumns);
+if (keptSpeed !== '1400') fail(`設定が残っていない: ${keptSpeed}`);
+if (keptColumns !== 3) fail(`スナップショットが残っていない: 列数 ${keptColumns}`);
+await reopened.close();
 
 // 実行オプション: 画面から変えられることと、共有 URL に載ることを確かめる
 await page.selectOption('label:has-text("スキル発動率") select', 'ALL');

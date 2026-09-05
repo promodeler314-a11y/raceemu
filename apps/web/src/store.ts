@@ -21,6 +21,7 @@ import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
+import { debounceSave, loadPersisted } from './persist.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
 export const gameData = loadGameData();
@@ -68,6 +69,19 @@ let pool: WorkerPool | null = null;
 function getPool(): WorkerPool {
   if (pool === null) pool = new WorkerPool(browserWorkerFactory);
   return pool;
+}
+
+/** 保存する設定。結果は含めない。 */
+export interface PersistedSettings {
+  readonly uma: UmaStatus;
+  readonly track: TrackRef;
+  readonly skillIds: readonly string[];
+  readonly count: number;
+  readonly seed: number;
+  readonly options: RunOptions;
+  readonly debuffCounts: Readonly<Record<string, number>>;
+  readonly hintLevels: Readonly<Record<string, number>>;
+  readonly useField: boolean;
 }
 
 export interface Snapshot {
@@ -155,7 +169,12 @@ interface AppState {
   runOptimize: () => Promise<void>;
   shareUrl: () => string;
   applyShared: () => boolean;
+  /** 保存してある設定とスナップショットを読み、そのあと共有 URL を当てる。 */
+  bootstrap: () => Promise<void>;
 }
+
+const saveSettings = debounceSave<PersistedSettings>('settings');
+const saveSnapshots = debounceSave<Snapshot[]>('snapshots', 200);
 
 let controller: AbortController | null = null;
 
@@ -439,6 +458,32 @@ export const useStore = create<AppState>((set, get) => ({
     return `${location.origin}${location.pathname}#s=${encoded}`;
   },
 
+  bootstrap: async () => {
+    // 共有 URL はハッシュから同期で読めるので先に当てる。
+    // IndexedDB を待つと、リンクを開いた人に既定値が一瞬見えてしまう。
+    // 保存してある設定より共有 URL のほうが強い、という順序でもある。
+    const shared = get().applyShared();
+    const [settings, snapshots] = await Promise.all([
+      loadPersisted<PersistedSettings>('settings'),
+      loadPersisted<Snapshot[]>('snapshots'),
+    ]);
+    if (!shared && settings !== null) {
+      set({
+        uma: settings.uma,
+        track: settings.track,
+        skillIds: [...settings.skillIds],
+        count: settings.count,
+        seed: settings.seed,
+        options: settings.options,
+        debuffCounts: { ...settings.debuffCounts },
+        hintLevels: { ...settings.hintLevels },
+        useField: settings.useField,
+      });
+    }
+    if (snapshots !== null) set({ snapshots });
+    hydrated = true;
+  },
+
   applyShared: () => {
     const match = /[#&]s=([^&]+)/.exec(location.hash);
     if (match === null) return false;
@@ -503,3 +548,42 @@ function getDetailField(state: AppState) {
 export function currentTrackDetail(track: TrackRef) {
   return gameData.trackData[track.location]?.courses[track.course];
 }
+
+/**
+ * 読み込みが終わるまでは書かない。既定値で上書きしてしまうためである。
+ */
+let hydrated = false;
+
+function settingsOf(state: AppState): PersistedSettings {
+  return {
+    uma: state.uma,
+    track: state.track,
+    skillIds: state.skillIds,
+    count: state.count,
+    seed: state.seed,
+    options: state.options,
+    debuffCounts: state.debuffCounts,
+    hintLevels: state.hintLevels,
+    useField: state.useField,
+  };
+}
+
+const SETTING_KEYS = [
+  'uma',
+  'track',
+  'skillIds',
+  'count',
+  'seed',
+  'options',
+  'debuffCounts',
+  'hintLevels',
+  'useField',
+] as const;
+
+useStore.subscribe((state, previous) => {
+  if (!hydrated) return;
+  if (SETTING_KEYS.some((key) => state[key] !== previous[key])) {
+    saveSettings(settingsOf(state));
+  }
+  if (state.snapshots !== previous.snapshots) saveSnapshots(state.snapshots);
+});
