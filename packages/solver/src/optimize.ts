@@ -27,6 +27,8 @@ export interface Evaluation {
   readonly times: Float64Array;
   /** 試行ごとの最大スパート成否。1 なら成立。 */
   readonly maxSpurt: Uint8Array;
+  /** 試行ごとの位置取り調整の回数 */
+  readonly positionCompetitionCount: Float64Array;
 }
 
 export interface PairedDiff {
@@ -112,16 +114,39 @@ export class Evaluator {
     });
     const times = new Float64Array(results.length);
     const maxSpurt = new Uint8Array(results.length);
+    const positionCompetitionCount = new Float64Array(results.length);
     for (let i = 0; i < results.length; i++) {
       times[i] = results[i]!.raceTime;
       maxSpurt[i] = results[i]!.maxSpurt ? 1 : 0;
+      positionCompetitionCount[i] = results[i]!.positionCompetitionCount;
     }
     this.races += results.length;
     this.evaluations++;
-    const evaluation: Evaluation = { skillIds: [...skillIds], times, maxSpurt };
+    const evaluation: Evaluation = { skillIds: [...skillIds], times, maxSpurt, positionCompetitionCount };
     this.cache.set(key, evaluation);
     return evaluation;
   }
+}
+
+/**
+ * 位置取り調整が実際に効いている量。
+ *
+ * 位置取り調整は買えるものではないので、候補には入れない。それでも
+ * スタミナを払って速度を得る取引ではあり（`state.ts` の目標速度に
+ * `positionCompetitionSpeed` が乗り、`applyPositionCompetition` で
+ * `positionCompetitionStamina` を引く）、その収支は単体スキルより
+ * 大きいことがある。買えないものとして、参考の 1 行だけ同じ土俵に並べる。
+ *
+ * 測り方は候補の単体評価と同じで、調整を止めた場合との試行ごとの引き算である。
+ * 止めるのは調整だけで、持久力温存はそのままにする。
+ * 同じ馬から調整の振る舞いだけを抜いた場合と比べたい。
+ */
+export interface PositionCompetitionEffect {
+  /** いまの設定で実際に起きた平均回数。0 に近ければ温存側にいる。 */
+  readonly averageCount: number;
+  /** 調整が起きなかった場合から見た短縮量。正なら調整があるほうが速い。 */
+  readonly diff: PairedDiff;
+  readonly races: number;
 }
 
 /** 単体で足したときの効き。並べ替えの手がかりと、UI での表示に使う。 */
@@ -131,6 +156,42 @@ export interface SingleEffect {
   readonly cost: number;
   /** 1 ポイントあたりの短縮量 */
   readonly efficiency: number;
+}
+
+export async function measurePositionCompetition(
+  context: OptimizeContext,
+  baseline: Evaluation,
+  trials: number,
+): Promise<PositionCompetitionEffect> {
+  const system: SystemSetting = { ...context.system, positionCompetitionRate: 0 };
+  const setting: SerializableRaceSetting = { ...context.base, skillIds: [...baseline.skillIds] };
+  const { results } = await context.pool.run(setting, system, {
+    count: trials,
+    seed: context.seed,
+    field: context.field ?? null,
+  });
+  const times = new Float64Array(results.length);
+  const maxSpurt = new Uint8Array(results.length);
+  const positionCompetitionCount = new Float64Array(results.length);
+  for (let i = 0; i < results.length; i++) {
+    times[i] = results[i]!.raceTime;
+    maxSpurt[i] = results[i]!.maxSpurt ? 1 : 0;
+    positionCompetitionCount[i] = results[i]!.positionCompetitionCount;
+  }
+  const without: Evaluation = {
+    skillIds: baseline.skillIds,
+    times,
+    maxSpurt,
+    positionCompetitionCount,
+  };
+  const counts = baseline.positionCompetitionCount;
+  let sum = 0;
+  for (const count of counts) sum += count;
+  return {
+    averageCount: counts.length === 0 ? 0 : sum / counts.length,
+    diff: pairedDiff(without, baseline),
+    races: results.length,
+  };
 }
 
 export interface OptimizeOptions {
@@ -148,6 +209,8 @@ export interface OptimizeOptions {
   readonly minKeep?: number;
   readonly onProgress?: (message: string) => void;
   readonly signal?: AbortSignal;
+  /** 位置取り調整の参考行を測るか。既定は測る。1 回ぶん余分に走る。 */
+  readonly measurePositionCompetition?: boolean;
 }
 
 export interface OptimizeEntry {
@@ -163,6 +226,8 @@ export interface OptimizeResult {
   /** 最終段まで残った構成を、短縮量の大きい順に並べたもの */
   readonly top: readonly OptimizeEntry[];
   readonly singles: readonly SingleEffect[];
+  /** 買えないが効いているもの。測らなかったときは null。 */
+  readonly positionCompetition: PositionCompetitionEffect | null;
   readonly cost: number;
   readonly races: number;
   readonly evaluations: number;
@@ -201,6 +266,14 @@ export async function optimizeSkills(
   // 基準は候補を 1 つも取らない構成
   const baseIds = context.base.skillIds.filter((id) => !candidates.includes(id));
   const baseline = await evaluator.evaluate(baseIds, lastStage);
+
+  // 位置取り調整の参考行。基準の評価をそのまま使うので、余分に走るのは 1 回ぶんだけ。
+  let positionCompetition: PositionCompetitionEffect | null = null;
+  if (options.measurePositionCompetition !== false) {
+    report('位置取り調整の効き');
+    positionCompetition = await measurePositionCompetition(context, baseline, lastStage);
+    evaluator.races += positionCompetition.races;
+  }
 
   // 単体評価。並べ替えの手がかりなので、少ない試行で足りる。
   report('単体評価');
@@ -300,6 +373,7 @@ export async function optimizeSkills(
     bestDiff: currentDiff,
     top,
     singles,
+    positionCompetition,
     cost: context.cost.totalCost(selected(current, candidates)),
     races: evaluator.races,
     evaluations: evaluator.evaluations,
