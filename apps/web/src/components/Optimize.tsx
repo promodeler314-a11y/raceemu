@@ -165,6 +165,25 @@ export function OptimizePanel() {
                 </tr>
               </thead>
               <tbody>
+                {result.positionCompetition !== null && (
+                  <tr className="border-t border-neutral-200 bg-neutral-50 dark:border-neutral-800 dark:bg-neutral-800/40">
+                    <td className="py-1">
+                      位置取り調整
+                      <span className="ml-1 text-neutral-500">
+                        （平均 {result.positionCompetition.averageCount.toFixed(1)} 回・買えない）
+                      </span>
+                    </td>
+                    <td className="text-right tabular-nums">
+                      {result.positionCompetition.diff.mean.toFixed(4)}
+                      <span className="text-neutral-500">
+                        {' '}
+                        ± {(2 * result.positionCompetition.diff.stdError).toFixed(4)}
+                      </span>
+                    </td>
+                    <td className="text-right tabular-nums">—</td>
+                    <td className="text-right tabular-nums">—</td>
+                  </tr>
+                )}
                 {result.singles.map((single) => (
                   <tr
                     key={single.skillId}
@@ -181,6 +200,15 @@ export function OptimizePanel() {
               </tbody>
             </table>
           </div>
+
+          {result.positionCompetition !== null && (
+            <p className="text-xs text-neutral-500 dark:text-neutral-400">
+              位置取り調整は取捨を選べないので候補には入れていない。それでもスタミナを払って速度を
+              得る取引であり、単体スキルより大きく効くことがある。この行が正なら払えている。大きく
+              負なら、スキルを増やすより先にスタミナか回復を足したほうがよい。平均回数が 0 に近い
+              ときは持久力温存の側にいて、そもそも調整が起きていない。
+            </p>
+          )}
 
           <p className="text-xs text-neutral-500 dark:text-neutral-400">
             レース {result.races.toLocaleString()} 本、構成の評価 {result.evaluations} 回、

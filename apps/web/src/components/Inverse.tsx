@@ -78,6 +78,8 @@ export function InversePanel() {
     <Panel title="逆算">
       <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
         目標を先に決めて、必要なステータスを求める。試行ごとに目標を満たす最小値を探し、その分布から達成率ごとの必要値を読む。
+        返すのは最小値なので、この水準では持久力温存の側に落ちる。つまり<strong>位置取り調整をほとんど払わない走りを前提にした答え</strong>である。
+        調整が毎回起きる前提だと、必要なスタミナは 170 から 210 ほど上がる。
       </p>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <label className="block">

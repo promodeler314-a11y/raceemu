@@ -93,6 +93,17 @@ for (const single of result.singles) {
       ` = ${(1000 * single.efficiency).toFixed(3)} ミリ秒/pt`,
   );
 }
+if (result.positionCompetition !== null) {
+  const { averageCount, diff } = result.positionCompetition;
+  console.log('');
+  console.log('位置取り調整（買えないので候補には入れない）:');
+  console.log(
+    `  平均 ${averageCount.toFixed(2)} 回、調整が起きない場合との差 ` +
+      `${diff.mean >= 0 ? '+' : ''}${diff.mean.toFixed(4)} 秒（誤差 ${(2 * diff.stdError).toFixed(4)}）`,
+  );
+  console.log('  正なら払えている。大きく負なら、スキルより先にスタミナか回復を足したほうがよい。');
+}
+
 console.log('');
 console.log(`最良の構成（${result.cost} pt / 予算 ${budget} pt）:`);
 for (const id of result.best) console.log(`  ${name(id)} (${cost.cost(id)} pt)`);

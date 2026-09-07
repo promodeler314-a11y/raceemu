@@ -6,7 +6,13 @@ import { WorkerPool } from '../src/parallel/pool.ts';
 import { toSerializable } from '../src/parallel/protocol.ts';
 import { defaultSystemSetting, type RaceSetting } from '../src/setting.ts';
 import { createCostModel, dedupeByGroup } from '../../solver/src/cost.ts';
-import { Evaluator, optimizeSkills, pairedDiff, type OptimizeContext } from '../../solver/src/optimize.ts';
+import {
+  Evaluator,
+  measurePositionCompetition,
+  optimizeSkills,
+  pairedDiff,
+  type OptimizeContext,
+} from '../../solver/src/optimize.ts';
 
 const data = loadGameData();
 const system = defaultSystemSetting();
@@ -158,4 +164,83 @@ describe('組み合わせ探索', () => {
       await pool.dispose();
     }
   }, 240000);
+});
+
+describe('位置取り調整の参考行', () => {
+  /** スタミナだけを差し替えた文脈を作る。 */
+  function contextWithStamina(pool: WorkerPool, stamina: number): OptimizeContext {
+    return {
+      ...makeContext(pool),
+      base: toSerializable({ ...setting, uma: { ...setting.uma, stamina } }),
+    };
+  }
+
+  it('平均回数が評価そのものと一致する', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const context = contextWithStamina(pool, 1400);
+      const evaluator = new Evaluator(context);
+      const baseline = await evaluator.evaluate([], 200);
+      const effect = await measurePositionCompetition(context, baseline, 200);
+
+      let sum = 0;
+      for (const count of baseline.positionCompetitionCount) sum += count;
+      expect(effect.averageCount).toBeCloseTo(sum / 200, 10);
+      expect(effect.races).toBe(200);
+      expect(effect.diff.trials).toBe(200);
+    } finally {
+      await pool.dispose();
+    }
+  }, 120000);
+
+  it('スタミナが足りていれば調整があるほうが速い', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const context = contextWithStamina(pool, 1400);
+      const evaluator = new Evaluator(context);
+      const baseline = await evaluator.evaluate([], 300);
+      const effect = await measurePositionCompetition(context, baseline, 300);
+
+      // 余裕がある側では調整が実際に起きており、その収支は正になる。
+      expect(effect.averageCount).toBeGreaterThan(3);
+      expect(effect.diff.mean).toBeGreaterThan(2 * effect.diff.stdError);
+    } finally {
+      await pool.dispose();
+    }
+  }, 120000);
+
+  it('スタミナが足りなければ調整はそもそも起きない', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const context = contextWithStamina(pool, 700);
+      const evaluator = new Evaluator(context);
+      const baseline = await evaluator.evaluate([], 200);
+      const effect = await measurePositionCompetition(context, baseline, 200);
+
+      // 持久力温存が先に発火するので、平均回数はほぼ 0 になる。
+      // このとき参考行は「調整の側にいない」ことを示す。
+      expect(effect.averageCount).toBeLessThan(0.5);
+    } finally {
+      await pool.dispose();
+    }
+  }, 120000);
+
+  it('測らない指定なら null を返し、レース数も増えない', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const context = makeContext(pool);
+      const options = {
+        candidates: [skill('中距離コーナー○').id, skill('中距離直線○').id],
+        budget: 200,
+        stages: [40, 80],
+      };
+      const off = await optimizeSkills(context, { ...options, measurePositionCompetition: false });
+      const on = await optimizeSkills(context, options);
+      expect(off.positionCompetition).toBeNull();
+      expect(on.positionCompetition).not.toBeNull();
+      expect(on.races).toBeGreaterThan(off.races);
+    } finally {
+      await pool.dispose();
+    }
+  }, 180000);
 });

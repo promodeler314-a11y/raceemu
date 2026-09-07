@@ -169,7 +169,13 @@ const singleRows = await page.$$eval(
 );
 for (const row of singleRows) console.log('  単体', row.join(' | '));
 if (!(bestCost <= 250)) fail(`予算を超えた構成が返った: ${bestCost} pt`);
-if (singleRows.length !== 3) fail(`単体評価の行数が想定と違う: ${singleRows.length}`);
+// 先頭は位置取り調整の参考行、続いて候補 3 つ
+if (singleRows.length !== 4) fail(`単体評価の行数が想定と違う: ${singleRows.length}`);
+const referenceRow = singleRows[0];
+if (!referenceRow[0].includes('位置取り調整')) fail('位置取り調整の参考行がない');
+if (!referenceRow[0].includes('買えない')) fail('参考行に買えない旨が出ていない');
+if (referenceRow[2] !== '—') fail(`参考行に pt が入っている: ${referenceRow[2]}`);
+console.log('  参考行:', referenceRow[0], '/', referenceRow[1]);
 await page.locator(optimizeSection).screenshot({ path: 'docs/images/m7-optimize.png' });
 await page.click('button:has-text("すべて外す")');
 
