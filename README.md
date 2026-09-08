@@ -31,6 +31,7 @@ pnpm build                     # UI のビルド
 pnpm e2e                       # ビルドした UI を実際のブラウザで確認
 pnpm monotonicity --trials 60  # 逆算の前提（単調性）の検査
 pnpm optimize --budget 600 --style SEN  # 組み合わせ探索の実測
+pnpm api                       # 探索をサーバ側で回す口（apps/api）
 ```
 
 ## 配信
@@ -42,5 +43,6 @@ https://promodeler314-a11y.github.io/raceemu/
 
 ## 構成
 
-`packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータ、`packages/solver` が逆算と探索、`apps/web` が UI である。
+`packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータ、`packages/solver` が逆算と探索、`apps/web` が UI、`apps/api` が探索をサーバ側で回す口である。
+`deploy/` に Dockerfile と Kubernetes のマニフェストを置いてある。
 計算モデルは [mee1080/umasim](https://github.com/mee1080/umasim) からの移植であり、本リポジトリも AGPL v3 とする。
