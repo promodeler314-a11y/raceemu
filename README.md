@@ -7,6 +7,8 @@
 - [逆算と組み合わせ探索の設計](docs/solver-design.md)
 - [順位条件の扱い](docs/order-condition.md)
 - [モックと実装のズレ](docs/ui-gap.md)
+- [配信](docs/deploy.md)
+- [サーバ側で探索を回す設計](docs/server-design.md)
 - [M1 の結果](docs/m1-report.md)
 - [M2 の結果](docs/m2-report.md)
 - [M3 の結果](docs/m3-report.md)
@@ -30,6 +32,15 @@ pnpm e2e                       # ビルドした UI を実際のブラウザで�
 pnpm monotonicity --trials 60  # 逆算の前提（単調性）の検査
 pnpm optimize --budget 600 --style SEN  # 組み合わせ探索の実測
 ```
+
+## 配信
+
+https://promodeler314-a11y.github.io/raceemu/
+
+`main` に入ると[ワークフロー](.github/workflows/pages.yml)が `typecheck`、`test`、`build`、`e2e` を通してから配る。
+詳しくは[配信](docs/deploy.md)を参照。
+
+## 構成
 
 `packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータ、`packages/solver` が逆算と探索、`apps/web` が UI である。
 計算モデルは [mee1080/umasim](https://github.com/mee1080/umasim) からの移植であり、本リポジトリも AGPL v3 とする。

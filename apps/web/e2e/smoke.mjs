@@ -5,6 +5,7 @@
 import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { extname, join, normalize } from 'node:path';
 
 const root = 'apps/web/dist';
@@ -45,8 +46,12 @@ await new Promise((r) => server.listen(4173, r));
   if (worker > 1.4 * 1024 * 1024) fail(`Worker のバンドルが大きい: ${mb(worker)} MB`);
 }
 
+// 開発コンテナには Chromium が置いてあるので、あればそれを使う。
+// CI のランナーには無く、`playwright install` が入れた先を Playwright 自身が知っているので、
+// その場合は指定しない。決め打ちにすると CI で起動できない。
+const bundled = '/opt/pw-browsers/chromium';
 const browser = await chromium.launch({
-  executablePath: '/opt/pw-browsers/chromium',
+  executablePath: existsSync(bundled) ? bundled : undefined,
   args: ['--no-sandbox'],
 });
 // 永続化を確かめるため、主画面のタブは 1 つのコンテキストにまとめる。
