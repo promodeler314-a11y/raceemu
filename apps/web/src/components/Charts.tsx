@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import { getSlope } from '../../../../packages/sim/src/data/track.ts';
 import { currentTrackDetail, useStore } from '../store.ts';
+import { formatTime, percentile } from '../format.ts';
 import { Panel } from './Inputs.tsx';
 
 /**
@@ -209,11 +210,13 @@ export function FrameCharts() {
 /** タイムの分布。単系列なので凡例は置かず、見出しで何かを示す。 */
 export function TimeHistogram() {
   const results = useStore((s) => s.results);
+  const [hover, setHover] = useState<number | null>(null);
+
   const bins = useMemo(() => {
     if (results.length === 0) return null;
-    const times = results.map((r) => r.raceTime);
-    const min = Math.min(...times);
-    const max = Math.max(...times);
+    const times = results.map((r) => r.raceTime).sort((a, b) => a - b);
+    const min = times[0]!;
+    const max = times[times.length - 1]!;
     if (!Number.isFinite(min) || max === min) return null;
     const binCount = 40;
     const width = (max - min) / binCount;
@@ -222,53 +225,114 @@ export function TimeHistogram() {
       const index = Math.min(binCount - 1, Math.floor((time - min) / width));
       counts[index]! += 1;
     }
-    return { min, max, width, counts, peak: Math.max(...counts) };
+    return {
+      min,
+      max,
+      width,
+      counts,
+      peak: Math.max(...counts),
+      total: times.length,
+      p5: percentile(times, 0.05),
+      p50: percentile(times, 0.5),
+      p95: percentile(times, 0.95),
+    };
   }, [results]);
 
   if (bins === null) return null;
 
-  const barWidth = 100 / bins.counts.length;
+  const W = 1000;
+  const H = 220;
+  const padTop = 8;
+  const padBottom = 20;
+  const plotW = W;
+  const plotH = H - padTop - padBottom;
+  const barGap = 0.6;
+  const barWidth = plotW / bins.counts.length - barGap;
+  const xOf = (time: number) => ((time - bins.min) / (bins.max - bins.min)) * plotW;
   const peakIndex = bins.counts.indexOf(bins.peak);
   const peakFrom = bins.min + peakIndex * bins.width;
   // 図を見られない場合に、形の要点だけでも伝える。
-  // 数値そのものは「結果」の表に出ているので、ここでは重ならない情報に絞る。
   const description =
-    `${results.length} 試行のタイムの分布。` +
-    `${bins.min.toFixed(2)} 秒から ${bins.max.toFixed(2)} 秒に広がり、` +
-    `最も多いのは ${peakFrom.toFixed(2)} 秒あたりで ${bins.peak} 件。`;
+    `${bins.total} 試行のタイムの分布。` +
+    `${formatTime(bins.min)} から ${formatTime(bins.max)} に広がり、` +
+    `最も多いのは ${formatTime(peakFrom)} あたりで ${bins.peak} 件。` +
+    `p5 は ${formatTime(bins.p5)}、p50 は ${formatTime(bins.p50)}、p95 は ${formatTime(bins.p95)}。`;
 
   return (
     <div>
-      <h3 className="text-sm font-medium">タイムの分布</h3>
+      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+        <h3 className="text-sm font-medium">タイムの分布</h3>
+        <span className="text-xs text-neutral-500 dark:text-neutral-400">
+          {bins.total.toLocaleString('ja-JP')} 試行 ・ ビン幅 {bins.width.toFixed(2)} 秒
+        </span>
+        <span className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
+          p5 {formatTime(bins.p5)} ・ p50 {formatTime(bins.p50)} ・ p95 {formatTime(bins.p95)}
+        </span>
+      </div>
       <svg
-        viewBox="0 0 100 30"
+        viewBox={`0 0 ${W} ${H}`}
         preserveAspectRatio="none"
-        className="mt-2 h-32 w-full"
+        className="mt-2 h-56 w-full"
         role="img"
         aria-label={description}
       >
         {bins.counts.map((count, i) => {
-          const height = (count / bins.peak) * 28;
+          const x = i * (plotW / bins.counts.length);
+          const height = bins.peak === 0 ? 0 : (count / bins.peak) * plotH;
           return (
             <rect
               key={i}
-              x={i * barWidth + 0.15}
-              y={30 - height}
-              width={barWidth - 0.3}
+              x={x}
+              y={padTop + plotH - height}
+              width={Math.max(barWidth, 0)}
               height={height}
-              rx={0.3}
+              rx={0.6}
               fill={color('speed')}
-            >
-              <title>
-                {(bins.min + i * bins.width).toFixed(2)} から {(bins.min + (i + 1) * bins.width).toFixed(2)} 秒: {count} 件
-              </title>
-            </rect>
+              opacity={hover === null || hover === i ? 1 : 0.45}
+              onMouseEnter={() => setHover(i)}
+              onMouseLeave={() => setHover((h) => (h === i ? null : h))}
+            />
           );
         })}
+        {(
+          [
+            { label: 'p5', value: bins.p5 },
+            { label: 'p50', value: bins.p50 },
+            { label: 'p95', value: bins.p95 },
+          ] as const
+        ).map(({ label, value }) => (
+          <line
+            key={label}
+            x1={xOf(value)}
+            x2={xOf(value)}
+            y1={padTop}
+            y2={padTop + plotH}
+            stroke={isDark() ? '#77746e' : '#8a877e'}
+            strokeWidth={1}
+            strokeDasharray="3 3"
+          />
+        ))}
+        <line
+          x1={0}
+          x2={plotW}
+          y1={padTop + plotH}
+          y2={padTop + plotH}
+          stroke={isDark() ? '#46494e' : '#c6c2b8'}
+          strokeWidth={1}
+        />
       </svg>
       <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
-        <span>{bins.min.toFixed(2)} 秒</span>
-        <span>{bins.max.toFixed(2)} 秒</span>
+        <span>{formatTime(bins.min)}</span>
+        {hover !== null ? (
+          <span className="font-medium text-neutral-700 dark:text-neutral-200">
+            {formatTime(bins.min + hover * bins.width)} – {formatTime(bins.min + (hover + 1) * bins.width)} ・{' '}
+            {bins.counts[hover]!.toLocaleString('ja-JP')} 試行 ・{' '}
+            {((bins.counts[hover]! / bins.total) * 100).toFixed(1)}%
+          </span>
+        ) : (
+          <span>バーにカーソルを合わせると帯の内訳を表示</span>
+        )}
+        <span>{formatTime(bins.max)}</span>
       </div>
     </div>
   );
