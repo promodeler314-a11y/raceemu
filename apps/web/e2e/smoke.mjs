@@ -90,15 +90,26 @@ const readTable = async (heading) =>
     (trs) => trs.map((tr) => [...tr.querySelectorAll('th,td')].map((c) => c.textContent?.trim())),
   );
 
-const summaryRows = Object.fromEntries((await readTable('結果')).map(([k, v]) => [k, v]));
-console.log('--- 結果');
-for (const [k, v] of Object.entries(summaryRows)) console.log(' ', k, v);
-if (summaryRows['試行回数'] !== '2000') fail('試行回数が合わない');
+// 結果の主数字とスキルの表は、見出しの文言ではなく data-testid で拾う。
+// モックへ寄せる作業で見出しは変わるが、ここで見たいものは変わらないため。
+const readTestTable = async (testId) =>
+  page.$$eval(`[data-testid="${testId}"] tbody tr`, (trs) =>
+    trs.map((tr) => [...tr.querySelectorAll('th,td')].map((c) => c.textContent?.trim())),
+  );
+const digits = (text) => (text ?? '').replace(/[^0-9]/g, '');
 
-const skillRows = await readTable('スキルごとの発動');
+console.log('--- 結果');
+const averageTime = await page.textContent('[data-testid=average-time]');
+const trialCount = digits(await page.textContent('[data-testid=trial-count]'));
+console.log('  平均タイム', averageTime, '/ 試行回数', trialCount);
+if (trialCount !== '2000') fail(`試行回数が合わない: ${trialCount}`);
+if (averageTime === null || averageTime.trim() === '') fail('平均タイムが出ていない');
+
+const skillRows = await readTestTable('skill-table');
 console.log('--- スキルごとの発動');
 for (const row of skillRows) console.log(' ', row.join(' | '));
-if (skillRows.length !== 3) fail(`スキルの行数が想定と違う: ${skillRows.length}`);
+// 上で足した 2 つ。tbody だけを見るので、以前のようにヘッダ行は数に入らない。
+if (skillRows.length !== 2) fail(`スキルの行数が想定と違う: ${skillRows.length}`);
 
 console.log('uPlot の図の数:', await page.locator('.u-wrap').count());
 
@@ -115,7 +126,7 @@ const runOnce = async () => {
     { timeout: 180000 },
   );
   await page.waitForTimeout(200);
-  const rows = await readTable('スキルごとの発動');
+  const rows = await readTestTable('skill-table');
   const row = rows.find((r) => r[0] === '真骨頂');
   return row === undefined ? NaN : Number.parseFloat(row[1]);
 };

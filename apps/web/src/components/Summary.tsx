@@ -70,7 +70,8 @@ export function SummaryOutput() {
   return (
     <Panel title="結果">
       <p className="text-xs text-neutral-500 dark:text-neutral-400">
-        {summary.all.count.toLocaleString('ja-JP')} 試行 ・ {(summary.elapsedMs / 1000).toFixed(2)} 秒
+        <span data-testid="trial-count">{summary.all.count.toLocaleString('ja-JP')}</span> 試行 ・{' '}
+        {(summary.elapsedMs / 1000).toFixed(2)} 秒
         {detail !== undefined && ` ・ ${detail.name}`}
       </p>
 
@@ -78,7 +79,10 @@ export function SummaryOutput() {
       <div className="mt-3 flex flex-col gap-4">
         <div className="flex flex-col gap-1 border-b border-neutral-200 pb-3 dark:border-neutral-800">
           <span className="text-xs text-neutral-500 dark:text-neutral-400">平均タイム</span>
-          <span className="font-mono text-4xl font-semibold tabular-nums leading-none">
+          <span
+            data-testid="average-time"
+            className="font-mono text-4xl font-semibold tabular-nums leading-none"
+          >
             {formatTime(summary.all.averageTime)}
           </span>
           <span className="text-xs text-neutral-500 dark:text-neutral-400">
@@ -165,7 +169,7 @@ export function SummaryOutput() {
             </span>
           </div>
           <div className="mt-2 overflow-x-auto">
-            <table className="w-full min-w-[36rem] text-sm">
+            <table data-testid="skill-table" className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
                   <th scope="col" className="py-1 pr-3 text-left font-normal">スキル</th>
