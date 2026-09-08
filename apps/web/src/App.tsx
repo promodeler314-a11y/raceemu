@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { CourseInput, OptionsInput, RunPanel, SkillInput, UmaInput } from './components/Inputs.tsx';
 import { SummaryOutput } from './components/Summary.tsx';
 import { FrameCharts } from './components/Charts.tsx';
-import { CompareOutput, ShareButton, SkillSummaryOutput } from './components/Compare.tsx';
+import { CompareOutput, ShareButton } from './components/Compare.tsx';
 import { InversePanel } from './components/Inverse.tsx';
 import { OptimizePanel } from './components/Optimize.tsx';
 import { ErrorBanner } from './components/Notices.tsx';
@@ -59,7 +59,6 @@ export default function App() {
         </div>
         <div className="space-y-4">
           <SummaryOutput />
-          <SkillSummaryOutput />
           <CompareOutput />
           <FrameCharts />
         </div>

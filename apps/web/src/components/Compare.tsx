@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { gameData, useStore } from '../store.ts';
+import { useStore } from '../store.ts';
 import { Panel } from './Inputs.tsx';
 
 function seconds(value: number): string {
@@ -134,60 +134,6 @@ export function CompareOutput() {
       >
         いまの結果を保存
       </button>
-    </Panel>
-  );
-}
-
-/** スキルごとの発動率と発動位置。 */
-export function SkillSummaryOutput() {
-  const skillSummaries = useStore((s) => s.skillSummaries);
-  if (skillSummaries.length === 0) return null;
-
-  const phaseLabels = ['序盤', '中盤', '終盤', 'ラスト'];
-  return (
-    <Panel title="スキルごとの発動">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[30rem] text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
-              <th scope="col" className="py-1 text-left font-normal">スキル</th>
-              <th scope="col" className="py-1 text-right font-normal">発動率</th>
-              <th scope="col" className="py-1 text-right font-normal">平均発動位置</th>
-              <th scope="col" className="py-1 text-right font-normal">2 回発動率</th>
-              <th scope="col" className="py-1 text-right font-normal">初回のフェーズ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {skillSummaries.map((skill) => {
-              const data = gameData.skillsById.get(skill.skillId);
-              const topPhase = skill.phaseRates.indexOf(Math.max(...skill.phaseRates));
-              return (
-                <tr key={skill.skillId} className="border-b border-neutral-100 last:border-0 dark:border-neutral-800">
-                  <th scope="row" className="py-1 text-left font-normal">
-                    {data?.name ?? skill.skillId}
-                  </th>
-                  <td className="py-1 text-right tabular-nums">
-                    {(skill.triggerRate * 100).toFixed(1)} %
-                  </td>
-                  <td className="py-1 text-right tabular-nums">
-                    {Number.isFinite(skill.averageFirstPosition)
-                      ? `${skill.averageFirstPosition.toFixed(0)} m`
-                      : '-'}
-                  </td>
-                  <td className="py-1 text-right tabular-nums">
-                    {(skill.doubleTriggerRate * 100).toFixed(1)} %
-                  </td>
-                  <td className="py-1 text-right text-xs">
-                    {skill.triggerRate === 0
-                      ? '-'
-                      : `${phaseLabels[topPhase]} ${(skill.phaseRates[topPhase]! * 100).toFixed(0)} %`}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
     </Panel>
   );
 }
