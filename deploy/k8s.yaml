@@ -1,0 +1,62 @@
+# k3s に置くときの最小の構成。
+# 名前空間・イメージ・ホスト名は環境に合わせて書き換える。
+#
+# 認証は持たせていない。Cloudflare Access を前に置く前提である。
+# docs/server-design.md の 5 節を参照。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raceemu
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: raceemu }
+  template:
+    metadata:
+      labels: { app: raceemu }
+    spec:
+      containers:
+        - name: raceemu
+          image: raceemu:latest
+          ports:
+            - containerPort: 8080
+          env:
+            # 並列数は cgroup のクォータから決まる。
+            # os.availableParallelism() は CPU アフィニティしか見ないので、
+            # limits.cpu だけではノードのコア数を答えてしまう。
+            # 明示したい場合だけ RACEEMU_CONCURRENCY を置く。
+            - name: PORT
+              value: "8080"
+            - name: RACEEMU_MAX_RUNNING
+              value: "1"
+            - name: RACEEMU_MAX_QUEUED
+              value: "8"
+            - name: RACEEMU_MAX_RACES
+              value: "2000000"
+          resources:
+            requests:
+              cpu: "2"
+              memory: 1Gi
+            limits:
+              # ここを増やすと Worker の本数もついてくる。
+              cpu: "4"
+              memory: 2Gi
+          readinessProbe:
+            httpGet: { path: /api/health, port: 8080 }
+            initialDelaySeconds: 5
+          livenessProbe:
+            httpGet: { path: /api/health, port: 8080 }
+            initialDelaySeconds: 30
+            # 探索がコアを埋めている間も応答が要るので、間隔は緩めにする。
+            periodSeconds: 30
+            timeoutSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: raceemu
+spec:
+  selector: { app: raceemu }
+  ports:
+    - port: 80
+      targetPort: 8080
