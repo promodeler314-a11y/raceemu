@@ -8,6 +8,7 @@
 - [順位条件の扱い](docs/order-condition.md)
 - [モックと実装のズレ](docs/ui-gap.md)
 - [配信](docs/deploy.md)
+- [サーバ側で探索を回す設計](docs/server-design.md)
 - [M1 の結果](docs/m1-report.md)
 - [M2 の結果](docs/m2-report.md)
 - [M3 の結果](docs/m3-report.md)
