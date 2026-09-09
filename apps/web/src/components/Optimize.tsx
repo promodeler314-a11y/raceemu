@@ -63,15 +63,22 @@ export function OptimizePanel() {
               中断
             </button>
           )}
+          {result !== null && !running && (
+            <span className="num text-xs text-ink3">
+              レース {result.races.toLocaleString()} 本 ・ 構成の評価 {result.evaluations} 回 ・{' '}
+              {(result.elapsedMs / 1000).toFixed(1)} 秒 ・ {result.rounds} 巡
+            </span>
+          )}
         </div>
       </div>
       {!useField && (
-        <p className="mt-2 text-xs text-warn-ink">
+        <p className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink">
           順位条件を判定していない。脚質と噛み合わない条件のスキルが過大に評価される。
         </p>
       )}
 
-      {log.length > 0 && (
+      {/* 進捗は走っている間だけ出す。終わったあとは結果を読む邪魔になる。 */}
+      {running && log.length > 0 && (
         <ol className="mt-3 space-y-0.5 text-xs text-ink3">
           {log.map((line, i) => (
             <li key={i}>{line}</li>
@@ -210,10 +217,6 @@ export function OptimizePanel() {
             </p>
           )}
 
-          <p className="text-xs text-ink3">
-            レース {result.races.toLocaleString()} 本、構成の評価 {result.evaluations} 回、
-            {(result.elapsedMs / 1000).toFixed(1)} 秒、{result.rounds} 巡
-          </p>
         </div>
       )}
     </Panel>

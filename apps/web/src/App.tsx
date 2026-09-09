@@ -7,6 +7,7 @@ import { InversePanel } from './components/Inverse.tsx';
 import { OptimizePanel } from './components/Optimize.tsx';
 import { ErrorBanner } from './components/Notices.tsx';
 import { Footer, Header, SettingsRail } from './components/Shell.tsx';
+import { PRESETS } from './presets.ts';
 import { useStore } from './store.ts';
 
 export default function App() {
@@ -85,15 +86,36 @@ export default function App() {
  */
 function EmptyOrSummary() {
   const summary = useStore((s) => s.summary);
-  if (summary === null) {
-    return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 py-24 text-center">
-        <h2 className="text-base font-semibold">まだ実行していません</h2>
-        <p className="max-w-md text-xs text-ink2">
-          左で設定を決めて実行すると、試行の分布とスキルごとの発動状況が出ます。
+  const applyPreset = useStore((s) => s.applyPreset);
+  const count = useStore((s) => s.count);
+  if (summary !== null) return <SummaryOutput />;
+  return (
+    <div className="flex flex-1 flex-col items-center justify-center gap-5 py-20 text-center">
+      <svg width="52" height="52" viewBox="0 0 48 48" fill="none" stroke="currentColor" strokeWidth="1.6" className="text-rule2">
+        <path d="M6 40h36" />
+        <path d="M6 40V8" />
+        <path d="M10 33c6 0 8-14 14-14s8 8 14-6" strokeDasharray="3 3" />
+      </svg>
+      <div className="flex max-w-xl flex-col gap-2">
+        <h2 className="text-lg font-semibold">まだ実行していません</h2>
+        <p className="text-[13px] text-ink2">
+          左で設定を決めて実行すると、{count.toLocaleString('ja-JP')} 回の試行からタイムの分布と
+          スキルごとの発動状況が出ます。まず試すなら、下のプリセットから始めるのが早いです。
         </p>
       </div>
-    );
-  }
-  return <SummaryOutput />;
+      <div className="grid w-full max-w-xl grid-cols-1 gap-2.5 text-left sm:grid-cols-3">
+        {PRESETS.map((preset) => (
+          <button
+            key={preset.id}
+            type="button"
+            onClick={() => applyPreset(preset)}
+            className="flex flex-col gap-1.5 rounded-sm border border-rule2 bg-surface p-3 text-left hover:bg-sunken"
+          >
+            <span className="text-[13px] font-semibold">{preset.name}</span>
+            <span className="text-[11px] text-ink3">{preset.note}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }

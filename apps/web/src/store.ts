@@ -22,6 +22,7 @@ import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/sr
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
 import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
+import { resolveSkillIds, type Preset } from './presets.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
 export const gameData = loadGameData();
@@ -177,6 +178,8 @@ interface AppState {
   setTrack: (patch: Partial<TrackRef>) => void;
   toggleSkill: (id: string) => void;
   clearSkills: () => void;
+  /** プリセットを丸ごと当てる。ウマ娘・コース・スキルを一度に差し替える。 */
+  applyPreset: (preset: Preset) => void;
   setCount: (count: number) => void;
   setUseField: (useField: boolean) => void;
   setSeed: (seed: number) => void;
@@ -275,6 +278,12 @@ export const useStore = create<AppState>((set, get) => ({
       skillIds: s.skillIds.includes(id) ? s.skillIds.filter((x) => x !== id) : [...s.skillIds, id],
     })),
   clearSkills: () => set({ skillIds: [] }),
+  applyPreset: (preset) =>
+    set({
+      uma: { charaName: '', ...preset.uma },
+      track: preset.track,
+      skillIds: resolveSkillIds(preset.skillNames),
+    }),
   setCount: (count) => set({ count }),
   setUseField: (useField) => set({ useField }),
   setSeed: (seed) => set({ seed }),
