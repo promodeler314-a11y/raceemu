@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import { getSlope } from '../../../../packages/sim/src/data/track.ts';
 import { currentTrackDetail, useStore } from '../store.ts';
+import { buildEvents, kindLabel, type EventKind } from '../events.ts';
 import { formatTime, percentile } from '../format.ts';
 import { Panel } from './Inputs.tsx';
 
@@ -207,8 +208,84 @@ export function FrameCharts() {
           bands={prepared.bands}
           series={[{ label: '勾配', values: prepared.slope, slot: 'context' }]}
         />
+        <EventList />
       </div>
     </Panel>
+  );
+}
+
+/**
+ * 1 レースの出来事。
+ *
+ * 図は「どう動いたか」は見せるが「なぜそこで変わったのか」は見せない。
+ * 速度が落ちた場所にコーナーがあったのか、スキルが切れたのか、掛かったのかは、
+ * 並べて初めて読める。
+ */
+const KIND_STYLE: Record<EventKind, string> = {
+  skill: 'border-s1 text-s1',
+  phase: 'border-rule2 text-ink2',
+  corner: 'border-rule2 text-ink3',
+  state: 'border-rule2 text-ink2',
+  end: 'border-ink2 text-ink',
+};
+
+function EventList() {
+  const detail = useStore((s) => s.detail);
+  const track = useStore((s) => s.track);
+  const trackDetail = currentTrackDetail(track);
+  const results = useStore((s) => s.results);
+  const events = useMemo(() => {
+    if (detail === null || trackDetail === undefined) return [];
+    // タイムと残り体力は結果の側から取る。シミュレーション状態は終端の値を
+    // 持たない（フレームを回し終えた時点の内部状態である）。
+    const result = results[detail.trial];
+    if (result === undefined) return [];
+    return buildEvents(detail.frames, trackDetail, {
+      raceTime: result.raceTime,
+      goalSp: result.goalSp,
+      spMax: detail.state.setting.spMax,
+    });
+  }, [detail, trackDetail, results]);
+
+  if (events.length === 0) return null;
+  return (
+    <div>
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <h3 className="text-sm font-medium">イベント</h3>
+        <span className="text-xs text-ink3">{events.length} 件</span>
+      </div>
+      <div className="mt-2 max-h-96 overflow-y-auto">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-surface">
+            <tr className="border-b border-rule text-ink3">
+              <th scope="col" className="py-1 pr-3 text-right font-normal">時刻</th>
+              <th scope="col" className="py-1 pr-3 text-right font-normal">位置</th>
+              <th scope="col" className="py-1 pr-3 text-left font-normal">種別</th>
+              <th scope="col" className="py-1 text-left font-normal">内容</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.map((event, i) => (
+              <tr key={i} className="border-b border-rule last:border-0">
+                <td className="num py-1 pr-3 text-right text-ink2">{event.time.toFixed(1)}</td>
+                <td className="num py-1 pr-3 text-right text-ink2">
+                  {event.position.toFixed(0)} m
+                </td>
+                <td className="py-1 pr-3">
+                  <span className={`rounded-sm border px-1 text-[11px] ${KIND_STYLE[event.kind]}`}>
+                    {kindLabel(event.kind)}
+                  </span>
+                </td>
+                <td className="py-1">
+                  {event.label}
+                  {event.detail !== '' && <span className="text-ink3"> ／ {event.detail}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
