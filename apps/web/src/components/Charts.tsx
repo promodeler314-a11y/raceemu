@@ -17,8 +17,13 @@ const SERIES = {
   context: { light: '#52514e', dark: '#c3c2b7' },
 };
 
+/**
+ * ヘッダの切替が付いたので、OS の設定ではなく画面の状態を見る。
+ * 色は CSS のトークンで持っているが、uPlot は canvas に描くため
+ * ここだけは JavaScript 側で値を選ぶ必要がある。
+ */
 function isDark(): boolean {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return document.documentElement.dataset['theme'] === 'dark';
 }
 
 function color(slot: keyof typeof SERIES): string {
@@ -124,7 +129,7 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
     <div>
       <div ref={ref} className="w-full" />
       {subtitle !== undefined && (
-        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{subtitle}</p>
+        <p className="mt-1 text-xs text-ink3">{subtitle}</p>
       )}
     </div>
   );
@@ -167,7 +172,7 @@ export function FrameCharts() {
   if (prepared === null) {
     return (
       <Panel title="レースの詳細">
-        <p className="text-sm text-neutral-500">実行すると 1 本目のレースを表示する。</p>
+        <p className="text-sm text-ink3">実行すると 1 本目のレースを表示する。</p>
       </Panel>
     );
   }
@@ -262,10 +267,10 @@ export function TimeHistogram() {
     <div>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <h3 className="text-sm font-medium">タイムの分布</h3>
-        <span className="text-xs text-neutral-500 dark:text-neutral-400">
+        <span className="text-xs text-ink3">
           {bins.total.toLocaleString('ja-JP')} 試行 ・ ビン幅 {bins.width.toFixed(2)} 秒
         </span>
-        <span className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
+        <span className="font-mono text-xs text-ink3">
           p5 {formatTime(bins.p5)} ・ p50 {formatTime(bins.p50)} ・ p95 {formatTime(bins.p95)}
         </span>
       </div>
@@ -321,10 +326,10 @@ export function TimeHistogram() {
           strokeWidth={1}
         />
       </svg>
-      <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
+      <div className="flex justify-between text-xs text-ink3">
         <span>{formatTime(bins.min)}</span>
         {hover !== null ? (
-          <span className="font-medium text-neutral-700 dark:text-neutral-200">
+          <span className="font-medium text-ink2">
             {formatTime(bins.min + hover * bins.width)} – {formatTime(bins.min + (hover + 1) * bins.width)} ・{' '}
             {bins.counts[hover]!.toLocaleString('ja-JP')} 試行 ・{' '}
             {((bins.counts[hover]! / bins.total) * 100).toFixed(1)}%

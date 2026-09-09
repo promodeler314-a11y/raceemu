@@ -5,8 +5,8 @@ import { useStore } from '../store.ts';
 import { Panel } from './Inputs.tsx';
 
 const fieldCls =
-  'w-full rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
-const labelCls = 'block text-xs text-neutral-500 dark:text-neutral-400';
+  'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
+const labelCls = 'block text-xs text-ink3';
 
 const STATUSES: TargetStatus[] = ['stamina', 'speed', 'power', 'guts', 'wisdom'];
 const GOALS: Goal[] = [{ kind: 'maxSpurt' }, { kind: 'finish' }];
@@ -52,12 +52,12 @@ function CriticalHistogram({ values, from, to }: { values: Float64Array; from: n
           );
         })}
       </svg>
-      <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
+      <div className="flex justify-between text-xs text-ink3">
         <span>{from}</span>
         <span>{to}</span>
       </div>
       {bins.unreachable > 0 && (
-        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+        <p className="mt-1 text-xs text-ink3">
           範囲内では達成できなかった試行が {bins.unreachable} 件ある。
         </p>
       )}
@@ -76,7 +76,7 @@ export function InversePanel() {
 
   return (
     <Panel title="逆算">
-      <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+      <p className="mb-3 text-xs text-ink3">
         目標を先に決めて、必要なステータスを求める。試行ごとに目標を満たす最小値を探し、その分布から達成率ごとの必要値を読む。
         返すのは最小値なので、この水準では持久力温存の側に落ちる。つまり<strong>位置取り調整をほとんど払わない走りを前提にした答え</strong>である。
         調整が毎回起きる前提だと、必要なスタミナは 170 から 210 ほど上がる。
@@ -129,7 +129,7 @@ export function InversePanel() {
       <div className="mt-3 flex items-center gap-3">
         <button
           type="button"
-          className="rounded bg-neutral-900 px-4 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-sm bg-primary-bg px-4 py-1.5 text-sm text-primary-fg disabled:opacity-50"
           onClick={() => void solveInverse()}
           disabled={running}
         >
@@ -139,12 +139,12 @@ export function InversePanel() {
           <>
             <button
               type="button"
-              className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+              className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
               onClick={cancel}
             >
               中断
             </button>
-            <span className="text-sm text-neutral-500">
+            <span className="text-sm text-ink3">
               {progress} / {inverseCount}
             </span>
           </>
@@ -155,7 +155,7 @@ export function InversePanel() {
         <div className="mt-4 space-y-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+              <tr className="border-b border-rule text-xs text-ink3">
                 <th className="py-1 text-left font-normal">達成率</th>
                 <th className="py-1 text-right font-normal">
                   必要な{STATUS_LABEL[inverseResult.status]}
@@ -164,8 +164,8 @@ export function InversePanel() {
             </thead>
             <tbody>
               {curve.map(({ rate, value }) => (
-                <tr key={rate} className="border-b border-neutral-100 last:border-0 dark:border-neutral-800">
-                  <th scope="row" className="py-1 text-left font-normal text-neutral-500 dark:text-neutral-400">
+                <tr key={rate} className="border-b border-rule last:border-0">
+                  <th scope="row" className="py-1 text-left font-normal text-ink3">
                     {(rate * 100).toFixed(0)} %
                   </th>
                   <td className="py-1 text-right tabular-nums">
@@ -182,7 +182,7 @@ export function InversePanel() {
             to={inverseResult.to}
           />
 
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="text-xs text-ink3">
             {GOAL_LABEL[inverseResult.goal.kind]}を目標に、{inverseResult.values.length} 試行。
             探し方は{inverseResult.method === 'bisect' ? '二分探索' : '全走査'}。
             レース {inverseResult.races.toLocaleString()} 本、

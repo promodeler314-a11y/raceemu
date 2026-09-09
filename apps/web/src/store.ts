@@ -84,6 +84,28 @@ export interface PersistedSettings {
   readonly useField: boolean;
 }
 
+/** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
+export type Tab = 'settings' | 'summary' | 'compare' | 'detail' | 'solve';
+
+export type Theme = 'light' | 'dark';
+
+/**
+ * テーマだけは localStorage に置く。
+ *
+ * 他の設定と同じ IndexedDB に入れると読み出しが非同期になり、
+ * 最初の描画が明色で出てから暗色に入れ替わる。同期で読める場所に置き、
+ * index.html の先頭で data-theme を当てておく。
+ */
+const THEME_KEY = 'raceemu-theme';
+
+export function loadTheme(): Theme {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
 export interface Snapshot {
   readonly id: number;
   readonly label: string;
@@ -163,6 +185,10 @@ interface AppState {
   setHintLevel: (skillId: string, level: number) => void;
   run: () => Promise<void>;
   cancel: () => void;
+  tab: Tab;
+  setTab: (tab: Tab) => void;
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
   showTrial: (trial: number) => void;
   setInverse: (patch: { status?: TargetStatus; goal?: Goal; count?: number }) => void;
   solveInverse: () => Promise<void>;
@@ -210,6 +236,18 @@ export const useStore = create<AppState>((set, get) => ({
   error: null,
   notice: null,
   summary: null,
+  tab: 'settings',
+  setTab: (tab) => set({ tab }),
+  theme: loadTheme(),
+  setTheme: (theme) => {
+    set({ theme });
+    document.documentElement.dataset['theme'] = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // 保存できなくても、その場の切替は効く。
+    }
+  },
   results: [],
   skillSummaries: [],
   detail: null,
@@ -281,6 +319,8 @@ export const useStore = create<AppState>((set, get) => ({
         skillSummaries: toSkillSummaries(serializable.skillIds, skillStats, results.length),
       });
       get().showTrial(0);
+      // 走らせた人が次に見たいのは結果である。設定の面に留まらせない。
+      set({ tab: 'summary' });
     } catch (error) {
       if (error instanceof SimulationCancelled) set({ error: null });
       else set({ error: error instanceof Error ? error.message : String(error) });

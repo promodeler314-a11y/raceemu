@@ -20,7 +20,7 @@ export function ErrorBanner() {
       {error !== null && (
         <div
           role="alert"
-          className="mb-2 flex items-start gap-3 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-100"
+          className="mb-2 flex items-start gap-3 rounded-sm border border-bad-rule bg-bad-tint px-3 py-2 text-sm text-bad-ink"
         >
           <span className="flex-1">{error}</span>
           <button
@@ -36,7 +36,7 @@ export function ErrorBanner() {
       {notice !== null && (
         <div
           role="status"
-          className="mb-2 flex items-start gap-3 rounded border border-neutral-300 bg-neutral-100 px-3 py-2 text-sm dark:border-neutral-700 dark:bg-neutral-800"
+          className="mb-2 flex items-start gap-3 rounded-sm border border-rule2 bg-sunken px-3 py-2 text-sm"
         >
           <span className="flex-1">{notice}</span>
           <button
@@ -80,25 +80,25 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, Boundar
     return (
       <div className="mx-auto max-w-2xl p-8">
         <h1 className="text-base font-semibold">画面を表示できませんでした</h1>
-        <p className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">
+        <p className="mt-2 text-sm text-ink2">
           計算モデルかコースデータの読み込みでつまずいています。ページを開き直すと直ることが
           あります。直らないときは、保存してある設定が壊れている可能性があるので、下のボタンで
           消してから開き直してください。
         </p>
-        <pre className="mt-3 overflow-x-auto rounded bg-neutral-100 p-3 text-xs dark:bg-neutral-800">
+        <pre className="mt-3 overflow-x-auto rounded-sm bg-sunken p-3 text-xs">
           {error.message}
         </pre>
         <div className="mt-4 flex gap-2">
           <button
             type="button"
-            className="rounded bg-neutral-900 px-3 py-1.5 text-sm text-white dark:bg-neutral-100 dark:text-neutral-900"
+            className="rounded-sm bg-primary-bg px-3 py-1.5 text-sm text-primary-fg"
             onClick={() => location.reload()}
           >
             開き直す
           </button>
           <button
             type="button"
-            className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+            className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
             onClick={() => {
               try {
                 indexedDB.deleteDatabase('raceemu');

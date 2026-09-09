@@ -21,12 +21,12 @@ export function CompareOutput() {
   if (snapshots.length === 0) {
     return (
       <Panel title="比較">
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-ink3">
           実行したあとに保存すると、設定同士を並べて比べられる。
         </p>
         <button
           type="button"
-          className="mt-3 rounded border border-neutral-300 px-3 py-1 text-sm disabled:opacity-50 dark:border-neutral-700"
+          className="mt-3 rounded-sm border border-rule2 px-3 py-1 text-sm disabled:opacity-50"
           onClick={saveSnapshot}
           disabled={summary === null}
         >
@@ -60,7 +60,7 @@ export function CompareOutput() {
         <table className="w-full min-w-[28rem] text-sm">
           <thead>
             <tr>
-              <th scope="col" className="py-1 text-left font-normal text-neutral-500 dark:text-neutral-400">
+              <th scope="col" className="py-1 text-left font-normal text-ink3">
                 項目
               </th>
               {columns.map((snapshot) => (
@@ -76,7 +76,7 @@ export function CompareOutput() {
                   </button>
                   <button
                     type="button"
-                    className="ml-1 text-neutral-400"
+                    className="ml-1 text-ink3"
                     onClick={() => removeSnapshot(snapshot.id)}
                     aria-label={`スナップショット ${snapshot.id} を削除する`}
                     title="削除"
@@ -91,8 +91,8 @@ export function CompareOutput() {
             {rows.map((row) => {
               const baseValue = row.value(base);
               return (
-                <tr key={row.label} className="border-b border-neutral-100 last:border-0 dark:border-neutral-800">
-                  <th scope="row" className="py-1 text-left font-normal text-neutral-500 dark:text-neutral-400">
+                <tr key={row.label} className="border-b border-rule last:border-0">
+                  <th scope="row" className="py-1 text-left font-normal text-ink3">
                     {row.label}
                   </th>
                   {columns.map((snapshot) => {
@@ -105,11 +105,11 @@ export function CompareOutput() {
                     return (
                       <td
                         key={snapshot.id}
-                        className={`py-1 text-right tabular-nums ${differs ? 'font-semibold' : 'text-neutral-500 dark:text-neutral-400'}`}
+                        className={`py-1 text-right tabular-nums ${differs ? 'font-semibold' : 'text-ink3'}`}
                       >
                         {value}
                         {Number.isFinite(delta) && (
-                          <span className="ml-1 text-xs font-normal text-neutral-500">
+                          <span className="ml-1 text-xs font-normal text-ink3">
                             ({delta > 0 ? '+' : ''}
                             {delta.toFixed(3)})
                           </span>
@@ -123,12 +123,12 @@ export function CompareOutput() {
           </tbody>
         </table>
       </div>
-      <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+      <p className="mt-2 text-xs text-ink3">
         太字は左端の列と違う値。括弧内は左端との差。
       </p>
       <button
         type="button"
-        className="mt-3 rounded border border-neutral-300 px-3 py-1 text-sm disabled:opacity-50 dark:border-neutral-700"
+        className="mt-3 rounded-sm border border-rule2 px-3 py-1 text-sm disabled:opacity-50"
         onClick={saveSnapshot}
         disabled={summary === null}
       >
@@ -144,7 +144,7 @@ export function ShareButton() {
   return (
     <button
       type="button"
-      className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+      className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
       onClick={() => {
         const url = shareUrl();
         history.replaceState(null, '', url);
