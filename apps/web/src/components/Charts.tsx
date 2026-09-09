@@ -2,23 +2,32 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import { getSlope } from '../../../../packages/sim/src/data/track.ts';
 import { currentTrackDetail, useStore } from '../store.ts';
+import { buildEvents, kindLabel, type EventKind } from '../events.ts';
 import { formatTime, percentile } from '../format.ts';
 import { Panel } from './Inputs.tsx';
 
 /**
  * 系列の色は dataviz の既定パレットの 1 から 3 番目。
- * 明色面での aqua は 3:1 を下回るため、体力の図は単系列にして見出しで名前を出す。
+ *
+ * 割り当てはモックに合わせてある。目標速度は速度と同じ量の参照線であって
+ * 別の系列ではないので、カテゴリ色を 1 枠使わず、破線の文脈色で描く。
+ * 空いた橙は体力に回した。`#1baf7a` は明色面でのコントラストが 3:1 を
+ * 下回るため、主要な系列に充てるより比較の 3 列目のような枠に回すほうがよい。
  */
 const SERIES = {
   speed: { light: '#2a78d6', dark: '#3987e5' },
-  target: { light: '#eb6834', dark: '#d95926' },
-  sp: { light: '#1baf7a', dark: '#199e70' },
-  // 勾配はコースの文脈であって系列ではない。カテゴリ色を使わず地の色で描く。
+  sp: { light: '#eb6834', dark: '#d95926' },
+  // 目標速度と勾配はコースと設定の文脈であって系列ではない。地の色で描く。
   context: { light: '#52514e', dark: '#c3c2b7' },
 };
 
+/**
+ * ヘッダの切替が付いたので、OS の設定ではなく画面の状態を見る。
+ * 色は CSS のトークンで持っているが、uPlot は canvas に描くため
+ * ここだけは JavaScript 側で値を選ぶ必要がある。
+ */
 function isDark(): boolean {
-  return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  return document.documentElement.dataset['theme'] === 'dark';
 }
 
 function color(slot: keyof typeof SERIES): string {
@@ -67,7 +76,13 @@ interface ChartProps {
   readonly title: string;
   readonly subtitle?: string;
   readonly x: Float64Array;
-  readonly series: readonly { label: string; values: Float64Array; slot: keyof typeof SERIES }[];
+  readonly series: readonly {
+    label: string;
+    values: Float64Array;
+    slot: keyof typeof SERIES;
+    /** 参照線として破線で描く。系列そのものではないもの。 */
+    dashed?: boolean;
+  }[];
   readonly bands: CourseBands;
   readonly height: number;
   /** true なら 0 を含めた範囲にする。速度のように 0 付近を使わない図では false。 */
@@ -105,7 +120,13 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
       ],
       series: [
         { label: '距離' },
-        ...series.map((s) => ({ label: s.label, stroke: color(s.slot), width: 2, points: { show: false } })),
+        ...series.map((s) => ({
+          label: s.label,
+          stroke: color(s.slot),
+          width: s.dashed === true ? 1.5 : 2,
+          ...(s.dashed === true ? { dash: [4, 3] } : {}),
+          points: { show: false },
+        })),
       ],
       plugins: [coursePlugin(bands)],
     };
@@ -124,7 +145,7 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
     <div>
       <div ref={ref} className="w-full" />
       {subtitle !== undefined && (
-        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">{subtitle}</p>
+        <p className="mt-1 text-xs text-ink3">{subtitle}</p>
       )}
     </div>
   );
@@ -167,7 +188,7 @@ export function FrameCharts() {
   if (prepared === null) {
     return (
       <Panel title="レースの詳細">
-        <p className="text-sm text-neutral-500">実行すると 1 本目のレースを表示する。</p>
+        <p className="text-sm text-ink3">実行すると 1 本目のレースを表示する。</p>
       </Panel>
     );
   }
@@ -175,6 +196,7 @@ export function FrameCharts() {
   return (
     <Panel title={`レースの詳細（試行 ${detail!.trial}）`}>
       <div className="space-y-4">
+        <TrialNavigation />
         <Chart
           title="速度"
           subtitle="灰色の帯はコーナー、破線は序盤と中盤と終盤とラストの境界。"
@@ -184,7 +206,7 @@ export function FrameCharts() {
           bands={prepared.bands}
           series={[
             { label: '現在速度 (m/s)', values: prepared.speed, slot: 'speed' },
-            { label: '目標速度 (m/s)', values: prepared.target, slot: 'target' },
+            { label: '目標速度 (m/s)', values: prepared.target, slot: 'context', dashed: true },
           ]}
         />
         <Chart
@@ -202,8 +224,137 @@ export function FrameCharts() {
           bands={prepared.bands}
           series={[{ label: '勾配', values: prepared.slope, slot: 'context' }]}
         />
+        <EventList />
       </div>
     </Panel>
+  );
+}
+
+/**
+ * どの試行を開いているか、と前後への移動。
+ *
+ * 「試行 0」とだけ出ていても、それが速いほうなのか遅いほうなのかが
+ * 分からない。分布のどこにいるかを併せて出す。
+ */
+function TrialNavigation() {
+  const detail = useStore((s) => s.detail);
+  const results = useStore((s) => s.results);
+  const seed = useStore((s) => s.seed);
+  const showTrial = useStore((s) => s.showTrial);
+  if (detail === null || results.length === 0) return null;
+
+  const time = results[detail.trial]?.raceTime;
+  const rank =
+    time === undefined ? null : results.filter((r) => r.raceTime < time).length;
+  const percentile = rank === null ? null : (rank / results.length) * 100;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className="rounded-sm border border-rule2 px-2 py-0.5 disabled:opacity-40"
+          onClick={() => showTrial(detail.trial - 1)}
+          disabled={detail.trial <= 0}
+          aria-label="前の試行"
+        >
+          ← 前
+        </button>
+        <button
+          type="button"
+          className="rounded-sm border border-rule2 px-2 py-0.5 disabled:opacity-40"
+          onClick={() => showTrial(detail.trial + 1)}
+          disabled={detail.trial >= results.length - 1}
+          aria-label="次の試行"
+        >
+          次 →
+        </button>
+      </div>
+      <span className="num text-ink2">
+        試行 {detail.trial} / {results.length - 1} ・ シード {seed}
+      </span>
+      {time !== undefined && percentile !== null && (
+        <span className="text-ink3">
+          この 1 本は <span className="num">{formatTime(time)}</span>
+          ・ 速いほうから <span className="num">{percentile.toFixed(0)}</span> %
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 1 レースの出来事。
+ *
+ * 図は「どう動いたか」は見せるが「なぜそこで変わったのか」は見せない。
+ * 速度が落ちた場所にコーナーがあったのか、スキルが切れたのか、掛かったのかは、
+ * 並べて初めて読める。
+ */
+const KIND_STYLE: Record<EventKind, string> = {
+  skill: 'border-s1 text-s1',
+  phase: 'border-rule2 text-ink2',
+  corner: 'border-rule2 text-ink3',
+  state: 'border-rule2 text-ink2',
+  end: 'border-ink2 text-ink',
+};
+
+function EventList() {
+  const detail = useStore((s) => s.detail);
+  const track = useStore((s) => s.track);
+  const trackDetail = currentTrackDetail(track);
+  const results = useStore((s) => s.results);
+  const events = useMemo(() => {
+    if (detail === null || trackDetail === undefined) return [];
+    // タイムと残り体力は結果の側から取る。シミュレーション状態は終端の値を
+    // 持たない（フレームを回し終えた時点の内部状態である）。
+    const result = results[detail.trial];
+    if (result === undefined) return [];
+    return buildEvents(detail.frames, trackDetail, {
+      raceTime: result.raceTime,
+      goalSp: result.goalSp,
+      spMax: detail.state.setting.spMax,
+    });
+  }, [detail, trackDetail, results]);
+
+  if (events.length === 0) return null;
+  return (
+    <div>
+      <div className="flex flex-wrap items-baseline gap-x-2">
+        <h3 className="text-sm font-medium">イベント</h3>
+        <span className="text-xs text-ink3">{events.length} 件</span>
+      </div>
+      <div className="mt-2 max-h-96 overflow-y-auto">
+        <table className="w-full text-xs">
+          <thead className="sticky top-0 bg-surface">
+            <tr className="border-b border-rule text-ink3">
+              <th scope="col" className="py-1 pr-3 text-right font-normal">時刻</th>
+              <th scope="col" className="py-1 pr-3 text-right font-normal">位置</th>
+              <th scope="col" className="py-1 pr-3 text-left font-normal">種別</th>
+              <th scope="col" className="py-1 text-left font-normal">内容</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.map((event, i) => (
+              <tr key={i} className="border-b border-rule last:border-0">
+                <td className="num py-1 pr-3 text-right text-ink2">{event.time.toFixed(1)}</td>
+                <td className="num py-1 pr-3 text-right text-ink2">
+                  {event.position.toFixed(0)} m
+                </td>
+                <td className="py-1 pr-3">
+                  <span className={`rounded-sm border px-1 text-[11px] ${KIND_STYLE[event.kind]}`}>
+                    {kindLabel(event.kind)}
+                  </span>
+                </td>
+                <td className="py-1">
+                  {event.label}
+                  {event.detail !== '' && <span className="text-ink3"> ／ {event.detail}</span>}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }
 
@@ -262,10 +413,10 @@ export function TimeHistogram() {
     <div>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <h3 className="text-sm font-medium">タイムの分布</h3>
-        <span className="text-xs text-neutral-500 dark:text-neutral-400">
+        <span className="text-xs text-ink3">
           {bins.total.toLocaleString('ja-JP')} 試行 ・ ビン幅 {bins.width.toFixed(2)} 秒
         </span>
-        <span className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
+        <span className="font-mono text-xs text-ink3">
           p5 {formatTime(bins.p5)} ・ p50 {formatTime(bins.p50)} ・ p95 {formatTime(bins.p95)}
         </span>
       </div>
@@ -321,10 +472,10 @@ export function TimeHistogram() {
           strokeWidth={1}
         />
       </svg>
-      <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
+      <div className="flex justify-between text-xs text-ink3">
         <span>{formatTime(bins.min)}</span>
         {hover !== null ? (
-          <span className="font-medium text-neutral-700 dark:text-neutral-200">
+          <span className="font-medium text-ink2">
             {formatTime(bins.min + hover * bins.width)} – {formatTime(bins.min + (hover + 1) * bins.width)} ・{' '}
             {bins.counts[hover]!.toLocaleString('ja-JP')} 試行 ・{' '}
             {((bins.counts[hover]! / bins.total) * 100).toFixed(1)}%

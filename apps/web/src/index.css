@@ -1,2 +1,90 @@
 @import 'tailwindcss';
 @import 'uplot/dist/uPlot.min.css';
+
+/*
+ * 見た目の土台。値は design/*.dc.html のモックから取っている。
+ *
+ * 色をトークンにまとめてあるのは、ダークの切替を「値の差し替え 1 か所」で
+ * 済ませるためである。以前は dark: を 114 か所に散らしていたので、画面を
+ * 足すたびに両方を書く必要があった。
+ */
+@theme {
+  --color-paper: #f5f4f1;
+  --color-surface: #fcfcfb;
+  --color-sunken: #eeece7;
+  --color-rule: #dedbd3;
+  --color-rule2: #c6c2b8;
+  --color-ink: #12120f;
+  --color-ink2: #52514e;
+  --color-ink3: #8a877e;
+
+  /* 図の系列。dataviz の既定から取っており、役割の割り当てはモックに合わせる。 */
+  --color-s1: #2a78d6;
+  --color-s2: #eb6834;
+  --color-s3: #1baf7a;
+
+  --color-acc-tint: #e7effa;
+  --color-acc-ink: #1c5cab;
+  --color-primary-bg: #12120f;
+  --color-primary-fg: #ffffff;
+
+  --color-warn-tint: #fdf6e3;
+  --color-warn-rule: #e8d9a8;
+  --color-warn-ink: #7a5c12;
+  --color-bad-tint: #fdeceb;
+  --color-bad-rule: #f0c3bf;
+  --color-bad-ink: #a3312a;
+
+  --font-sans: 'IBM Plex Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 3px;
+}
+
+/* ダークはトークンの差し替えだけで成立させる。 */
+[data-theme='dark'] {
+  --color-paper: #17181a;
+  --color-surface: #1f2123;
+  --color-sunken: #272a2d;
+  --color-rule: #34373b;
+  --color-rule2: #46494e;
+  --color-ink: #e9e7e2;
+  --color-ink2: #aaa7a1;
+  --color-ink3: #77746e;
+
+  --color-acc-tint: rgba(58, 138, 232, 0.22);
+  --color-acc-ink: #7fb2ea;
+  --color-primary-bg: #e9e7e2;
+  --color-primary-fg: #17181a;
+
+  --color-warn-tint: rgba(232, 190, 80, 0.14);
+  --color-warn-rule: #5c4d24;
+  --color-warn-ink: #d8bd6a;
+  --color-bad-tint: rgba(224, 108, 98, 0.14);
+  --color-bad-rule: #6b3a36;
+  --color-bad-ink: #e29a94;
+}
+
+html {
+  color-scheme: light;
+}
+[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+/* 数字は等幅にして、桁が揃うようにする。 */
+.num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

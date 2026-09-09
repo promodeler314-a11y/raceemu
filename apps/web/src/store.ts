@@ -6,7 +6,9 @@ import { toSerializable, toSkillSummaries, type SkillSummary } from '../../../pa
 import { RaceCalculator } from '../../../packages/sim/src/calculator.ts';
 import {
   DEBUFF_TYPES,
+  DerivedSetting,
   defaultSystemSetting,
+  emptyPassiveBonus,
   type PositionKeepMode,
   type RaceSetting,
   type RandomPosition,
@@ -22,6 +24,7 @@ import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/sr
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
 import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
+import { resolveSkillIds, type Preset } from './presets.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
 export const gameData = loadGameData();
@@ -84,6 +87,41 @@ export interface PersistedSettings {
   readonly useField: boolean;
 }
 
+/** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
+export type Tab = 'settings' | 'summary' | 'compare' | 'detail' | 'solve';
+
+export type Theme = 'light' | 'dark';
+
+/**
+ * テーマだけは localStorage に置く。
+ *
+ * 他の設定と同じ IndexedDB に入れると読み出しが非同期になり、
+ * 最初の描画が明色で出てから暗色に入れ替わる。同期で読める場所に置き、
+ * index.html の先頭で data-theme を当てておく。
+ */
+const THEME_KEY = 'raceemu-theme';
+
+export function loadTheme(): Theme {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
+/**
+ * タイムの分布を粗く畳んだもの。
+ *
+ * 分布を重ねて出すには毎試行の値が要るが、試行は最大 20 万回あるので
+ * そのまま持つと 1 件で 1.6 MB になる。ビンに畳めば数百バイトで済み、
+ * 図に描くぶんには元の値と区別が付かない。
+ */
+export interface Histogram {
+  readonly min: number;
+  readonly max: number;
+  readonly counts: readonly number[];
+}
+
 export interface Snapshot {
   readonly id: number;
   readonly label: string;
@@ -94,6 +132,36 @@ export interface Snapshot {
   readonly debuffCounts: Readonly<Record<string, number>>;
   readonly summary: SimulationSummary;
   readonly skillSummaries: readonly SkillSummary[];
+  /** 分布の重ね合わせに使う。古いスナップショットには無い。 */
+  readonly histogram?: Histogram;
+  /** タイムの標準偏差。差の区間を出すのに使う。古いスナップショットには無い。 */
+  readonly sd?: number;
+}
+
+const HISTOGRAM_BINS = 60;
+
+function histogramOf(times: readonly number[]): Histogram | undefined {
+  if (times.length === 0) return undefined;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const time of times) {
+    if (time < min) min = time;
+    if (time > max) max = time;
+  }
+  if (!(max > min)) return { min, max: min + 1, counts: [times.length] };
+  const counts = new Array<number>(HISTOGRAM_BINS).fill(0);
+  const width = (max - min) / HISTOGRAM_BINS;
+  for (const time of times) {
+    counts[Math.min(HISTOGRAM_BINS - 1, Math.floor((time - min) / width))]! += 1;
+  }
+  return { min, max, counts };
+}
+
+function standardDeviation(times: readonly number[], mean: number): number | undefined {
+  if (times.length < 2) return undefined;
+  let sum = 0;
+  for (const time of times) sum += (time - mean) ** 2;
+  return Math.sqrt(sum / (times.length - 1));
 }
 
 export interface InverseResult {
@@ -155,6 +223,8 @@ interface AppState {
   setTrack: (patch: Partial<TrackRef>) => void;
   toggleSkill: (id: string) => void;
   clearSkills: () => void;
+  /** プリセットを丸ごと当てる。ウマ娘・コース・スキルを一度に差し替える。 */
+  applyPreset: (preset: Preset) => void;
   setCount: (count: number) => void;
   setUseField: (useField: boolean) => void;
   setSeed: (seed: number) => void;
@@ -163,6 +233,10 @@ interface AppState {
   setHintLevel: (skillId: string, level: number) => void;
   run: () => Promise<void>;
   cancel: () => void;
+  tab: Tab;
+  setTab: (tab: Tab) => void;
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
   showTrial: (trial: number) => void;
   setInverse: (patch: { status?: TargetStatus; goal?: Goal; count?: number }) => void;
   solveInverse: () => Promise<void>;
@@ -210,6 +284,18 @@ export const useStore = create<AppState>((set, get) => ({
   error: null,
   notice: null,
   summary: null,
+  tab: 'settings',
+  setTab: (tab) => set({ tab }),
+  theme: loadTheme(),
+  setTheme: (theme) => {
+    set({ theme });
+    document.documentElement.dataset['theme'] = theme;
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // 保存できなくても、その場の切替は効く。
+    }
+  },
   results: [],
   skillSummaries: [],
   detail: null,
@@ -237,6 +323,12 @@ export const useStore = create<AppState>((set, get) => ({
       skillIds: s.skillIds.includes(id) ? s.skillIds.filter((x) => x !== id) : [...s.skillIds, id],
     })),
   clearSkills: () => set({ skillIds: [] }),
+  applyPreset: (preset) =>
+    set({
+      uma: { charaName: '', ...preset.uma },
+      track: preset.track,
+      skillIds: resolveSkillIds(preset.skillNames),
+    }),
   setCount: (count) => set({ count }),
   setUseField: (useField) => set({ useField }),
   setSeed: (seed) => set({ seed }),
@@ -266,21 +358,35 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const setting = buildSetting(state);
       const serializable = toSerializable(setting);
-      const { results, skillStats } = await getPool().run(serializable, system, {
+      const { results, skillStats, cancelled } = await getPool().run(serializable, system, {
         count: state.count,
         seed: state.seed,
         onProgress: (done) => set({ progress: done }),
         signal: controller.signal,
+        // 止めたときに何も残らないと、長く走らせたあとに手を止めた人が
+        // 最初からやり直すことになる。終わったぶんは見せる。
+        keepPartial: true,
         field: fieldSpec(state),
       });
       const elapsedMs = performance.now() - started;
+      if (results.length === 0) {
+        // 1 件も終わる前に止めた。前の結果を消さずにそのままにする。
+        set({ notice: '中断しました。結果はまだ 1 件も集まっていません。' });
+        return;
+      }
       set({
         summary: summarize(results, elapsedMs),
         results,
         elapsedMs,
         skillSummaries: toSkillSummaries(serializable.skillIds, skillStats, results.length),
+        notice:
+          cancelled === true
+            ? `${state.count.toLocaleString('ja-JP')} 件のうち ${results.length.toLocaleString('ja-JP')} 件で中断しました。ここまでの結果を出しています。`
+            : null,
       });
       get().showTrial(0);
+      // 走らせた人が次に見たいのは結果である。設定の面に留まらせない。
+      set({ tab: 'summary' });
     } catch (error) {
       if (error instanceof SimulationCancelled) set({ error: null });
       else set({ error: error instanceof Error ? error.message : String(error) });
@@ -372,6 +478,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (state.summary === null) return;
     const id = (state.snapshots[0]?.id ?? 0) + 1;
     const track = currentTrackDetail(state.track);
+    const times = state.results.map((r) => r.raceTime);
     const label = `#${id} ${track?.name ?? ''} ${state.uma.speed}/${state.uma.stamina}/${state.uma.power}/${state.uma.guts}/${state.uma.wisdom}`;
     set({
       snapshots: [
@@ -385,6 +492,8 @@ export const useStore = create<AppState>((set, get) => ({
           debuffCounts: { ...state.debuffCounts },
           summary: state.summary,
           skillSummaries: state.skillSummaries,
+          histogram: histogramOf(times),
+          sd: standardDeviation(times, state.summary.all.averageTime),
         },
         ...state.snapshots,
       ],
@@ -564,6 +673,34 @@ function getDetailField(state: AppState) {
     detailFieldKey = key;
   }
   return detailField;
+}
+
+/**
+ * 適性ややる気の補正を当てたあとのステータス。
+ *
+ * 入力した値がそのまま使われるわけではないので、入力欄の下に出す。
+ * 計算は本体と同じ `DerivedSetting` に任せる。ここで作り直すと、
+ * 本体の式が変わったときに黙ってずれる。
+ */
+export function modifiedStatus(state: {
+  uma: UmaStatus;
+  track: TrackRef;
+  skillIds: readonly string[];
+  options: RunOptions;
+  debuffCounts: Readonly<Record<string, number>>;
+}): Record<'speed' | 'stamina' | 'power' | 'guts' | 'wisdom', number> {
+  const derived = new DerivedSetting(
+    buildSetting(state as AppState),
+    emptyPassiveBonus(),
+    gameData.trackData,
+  );
+  return {
+    speed: derived.modifiedSpeed,
+    stamina: derived.modifiedStamina,
+    power: derived.modifiedPower,
+    guts: derived.modifiedGuts,
+    wisdom: derived.modifiedWisdom,
+  };
 }
 
 export function currentTrackDetail(track: TrackRef) {

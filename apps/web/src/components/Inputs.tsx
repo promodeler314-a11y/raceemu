@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { FIT_RANKS, type Condition, type FitRank, type Style } from '../../../../packages/sim/src/data/constants.ts';
+import { getSlope, type TrackDetail } from '../../../../packages/sim/src/data/track.ts';
 import {
   costModelFor,
   currentTrackDetail,
   debuffTypes,
   gameData,
+  modifiedStatus,
   skillChoices,
   useStore,
 } from '../store.ts';
@@ -14,9 +16,9 @@ import type {
   SkillActivateAdjustment,
 } from '../../../../packages/sim/src/setting.ts';
 
-const labelCls = 'block text-xs text-neutral-500 dark:text-neutral-400';
+const labelCls = 'block text-xs text-ink3';
 const fieldCls =
-  'w-full rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
+  'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -27,9 +29,144 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-export function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * 区切りの付け方は置き場所で変える。
+ *
+ * 結果の側は地の色（paper）の上に置くので、枠のある箱にする。
+ * 設定の列は既に surface の面なので、そこに箱を重ねると枠が二重になる。
+ * モックに合わせて、見出しの下の罫線だけで区切る。
+ */
+/**
+ * 分割ボタン。
+ *
+ * 選択肢が少ないものは `<select>` より速い。開かなくても全部見えるので、
+ * いま何が選べるのかと、どれを選んでいるのかが同時に分かる。
+ * モックが脚質・やる気・バ場状態・実行オプションでこの形を採っている。
+ */
+export function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly { readonly value: T; readonly label: string }[];
+  onChange: (value: T) => void;
+}) {
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-4 dark:border-neutral-800 dark:bg-neutral-900">
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] text-ink3">{label}</span>
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className="flex h-[30px] overflow-hidden rounded-sm border border-rule2"
+      >
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            // 「良」のように 1 文字の選択肢は、単独だと何の設定か分からない。
+            // 群の名前を添えて読み上げる。
+            aria-label={`${label} ${option.label}`}
+            aria-checked={value === option.value}
+            onClick={() => onChange(option.value)}
+            className={`flex flex-1 items-center justify-center border-r border-rule px-1 text-xs last:border-r-0 ${
+              value === option.value
+                ? 'bg-acc-tint font-semibold text-acc-ink'
+                : 'bg-surface text-ink2'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * コース形状の小さな図。
+ *
+ * 「コーナー 4」と字で書いてあっても、どこに来るのかは分からない。
+ * コーナーを帯で、勾配を線で出す。詳細の面にある大きな図と同じものを
+ * 縮めたわけではなく、設定を決めるときに要る情報だけを残している。
+ */
+function CourseShape({ detail }: { detail: TrackDetail }) {
+  const length = detail.distance;
+  const x = (position: number) => (position / length) * 100;
+  // 勾配は区間ごとに与えられる。無い区間は 0 として折れ線にする。
+  const points: string[] = [];
+  const step = length / 60;
+  for (let i = 0; i <= 60; i++) {
+    const position = i * step;
+    const slope = getSlope(detail, position);
+    // 上りを上に描く。値は本家の内部値で、±2 程度に収まる。
+    points.push(`${x(position)},${10 - Math.max(-3, Math.min(3, slope)) * 2}`);
+  }
+  return (
+    <div className="rounded-sm border border-rule bg-sunken px-2 py-2">
+      <div className="flex items-baseline justify-between text-[11px] text-ink3">
+        <span>コース形状</span>
+        <span>
+          {detail.turn === 1 ? '右回り' : '左回り'} ・ コーナー {detail.corners.length} ・ 直線{' '}
+          {Math.round(detail.straights.reduce((a, b) => Math.max(a, b.end - b.start), 0))}m
+        </span>
+      </div>
+      <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="mt-1 h-12 w-full">
+        {detail.corners.map((corner, i) => (
+          <rect
+            key={i}
+            x={x(corner.start)}
+            y={0}
+            width={x(corner.end) - x(corner.start)}
+            height={20}
+            className="fill-rule2 opacity-40"
+          >
+            <title>
+              コーナー {i + 1}: {Math.round(corner.start)} から {Math.round(corner.end)} m
+            </title>
+          </rect>
+        ))}
+        <polyline
+          points={points.join(' ')}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={0.6}
+          className="text-ink2"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <div className="flex justify-between text-[11px] text-ink3">
+        <span>0m</span>
+        <span className="num">{length}m</span>
+      </div>
+    </div>
+  );
+}
+
+export function Panel({
+  title,
+  variant = 'card',
+  children,
+}: {
+  title: string;
+  variant?: 'card' | 'plain';
+  children: React.ReactNode;
+}) {
+  if (variant === 'plain') {
+    return (
+      <section className="flex flex-col gap-2.5">
+        <h2 className="flex h-[34px] items-center border-b border-rule text-[13px] font-semibold">
+          {title}
+        </h2>
+        {children}
+      </section>
+    );
+  }
+  return (
+    <section className="rounded-sm border border-rule bg-surface p-4">
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
       {children}
     </section>
@@ -44,7 +181,7 @@ export function CourseInput() {
   const detail = currentTrackDetail(track);
 
   return (
-    <Panel title="コース">
+    <Panel title="コース" variant="plain">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="レース場">
           <select
@@ -76,18 +213,17 @@ export function CourseInput() {
             ))}
           </select>
         </Field>
-        <Field label="バ場状態">
-          <select
-            className={fieldCls}
-            value={track.condition}
-            onChange={(e) => setTrack({ condition: Number(e.target.value) })}
-          >
-            <option value={1}>良</option>
-            <option value={2}>稍重</option>
-            <option value={3}>重</option>
-            <option value={4}>不良</option>
-          </select>
-        </Field>
+        <Segmented
+          label="バ場状態"
+          value={String(track.condition)}
+          options={[
+            { value: '1', label: '良' },
+            { value: '2', label: '稍重' },
+            { value: '3', label: '重' },
+            { value: '4', label: '不良' },
+          ]}
+          onChange={(value) => setTrack({ condition: Number(value) })}
+        />
         <Field label="出走頭数">
           <select
             className={fieldCls}
@@ -100,10 +236,16 @@ export function CourseInput() {
         </Field>
       </div>
       {detail !== undefined && (
-        <p className="mt-3 text-xs text-neutral-500 dark:text-neutral-400">
-          {detail.distance} m / {detail.surface === 1 ? '芝' : 'ダート'} / コーナー{' '}
-          {detail.corners.length} / 基準タイム {detail.finishTimeMin} から {detail.finishTimeMax} 秒
-        </p>
+        <>
+          <CourseShape detail={detail} />
+          <p className="text-[11px] text-ink3">
+            {detail.surface === 1 ? '芝' : 'ダート'} ・ 基準タイム{' '}
+            <span className="num">
+              {detail.finishTimeMin} から {detail.finishTimeMax}
+            </span>{' '}
+            秒
+          </p>
+        </>
       )}
     </Panel>
   );
@@ -123,18 +265,37 @@ const CONDITION_LABEL: Record<Condition, string> = {
 export function UmaInput() {
   const uma = useStore((s) => s.uma);
   const setUma = useStore((s) => s.setUma);
+  const track = useStore((s) => s.track);
+  const skillIds = useStore((s) => s.skillIds);
+  const options = useStore((s) => s.options);
+  const debuffCounts = useStore((s) => s.debuffCounts);
+  const modified = useMemo(
+    () => modifiedStatus({ uma, track, skillIds, options, debuffCounts }),
+    [uma, track, skillIds, options, debuffCounts],
+  );
 
+  // 入力した値がそのまま使われるわけではないので、補正後の値を下に添える。
+  // 中身はやる気、コースの得意ステータス（courseSetStatus）、バ場、脚質適性など。
+  // どれが効いたかまでは出さない。ここで見たいのは「入力と違う」ことである。
   const stat = (key: 'speed' | 'stamina' | 'power' | 'guts' | 'wisdom', label: string) => (
-    <Field label={label}>
-      <input
-        type="number"
-        className={fieldCls}
-        value={uma[key]}
-        min={1}
-        max={2500}
-        onChange={(e) => setUma({ [key]: Number(e.target.value) })}
-      />
-    </Field>
+    <div className="flex flex-col gap-1">
+      <Field label={label}>
+        <input
+          type="number"
+          className={`${fieldCls} num text-right`}
+          value={uma[key]}
+          min={1}
+          max={2500}
+          onChange={(e) => setUma({ [key]: Number(e.target.value) })}
+        />
+      </Field>
+      <span
+        className="num text-right text-[11px] text-ink3"
+        title="やる気やコースの得意ステータスなどの補正を当てた値。計算にはこちらが使われる"
+      >
+        → {modified[key]}
+      </span>
+    </div>
   );
 
   const fit = (key: 'distanceFit' | 'surfaceFit' | 'styleFit', label: string) => (
@@ -154,7 +315,7 @@ export function UmaInput() {
   );
 
   return (
-    <Panel title="ウマ娘">
+    <Panel title="ウマ娘" variant="plain">
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
         {stat('speed', 'スピード')}
         {stat('stamina', 'スタミナ')}
@@ -163,32 +324,21 @@ export function UmaInput() {
         {stat('wisdom', '賢さ')}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <Field label="脚質">
-          <select
-            className={fieldCls}
-            value={uma.style}
-            onChange={(e) => setUma({ style: e.target.value as Style })}
-          >
-            {STYLES.map((style) => (
-              <option key={style} value={style}>
-                {STYLE_LABEL[style]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="やる気">
-          <select
-            className={fieldCls}
-            value={uma.condition}
-            onChange={(e) => setUma({ condition: e.target.value as Condition })}
-          >
-            {CONDITIONS.map((condition) => (
-              <option key={condition} value={condition}>
-                {CONDITION_LABEL[condition]}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <Segmented
+          label="脚質"
+          value={uma.style}
+          options={STYLES.map((style) => ({ value: style, label: STYLE_LABEL[style] ?? style }))}
+          onChange={(style) => setUma({ style })}
+        />
+        <Segmented
+          label="やる気"
+          value={uma.condition}
+          options={CONDITIONS.map((condition) => ({
+            value: condition,
+            label: CONDITION_LABEL[condition],
+          }))}
+          onChange={(condition) => setUma({ condition })}
+        />
         <Field label="枠番（0 でランダム）">
           <input
             type="number"
@@ -224,7 +374,7 @@ export function SkillInput() {
   const selected = skillIds.map((id) => gameData.skillsById.get(id)!).filter(Boolean);
 
   return (
-    <Panel title={`スキル（${skillIds.length} 個）`}>
+    <Panel title={`スキル（${skillIds.length} 個）`} variant="plain">
       <input
         className={fieldCls}
         placeholder="スキル名で検索"
@@ -232,16 +382,16 @@ export function SkillInput() {
         onChange={(e) => setQuery(e.target.value)}
       />
       {matched.length > 0 && (
-        <ul className="mt-2 max-h-48 overflow-y-auto rounded border border-neutral-200 text-sm dark:border-neutral-800">
+        <ul className="mt-2 max-h-48 overflow-y-auto rounded-sm border border-rule text-sm">
           {matched.map(({ name, skill }) => (
             <li key={skill.id}>
               <button
                 type="button"
-                className="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                className="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-sunken"
                 onClick={() => toggleSkill(skill.id)}
               >
                 <span>{name}</span>
-                <span className="text-xs text-neutral-500">
+                <span className="text-xs text-ink3">
                   {skillIds.includes(skill.id) ? '選択中' : skill.rarity}
                 </span>
               </button>
@@ -254,7 +404,7 @@ export function SkillInput() {
           <div className="mt-3 overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                <tr className="border-b border-rule text-xs text-ink3">
                   <th scope="col" className="py-1 text-left font-normal">スキル</th>
                   <th scope="col" className="py-1 text-right font-normal">ヒント</th>
                   <th scope="col" className="py-1 text-right font-normal">必要 pt</th>
@@ -267,14 +417,14 @@ export function SkillInput() {
                 {selected.map((skill) => (
                   <tr
                     key={skill.id}
-                    className="border-b border-neutral-100 last:border-0 dark:border-neutral-800"
+                    className="border-b border-rule last:border-0"
                   >
                     <th scope="row" className="py-1 text-left font-normal">
                       {skill.name}
                     </th>
                     <td className="py-1 text-right">
                       <select
-                        className="rounded border border-neutral-300 bg-white px-1 py-0.5 text-xs dark:border-neutral-700 dark:bg-neutral-900"
+                        className="rounded-sm border border-rule2 bg-surface px-1 py-0.5 text-xs"
                         value={hintLevels[skill.id] ?? 0}
                         aria-label={`${skill.name} のヒントレベル`}
                         onChange={(e) => setHintLevel(skill.id, Number(e.target.value))}
@@ -290,7 +440,7 @@ export function SkillInput() {
                     <td className="py-1 text-right">
                       <button
                         type="button"
-                        className="px-1 text-neutral-400 hover:text-neutral-700 dark:hover:text-neutral-200"
+                        className="px-1 text-ink3 hover:text-ink2"
                         onClick={() => toggleSkill(skill.id)}
                         aria-label={`${skill.name} を外す`}
                         title="外す"
@@ -303,7 +453,7 @@ export function SkillInput() {
               </tbody>
             </table>
           </div>
-          <div className="mt-2 flex items-center justify-between text-xs text-neutral-500 dark:text-neutral-400">
+          <div className="mt-2 flex items-center justify-between text-xs text-ink3">
             <span>
               合計 {costModel.totalCost(selected.map((s) => s.id))} pt
               <span className="ml-2">同じグループからは上位のぶんだけ数える。</span>
@@ -349,7 +499,7 @@ export function OptionsInput() {
   const debuffTotal = Object.values(debuffCounts).reduce((a, b) => a + b, 0);
 
   return (
-    <Panel title="実行オプション">
+    <Panel title="実行オプション" variant="plain">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="スキル発動率">
           <select
@@ -404,14 +554,14 @@ export function OptionsInput() {
           />
         </Field>
       </div>
-      <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-400">
+      <p className="mt-2 text-xs text-ink3">
         発生率は「速度上げのみ抽選」のときだけ効く。「スキルも他の乱数も固定」を選ぶと、掛かりと
         下り坂とスパート候補の抽選も固定され、レースがほぼ決定的になる。
       </p>
 
       <h3 className="mt-4 mb-2 text-sm font-semibold">
         受けるデバフ
-        <span className="ml-2 text-xs font-normal text-neutral-500 dark:text-neutral-400">
+        <span className="ml-2 text-xs font-normal text-ink3">
           合計 {debuffTotal} 個
         </span>
       </h3>
@@ -423,7 +573,7 @@ export function OptionsInput() {
             </span>
             <input
               type="number"
-              className="w-14 rounded border border-neutral-300 bg-white px-1 py-0.5 text-right text-xs tabular-nums dark:border-neutral-700 dark:bg-neutral-900"
+              className="w-14 rounded-sm border border-rule2 bg-surface px-1 py-0.5 text-right text-xs tabular-nums"
               value={debuffCounts[type.id] ?? 0}
               min={0}
               max={12}
@@ -440,72 +590,65 @@ export function RunPanel() {
   const { count, seed, running, progress, setCount, setSeed, run, cancel, useField, setUseField } =
     useStore();
   const gateCount = useStore((s) => s.track.gateCount);
+  const elapsedMs = useStore((s) => s.elapsedMs);
+  const summary = useStore((s) => s.summary);
+  const inputCls = 'num rounded-sm border border-rule2 bg-surface px-2 py-1 text-right text-xs text-ink';
   return (
-    <Panel title="実行">
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Field label="試行回数">
-          <input
-            type="number"
-            className={fieldCls}
-            value={count}
-            min={1}
-            max={200000}
-            step={1000}
-            onChange={(e) => setCount(Number(e.target.value))}
-          />
-        </Field>
-        <Field label="シード">
-          <input
-            type="number"
-            className={fieldCls}
-            value={seed}
-            onChange={(e) => setSeed(Number(e.target.value))}
-          />
-        </Field>
-      </div>
-      <label className="mt-3 flex items-start gap-2 text-sm">
+    <div className="flex flex-none flex-wrap items-center gap-3 border-b border-rule bg-surface px-5 py-2.5">
+      <label className="flex items-center gap-2 text-xs text-ink3">
+        試行回数
         <input
-          type="checkbox"
-          className="mt-0.5"
-          checked={useField}
-          onChange={(e) => setUseField(e.target.checked)}
+          type="number"
+          className={`${inputCls} w-24`}
+          value={count}
+          min={1}
+          max={200000}
+          step={1000}
+          onChange={(e) => setCount(Number(e.target.value))}
         />
-        <span>
-          順位条件を判定する
-          <span className="block text-xs text-neutral-500 dark:text-neutral-400">
-            相手 {gateCount - 1} 頭の位置を先に計算して順位を出す。外すと本家と同じく、順位条件は満たしている前提になる。
-          </span>
-        </span>
       </label>
-      <div className="mt-3 flex items-center gap-3">
-        <button
-          type="button"
-          className="rounded bg-neutral-900 px-4 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
-          onClick={() => void run()}
-          disabled={running}
-          title="Ctrl+Enter（Mac は Cmd+Enter）でも実行できる"
-        >
-          {running ? '実行中' : '実行'}
-        </button>
-        {running && (
-          <>
-            <button
-              type="button"
-              className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
-              onClick={cancel}
-              title="Esc でも中断できる"
-            >
-              中断
-            </button>
-            <span className="text-sm text-neutral-500" role="status" aria-live="polite">
-              {progress} / {count}
-            </span>
-          </>
-        )}
-        <span className="ml-auto text-xs text-neutral-500 dark:text-neutral-400">
-          Ctrl+Enter で実行、Esc で中断
-        </span>
-      </div>
-    </Panel>
+      <label className="flex items-center gap-2 text-xs text-ink3">
+        シード
+        <input
+          type="number"
+          className={`${inputCls} w-20`}
+          value={seed}
+          onChange={(e) => setSeed(Number(e.target.value))}
+        />
+      </label>
+      <button
+        type="button"
+        className="rounded-sm bg-primary-bg px-4 py-1.5 text-xs font-semibold text-primary-fg disabled:opacity-50"
+        onClick={() => void run()}
+        disabled={running}
+        title="Ctrl+Enter（Mac は Cmd+Enter）でも実行できる"
+      >
+        {running ? '実行中' : '実行'}
+      </button>
+      {running && (
+        <>
+          <button
+            type="button"
+            className="rounded-sm border border-rule2 px-3 py-1.5 text-xs"
+            onClick={cancel}
+            title="Esc でも中断できる"
+          >
+            中断
+          </button>
+          <span className="num text-xs text-ink3" role="status" aria-live="polite">
+            {progress} / {count}
+          </span>
+        </>
+      )}
+      <label className="flex items-center gap-1.5 text-xs text-ink2">
+        <input type="checkbox" checked={useField} onChange={(e) => setUseField(e.target.checked)} />
+        順位条件を判定する
+        <span className="text-ink3">（相手 {gateCount - 1} 頭）</span>
+      </label>
+      <span className="ml-auto text-[11px] text-ink3">
+        {summary !== null && <span className="num mr-3">前回 {(elapsedMs / 1000).toFixed(2)} 秒</span>}
+        Ctrl+Enter で実行、Esc で中断
+      </span>
+    </div>
   );
 }

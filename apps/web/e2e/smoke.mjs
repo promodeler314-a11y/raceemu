@@ -61,10 +61,23 @@ const page = await context.newPage();
 const errors = [];
 page.on('pageerror', (e) => errors.push(String(e)));
 page.on('console', (m) => {
-  if (m.type() === 'error') errors.push(m.text());
+  if (m.type() !== 'error') return;
+  // 外部からの読み込みの失敗はアプリの誤りではない。書体は CDN から取っており、
+  // 取れなければ代替の書体で動く。取れないこと自体を検査で落とすと、
+  // 外に出られない環境でこの検査が通らなくなる。
+  if (m.text().startsWith('Failed to load resource')) return;
+  errors.push(m.text());
 });
 
 await page.goto('http://localhost:4173/', { waitUntil: 'load' });
+// ヘッダにタブが入ったので、面を移ってから触る。
+// 実行すると自動で「結果」に移るため、設定を触る前には毎回戻る必要がある。
+const tabOf = async (target, label) => {
+  await target.click(`nav button:has-text("${label}")`);
+  await target.waitForTimeout(120);
+};
+const goTab = (label) => tabOf(page, label);
+
 console.log('タイトル:', await page.textContent('h1'));
 console.log('hardwareConcurrency:', await page.evaluate(() => navigator.hardwareConcurrency));
 
@@ -111,13 +124,16 @@ for (const row of skillRows) console.log(' ', row.join(' | '));
 // 上で足した 2 つ。tbody だけを見るので、以前のようにヘッダ行は数に入らない。
 if (skillRows.length !== 2) fail(`スキルの行数が想定と違う: ${skillRows.length}`);
 
+await goTab('詳細');
 console.log('uPlot の図の数:', await page.locator('.u-wrap').count());
 
 // 順位条件: フィールドを入れると、脚質と噛み合わないスキルの発動率が落ちる
+await goTab('設定');
 await page.fill('input[placeholder="スキル名で検索"]', '真骨頂');
 await page.click('button:has-text("真骨頂")');
 await page.fill('input[placeholder="スキル名で検索"]', '');
-await page.selectOption('select >> nth=4', 'NIGE');
+// 脚質は分割ボタンになった。役割と名前で引く。
+await page.click('[role=radiogroup][aria-label="脚質"] button:has-text("逃げ")');
 const runOnce = async () => {
   await page.click('button:has-text("実行")');
   await page.waitForFunction(
@@ -126,6 +142,7 @@ const runOnce = async () => {
     { timeout: 180000 },
   );
   await page.waitForTimeout(200);
+  await goTab('結果');
   const rows = await readTestTable('skill-table');
   const row = rows.find((r) => r[0] === '真骨頂');
   return row === undefined ? NaN : Number.parseFloat(row[1]);
@@ -137,10 +154,12 @@ console.log(`--- 逃げ + 真骨頂（後方寄り条件）の発動率: 順位�
 if (!(withoutField > 80)) fail('順位を無視したときの発動率が低すぎる');
 if (!(withField < 10)) fail('フィールドを入れても発動率が落ちていない');
 await page.uncheck('input[type=checkbox]');
+await goTab('設定');
 await page.click('button[aria-label="真骨頂 を外す"]');
 
 // 逆算: 最大スパートに必要なスタミナを求める
 await page.selectOption('select:below(:text("目標"))', { index: 0 }).catch(() => {});
+await goTab('探索');
 await page.fill('input[type=number][max="20000"]', '300');
 await page.click('button:has-text("逆算する")');
 await page.waitForFunction(
@@ -159,12 +178,14 @@ for (let i = 1; i < values.length; i++) {
 }
 
 // 組み合わせ探索: 候補を選び、予算に収まる構成が返ることを確かめる
+await goTab('設定');
 await page.click('button:has-text("すべて外す")');
 for (const skillName of ['中距離コーナー○', '中距離直線○', '一匹狼']) {
   await page.fill('input[placeholder="スキル名で検索"]', skillName);
   await page.click(`button:has-text("${skillName}")`);
   await page.fill('input[placeholder="スキル名で検索"]', '');
 }
+await goTab('探索');
 await page.fill('input[type=number][max="20000"][step="50"]', '250');
 await page.click('button:has-text("探索する")');
 await page.waitForFunction(
@@ -193,10 +214,11 @@ if (!referenceRow[0].includes('買えない')) fail('参考行に買えない旨
 if (referenceRow[2] !== '—') fail(`参考行に pt が入っている: ${referenceRow[2]}`);
 console.log('  参考行:', referenceRow[0], '/', referenceRow[1]);
 await page.locator(optimizeSection).screenshot({ path: 'docs/images/m7-optimize.png' });
+await goTab('設定');
 await page.click('button:has-text("すべて外す")');
 
 // 比較: 設定を変えてもう一度実行し、2 列並ぶことを確かめる
-await page.click('button:has-text("いまの結果を保存")');
+await page.click('button:has-text("スナップショットを保存")');
 await page.fill('input[type=number][max="2500"] >> nth=0', '1400');
 await page.click('button:has-text("実行")');
 await page.waitForFunction(
@@ -204,7 +226,8 @@ await page.waitForFunction(
   null,
   { timeout: 180000 },
 );
-await page.click('button:has-text("いまの結果を保存")');
+await page.click('button:has-text("スナップショットを保存")');
+await goTab('比較');
 const compareRows = await readTable('比較');
 console.log('--- 比較');
 for (const row of compareRows.slice(0, 8)) console.log(' ', row.join(' | '));
@@ -216,6 +239,7 @@ const reopened = await context.newPage();
 await reopened.goto('http://localhost:4173/', { waitUntil: 'load' });
 await reopened.waitForTimeout(600);
 const keptSpeed = await reopened.inputValue('input[type=number][max="2500"] >> nth=0');
+await tabOf(reopened, '比較');
 const keptColumns = await reopened.evaluate(() => {
   const section = [...document.querySelectorAll('section')].find((el) =>
     el.querySelector('h2')?.textContent?.includes('比較'),
@@ -228,6 +252,7 @@ if (keptColumns !== 3) fail(`スナップショットが残っていない: 列�
 await reopened.close();
 
 // 実行オプション: 画面から変えられることと、共有 URL に載ることを確かめる
+await goTab('設定');
 await page.selectOption('label:has-text("スキル発動率") select', 'ALL');
 await page.fill('input[type=number][max="12"] >> nth=0', '2');
 const optionState = await page.evaluate(() => ({

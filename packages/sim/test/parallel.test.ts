@@ -213,3 +213,47 @@ describe('Worker が死んだとき', () => {
     await pool.dispose();
   });
 });
+
+describe('中断したときの途中結果', () => {
+  it('keepPartial を指定すると、終わったぶんが返る', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const controller = new AbortController();
+      const output = await pool.run(toSerializable(setting), system, {
+        count: 4000,
+        seed: 1,
+        chunkSize: 32,
+        keepPartial: true,
+        signal: controller.signal,
+        // 少し進んだところで止める。1 件も終わっていないと差が見えない。
+        onProgress: (done) => {
+          if (done >= 64) controller.abort();
+        },
+      });
+      expect(output.cancelled).toBe(true);
+      expect(output.results.length).toBeGreaterThan(0);
+      expect(output.results.length).toBeLessThan(4000);
+      // 穴を落としているので、undefined が混ざっていない。
+      for (const result of output.results) expect(result).toBeDefined();
+    } finally {
+      await pool.dispose();
+    }
+  }, 120000);
+
+  it('keepPartial を指定しなければ、これまでどおり中断は例外になる', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const controller = new AbortController();
+      controller.abort();
+      await expect(
+        pool.run(toSerializable(setting), system, {
+          count: 100,
+          seed: 1,
+          signal: controller.signal,
+        }),
+      ).rejects.toBeInstanceOf(SimulationCancelled);
+    } finally {
+      await pool.dispose();
+    }
+  }, 60000);
+});

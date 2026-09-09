@@ -5,14 +5,29 @@ import { useStore } from '../store.ts';
 import { Panel } from './Inputs.tsx';
 
 const fieldCls =
-  'w-full rounded border border-neutral-300 bg-white px-2 py-1 text-sm dark:border-neutral-700 dark:bg-neutral-900';
-const labelCls = 'block text-xs text-neutral-500 dark:text-neutral-400';
+  'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
+const labelCls = 'block text-xs text-ink3';
 
 const STATUSES: TargetStatus[] = ['stamina', 'speed', 'power', 'guts', 'wisdom'];
 const GOALS: Goal[] = [{ kind: 'maxSpurt' }, { kind: 'finish' }];
 
-/** 臨界値の分布。単系列なので凡例は置かず、見出しで何かを示す。 */
-function CriticalHistogram({ values, from, to }: { values: Float64Array; from: number; to: number }) {
+/**
+ * 臨界値の分布。単系列なので凡例は置かず、見出しで何かを示す。
+ *
+ * `current` にいまの設定値を渡すと、その位置に破線を引く。
+ * 表の達成率だけを見ても「自分がどこにいるか」が分からないためである。
+ */
+function CriticalHistogram({
+  values,
+  from,
+  to,
+  current,
+}: {
+  values: Float64Array;
+  from: number;
+  to: number;
+  current?: number;
+}) {
   const bins = useMemo(() => {
     const binCount = 40;
     const width = (to - from) / binCount;
@@ -31,7 +46,14 @@ function CriticalHistogram({ values, from, to }: { values: Float64Array; from: n
   const barWidth = 100 / bins.counts.length;
   return (
     <div>
-      <h3 className="text-sm font-medium">臨界値の分布</h3>
+      <h3 className="text-sm font-medium">
+        臨界値の分布
+        {current !== undefined && current >= from && current <= to && (
+          <span className="ml-2 text-xs font-normal text-ink3">
+            破線はいまの設定値 <span className="num">{current}</span>
+          </span>
+        )}
+      </h3>
       <svg viewBox="0 0 100 30" preserveAspectRatio="none" className="mt-2 h-28 w-full">
         {bins.counts.map((count, i) => {
           const height = (count / bins.peak) * 28;
@@ -43,7 +65,7 @@ function CriticalHistogram({ values, from, to }: { values: Float64Array; from: n
               width={barWidth - 0.3}
               height={height}
               rx={0.3}
-              fill="#2a78d6"
+              className="fill-s1"
             >
               <title>
                 {(from + i * bins.width).toFixed(0)} から {(from + (i + 1) * bins.width).toFixed(0)}: {count} 件
@@ -51,13 +73,25 @@ function CriticalHistogram({ values, from, to }: { values: Float64Array; from: n
             </rect>
           );
         })}
+        {current !== undefined && current >= from && current <= to && (
+          <line
+            x1={((current - from) / (to - from)) * 100}
+            x2={((current - from) / (to - from)) * 100}
+            y1={0}
+            y2={30}
+            stroke="currentColor"
+            strokeWidth={0.3}
+            strokeDasharray="1 1"
+            className="text-ink2"
+          />
+        )}
       </svg>
-      <div className="flex justify-between text-xs text-neutral-500 dark:text-neutral-400">
+      <div className="flex justify-between text-xs text-ink3">
         <span>{from}</span>
         <span>{to}</span>
       </div>
       {bins.unreachable > 0 && (
-        <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-400">
+        <p className="mt-1 text-xs text-ink3">
           範囲内では達成できなかった試行が {bins.unreachable} 件ある。
         </p>
       )}
@@ -68,6 +102,7 @@ function CriticalHistogram({ values, from, to }: { values: Float64Array; from: n
 export function InversePanel() {
   const { inverseStatus, inverseGoal, inverseCount, inverseResult, running, progress, setInverse, solveInverse, cancel } =
     useStore();
+  const uma = useStore((s) => s.uma);
 
   const curve = useMemo(
     () => (inverseResult === null ? null : achievementCurve(inverseResult.values)),
@@ -76,7 +111,7 @@ export function InversePanel() {
 
   return (
     <Panel title="逆算">
-      <p className="mb-3 text-xs text-neutral-500 dark:text-neutral-400">
+      <p className="mb-3 text-xs text-ink3">
         目標を先に決めて、必要なステータスを求める。試行ごとに目標を満たす最小値を探し、その分布から達成率ごとの必要値を読む。
         返すのは最小値なので、この水準では持久力温存の側に落ちる。つまり<strong>位置取り調整をほとんど払わない走りを前提にした答え</strong>である。
         調整が毎回起きる前提だと、必要なスタミナは 170 から 210 ほど上がる。
@@ -129,7 +164,7 @@ export function InversePanel() {
       <div className="mt-3 flex items-center gap-3">
         <button
           type="button"
-          className="rounded bg-neutral-900 px-4 py-1.5 text-sm text-white disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900"
+          className="rounded-sm bg-primary-bg px-4 py-1.5 text-sm text-primary-fg disabled:opacity-50"
           onClick={() => void solveInverse()}
           disabled={running}
         >
@@ -139,15 +174,22 @@ export function InversePanel() {
           <>
             <button
               type="button"
-              className="rounded border border-neutral-300 px-3 py-1.5 text-sm dark:border-neutral-700"
+              className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
               onClick={cancel}
             >
               中断
             </button>
-            <span className="text-sm text-neutral-500">
+            <span className="num text-sm text-ink3">
               {progress} / {inverseCount}
             </span>
           </>
+        )}
+        {inverseResult !== null && !running && (
+          <span className="num text-xs text-ink3">
+            レース {inverseResult.races.toLocaleString()} 本 ・{' '}
+            {(inverseResult.elapsedMs / 1000).toFixed(2)} 秒 ・ 探し方は
+            {inverseResult.method === 'bisect' ? '二分探索' : '全走査'}
+          </span>
         )}
       </div>
 
@@ -155,7 +197,7 @@ export function InversePanel() {
         <div className="mt-4 space-y-4">
           <table className="w-full text-sm">
             <thead>
-              <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+              <tr className="border-b border-rule text-xs text-ink3">
                 <th className="py-1 text-left font-normal">達成率</th>
                 <th className="py-1 text-right font-normal">
                   必要な{STATUS_LABEL[inverseResult.status]}
@@ -163,16 +205,33 @@ export function InversePanel() {
               </tr>
             </thead>
             <tbody>
-              {curve.map(({ rate, value }) => (
-                <tr key={rate} className="border-b border-neutral-100 last:border-0 dark:border-neutral-800">
-                  <th scope="row" className="py-1 text-left font-normal text-neutral-500 dark:text-neutral-400">
-                    {(rate * 100).toFixed(0)} %
-                  </th>
-                  <td className="py-1 text-right tabular-nums">
-                    {Number.isNaN(value) ? '範囲外' : value}
-                  </td>
-                </tr>
-              ))}
+              {curve.map(({ rate, value }, i) => {
+                // いまの設定値で届いている行のうち、いちばん達成率の高いもの。
+                // 表だけでは「自分がどこにいるか」が読み取れない。
+                const reached =
+                  !Number.isNaN(value) &&
+                  uma[inverseResult.status] >= value &&
+                  (curve[i + 1] === undefined ||
+                    Number.isNaN(curve[i + 1]!.value) ||
+                    uma[inverseResult.status] < curve[i + 1]!.value);
+                return (
+                  <tr
+                    key={rate}
+                    className={`border-b border-rule last:border-0 ${reached ? 'bg-acc-tint' : ''}`}
+                  >
+                    <th
+                      scope="row"
+                      className={`py-1 text-left font-normal ${reached ? 'font-semibold text-acc-ink' : 'text-ink3'}`}
+                    >
+                      {(rate * 100).toFixed(0)} %
+                      {reached && <span className="ml-2 text-[11px] font-normal">いまここ</span>}
+                    </th>
+                    <td className="num py-1 text-right">
+                      {Number.isNaN(value) ? '範囲外' : value}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
 
@@ -180,15 +239,13 @@ export function InversePanel() {
             values={inverseResult.values}
             from={inverseResult.from}
             to={inverseResult.to}
+            current={uma[inverseResult.status]}
           />
 
-          <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          <p className="text-xs text-ink3">
             {GOAL_LABEL[inverseResult.goal.kind]}を目標に、{inverseResult.values.length} 試行。
-            探し方は{inverseResult.method === 'bisect' ? '二分探索' : '全走査'}。
-            レース {inverseResult.races.toLocaleString()} 本、
-            {(inverseResult.elapsedMs / 1000).toFixed(2)} 秒。
             {inverseResult.method === 'scan' &&
-              '完走は 1 試行の中で単調に変わらないため、二分探索は使えない。'}
+              '完走は 1 試行の中で単調に変わらないため、二分探索は使えず全走査になる。'}
           </p>
         </div>
       )}

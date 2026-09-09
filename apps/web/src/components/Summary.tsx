@@ -35,7 +35,7 @@ export function SummaryOutput() {
   if (summary === null) {
     return (
       <Panel title="結果">
-        <p className="text-sm text-neutral-500">まだ実行していない。</p>
+        <p className="text-sm text-ink3">まだ実行していない。</p>
       </Panel>
     );
   }
@@ -69,7 +69,7 @@ export function SummaryOutput() {
 
   return (
     <Panel title="結果">
-      <p className="text-xs text-neutral-500 dark:text-neutral-400">
+      <p className="text-xs text-ink3">
         <span data-testid="trial-count">{summary.all.count.toLocaleString('ja-JP')}</span> 試行 ・{' '}
         {(summary.elapsedMs / 1000).toFixed(2)} 秒
         {detail !== undefined && ` ・ ${detail.name}`}
@@ -77,15 +77,15 @@ export function SummaryOutput() {
 
       {/* 主数字とタイル。結果パネルは画面の半分ほどの幅しかないので、横並びにはしない。 */}
       <div className="mt-3 flex flex-col gap-4">
-        <div className="flex flex-col gap-1 border-b border-neutral-200 pb-3 dark:border-neutral-800">
-          <span className="text-xs text-neutral-500 dark:text-neutral-400">平均タイム</span>
+        <div className="flex flex-col gap-1 border-b border-rule pb-3">
+          <span className="text-xs text-ink3">平均タイム</span>
           <span
             data-testid="average-time"
             className="font-mono text-4xl font-semibold tabular-nums leading-none"
           >
             {formatTime(summary.all.averageTime)}
           </span>
-          <span className="text-xs text-neutral-500 dark:text-neutral-400">
+          <span className="text-xs text-ink3">
             {baseline === undefined ? (
               'スナップショットを保存すると基準比を表示'
             ) : (
@@ -106,33 +106,33 @@ export function SummaryOutput() {
         </div>
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">最速タイム</span>
+            <span className="text-xs text-ink3">最速タイム</span>
             <span className="font-mono text-lg font-semibold tabular-nums">{formatTime(summary.all.bestTime)}</span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">最遅タイム</span>
+            <span className="text-xs text-ink3">最遅タイム</span>
             <span className="font-mono text-lg font-semibold tabular-nums">{formatTime(summary.all.worstTime)}</span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">完走率</span>
+            <span className="text-xs text-ink3">完走率</span>
             <span className="font-mono text-lg font-semibold tabular-nums">{percent(summary.finishRate)}</span>
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">最大スパート率</span>
+            <span className="text-xs text-ink3">最大スパート率</span>
             <span className="font-mono text-lg font-semibold tabular-nums">{percent(summary.spurtRate)}</span>
             {Number.isFinite(spurtRateDelta) && (
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              <span className="text-xs text-ink3">
                 基準比 <span className="font-mono tabular-nums">{signed(spurtRateDelta, 1)}</span> pt
               </span>
             )}
           </div>
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">ゴール時の残り体力</span>
+            <span className="text-xs text-ink3">ゴール時の残り体力</span>
             <span className="font-mono text-lg font-semibold tabular-nums">
               {summary.all.averageGoalSp.toFixed(1)}
             </span>
             {Number.isFinite(goalSpP5) && (
-              <span className="text-xs text-neutral-500 dark:text-neutral-400">
+              <span className="text-xs text-ink3">
                 下位 5% で <span className="font-mono tabular-nums">{goalSpP5.toFixed(1)}</span>
               </span>
             )}
@@ -146,12 +146,12 @@ export function SummaryOutput() {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
-        <span className="text-xs text-neutral-500 dark:text-neutral-400">この 1 本を見る:</span>
+        <span className="text-xs text-ink3">この 1 本を見る:</span>
         {picks.map(({ label, entry }) => (
           <button
             key={label}
             type="button"
-            className="rounded border border-neutral-300 px-2 py-0.5 text-xs dark:border-neutral-700"
+            className="rounded-sm border border-rule2 px-2 py-0.5 text-xs"
             onClick={() => showTrial(entry!.trial)}
           >
             {label}（{formatTime(entry!.time)}）
@@ -164,14 +164,14 @@ export function SummaryOutput() {
         <div className="mt-5">
           <div className="flex items-baseline gap-2">
             <h3 className="text-sm font-medium">スキル別の発動状況</h3>
-            <span className="text-xs text-neutral-500 dark:text-neutral-400">
+            <span className="text-xs text-ink3">
               △ 発動条件に近似が含まれるスキル ・ 数値は {summary.all.count.toLocaleString('ja-JP')} 試行の平均
             </span>
           </div>
           <div className="mt-2 overflow-x-auto">
             <table data-testid="skill-table" className="w-full min-w-[36rem] text-sm">
               <thead>
-                <tr className="border-b border-neutral-200 text-xs text-neutral-500 dark:border-neutral-800 dark:text-neutral-400">
+                <tr className="border-b border-rule text-xs text-ink3">
                   <th scope="col" className="py-1 pr-3 text-left font-normal">スキル</th>
                   <th scope="col" className="py-1 pr-3 text-right font-normal">発動率</th>
                   <th scope="col" className="py-1 pr-3 text-right font-normal">平均発動位置</th>
@@ -185,20 +185,20 @@ export function SummaryOutput() {
                   const approximate = data !== undefined && hasApproximateCondition(data);
                   const peak = Math.max(...skill.phaseRates, 0.0001);
                   return (
-                    <tr key={skill.skillId} className="border-b border-neutral-100 last:border-0 dark:border-neutral-800">
+                    <tr key={skill.skillId} className="border-b border-rule last:border-0">
                       <th scope="row" className="py-1.5 pr-3 text-left font-normal">
                         {data?.name ?? skill.skillId}
                         {approximate && (
-                          <span className="ml-1 text-neutral-400" title="発動条件に近似が含まれる">
+                          <span className="ml-1 text-ink3" title="発動条件に近似が含まれる">
                             △
                           </span>
                         )}
                       </th>
                       <td className="py-1.5 pr-3 text-right tabular-nums">
                         <div className="flex items-center justify-end gap-2">
-                          <div className="h-1.5 w-20 rounded-full bg-neutral-200 dark:bg-neutral-800">
+                          <div className="h-1.5 w-20 rounded-full bg-sunken">
                             <div
-                              className="h-1.5 rounded-full bg-[#2a78d6] dark:bg-[#3987e5]"
+                              className="h-1.5 rounded-full bg-s1"
                               style={{ width: `${(skill.triggerRate * 100).toFixed(1)}%` }}
                             />
                           </div>
@@ -215,7 +215,7 @@ export function SummaryOutput() {
                       </td>
                       <td className="py-1.5">
                         {skill.triggerRate === 0 ? (
-                          <span className="text-neutral-400">—</span>
+                          <span className="text-ink3">—</span>
                         ) : (
                           <svg width="72" height="16" viewBox="0 0 72 16" aria-hidden="true">
                             {skill.phaseRates.map((rate, i) => {
@@ -227,8 +227,7 @@ export function SummaryOutput() {
                                   y={16 - h}
                                   width={14}
                                   height={h}
-                                  fill="#2a78d6"
-                                  className="dark:fill-[#3987e5]"
+                                  className="fill-s1"
                                 >
                                   <title>
                                     {PHASE_LABELS[i]}: {(rate * 100).toFixed(1)} %
