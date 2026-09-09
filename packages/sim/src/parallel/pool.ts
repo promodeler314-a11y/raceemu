@@ -43,6 +43,13 @@ export interface RunOptions {
   readonly signal?: AbortSignal;
   /** 他のウマ娘の位置。渡すと順位条件を実際に判定する。 */
   readonly field?: FieldSpec | null;
+  /**
+   * 中断したときに、そこまでに終わった試行を返すか。
+   *
+   * 既定では中断は例外になり、途中の結果は捨てられる。画面から止めたときに
+   * 何も残らないと、長く走らせたあとに手を止めた人が全部やり直すことになる。
+   */
+  readonly keepPartial?: boolean;
 }
 
 export interface CriticalOutput {
@@ -54,6 +61,13 @@ export interface RunOutput {
   readonly results: RaceSimulationResult[];
   /** スキルごとの集計。設定のスキル順に並ぶ。 */
   readonly skillStats: Float64Array;
+  /**
+   * 中断されたか。`keepPartial` を指定したときだけ true になりうる。
+   *
+   * true のとき `results` は要求した数より少ない。塊は順不同で終わるので、
+   * 「先頭から N 件」ではなく「終わったものだけ」である。
+   */
+  readonly cancelled?: boolean;
 }
 
 export class SimulationCancelled extends Error {
@@ -214,29 +228,38 @@ export class WorkerPool {
     const seed = options.seed ?? 1;
     const results: RaceSimulationResult[] = new Array(total);
 
-    await this.dispatchAll(
-      total,
-      Math.max(1, options.chunkSize ?? 256),
-      options,
-      (id, from, count): ChunkRequest => ({
-        kind: 'chunk',
-        id,
-        setting,
-        system,
-        seed,
-        from,
-        count,
-        field: options.field ?? null,
-      }),
-      (response, from) => {
-        if (response.kind !== 'chunk') return;
-        const unpacked = unpackResults(response.packed);
-        for (let j = 0; j < unpacked.length; j++) results[from + j] = unpacked[j]!;
-        for (let j = 0; j < skillStats.length; j++) skillStats[j] += response.skillStats[j] ?? 0;
-      },
-    );
+    let cancelled = false;
+    try {
+      await this.dispatchAll(
+        total,
+        Math.max(1, options.chunkSize ?? 256),
+        options,
+        (id, from, count): ChunkRequest => ({
+          kind: 'chunk',
+          id,
+          setting,
+          system,
+          seed,
+          from,
+          count,
+          field: options.field ?? null,
+        }),
+        (response, from) => {
+          if (response.kind !== 'chunk') return;
+          const unpacked = unpackResults(response.packed);
+          for (let j = 0; j < unpacked.length; j++) results[from + j] = unpacked[j]!;
+          for (let j = 0; j < skillStats.length; j++) skillStats[j] += response.skillStats[j] ?? 0;
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof SimulationCancelled) || options.keepPartial !== true) throw error;
+      cancelled = true;
+    }
 
-    return { results, skillStats };
+    if (!cancelled) return { results, skillStats };
+    // 塊は順不同で終わるので、埋まっていない番号が飛び飛びに残る。
+    // 穴を落として、終わったものだけを返す。
+    return { results: results.filter((result) => result !== undefined), skillStats, cancelled };
   }
 
   /** 試行ごとの臨界値を求める。 */

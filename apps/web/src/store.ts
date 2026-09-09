@@ -109,6 +109,19 @@ export function loadTheme(): Theme {
   }
 }
 
+/**
+ * タイムの分布を粗く畳んだもの。
+ *
+ * 分布を重ねて出すには毎試行の値が要るが、試行は最大 20 万回あるので
+ * そのまま持つと 1 件で 1.6 MB になる。ビンに畳めば数百バイトで済み、
+ * 図に描くぶんには元の値と区別が付かない。
+ */
+export interface Histogram {
+  readonly min: number;
+  readonly max: number;
+  readonly counts: readonly number[];
+}
+
 export interface Snapshot {
   readonly id: number;
   readonly label: string;
@@ -119,6 +132,36 @@ export interface Snapshot {
   readonly debuffCounts: Readonly<Record<string, number>>;
   readonly summary: SimulationSummary;
   readonly skillSummaries: readonly SkillSummary[];
+  /** 分布の重ね合わせに使う。古いスナップショットには無い。 */
+  readonly histogram?: Histogram;
+  /** タイムの標準偏差。差の区間を出すのに使う。古いスナップショットには無い。 */
+  readonly sd?: number;
+}
+
+const HISTOGRAM_BINS = 60;
+
+function histogramOf(times: readonly number[]): Histogram | undefined {
+  if (times.length === 0) return undefined;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const time of times) {
+    if (time < min) min = time;
+    if (time > max) max = time;
+  }
+  if (!(max > min)) return { min, max: min + 1, counts: [times.length] };
+  const counts = new Array<number>(HISTOGRAM_BINS).fill(0);
+  const width = (max - min) / HISTOGRAM_BINS;
+  for (const time of times) {
+    counts[Math.min(HISTOGRAM_BINS - 1, Math.floor((time - min) / width))]! += 1;
+  }
+  return { min, max, counts };
+}
+
+function standardDeviation(times: readonly number[], mean: number): number | undefined {
+  if (times.length < 2) return undefined;
+  let sum = 0;
+  for (const time of times) sum += (time - mean) ** 2;
+  return Math.sqrt(sum / (times.length - 1));
 }
 
 export interface InverseResult {
@@ -315,19 +358,31 @@ export const useStore = create<AppState>((set, get) => ({
     try {
       const setting = buildSetting(state);
       const serializable = toSerializable(setting);
-      const { results, skillStats } = await getPool().run(serializable, system, {
+      const { results, skillStats, cancelled } = await getPool().run(serializable, system, {
         count: state.count,
         seed: state.seed,
         onProgress: (done) => set({ progress: done }),
         signal: controller.signal,
+        // 止めたときに何も残らないと、長く走らせたあとに手を止めた人が
+        // 最初からやり直すことになる。終わったぶんは見せる。
+        keepPartial: true,
         field: fieldSpec(state),
       });
       const elapsedMs = performance.now() - started;
+      if (results.length === 0) {
+        // 1 件も終わる前に止めた。前の結果を消さずにそのままにする。
+        set({ notice: '中断しました。結果はまだ 1 件も集まっていません。' });
+        return;
+      }
       set({
         summary: summarize(results, elapsedMs),
         results,
         elapsedMs,
         skillSummaries: toSkillSummaries(serializable.skillIds, skillStats, results.length),
+        notice:
+          cancelled === true
+            ? `${state.count.toLocaleString('ja-JP')} 件のうち ${results.length.toLocaleString('ja-JP')} 件で中断しました。ここまでの結果を出しています。`
+            : null,
       });
       get().showTrial(0);
       // 走らせた人が次に見たいのは結果である。設定の面に留まらせない。
@@ -423,6 +478,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (state.summary === null) return;
     const id = (state.snapshots[0]?.id ?? 0) + 1;
     const track = currentTrackDetail(state.track);
+    const times = state.results.map((r) => r.raceTime);
     const label = `#${id} ${track?.name ?? ''} ${state.uma.speed}/${state.uma.stamina}/${state.uma.power}/${state.uma.guts}/${state.uma.wisdom}`;
     set({
       snapshots: [
@@ -436,6 +492,8 @@ export const useStore = create<AppState>((set, get) => ({
           debuffCounts: { ...state.debuffCounts },
           summary: state.summary,
           skillSummaries: state.skillSummaries,
+          histogram: histogramOf(times),
+          sd: standardDeviation(times, state.summary.all.averageTime),
         },
         ...state.snapshots,
       ],

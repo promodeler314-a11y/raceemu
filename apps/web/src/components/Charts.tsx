@@ -8,13 +8,16 @@ import { Panel } from './Inputs.tsx';
 
 /**
  * 系列の色は dataviz の既定パレットの 1 から 3 番目。
- * 明色面での aqua は 3:1 を下回るため、体力の図は単系列にして見出しで名前を出す。
+ *
+ * 割り当てはモックに合わせてある。目標速度は速度と同じ量の参照線であって
+ * 別の系列ではないので、カテゴリ色を 1 枠使わず、破線の文脈色で描く。
+ * 空いた橙は体力に回した。`#1baf7a` は明色面でのコントラストが 3:1 を
+ * 下回るため、主要な系列に充てるより比較の 3 列目のような枠に回すほうがよい。
  */
 const SERIES = {
   speed: { light: '#2a78d6', dark: '#3987e5' },
-  target: { light: '#eb6834', dark: '#d95926' },
-  sp: { light: '#1baf7a', dark: '#199e70' },
-  // 勾配はコースの文脈であって系列ではない。カテゴリ色を使わず地の色で描く。
+  sp: { light: '#eb6834', dark: '#d95926' },
+  // 目標速度と勾配はコースと設定の文脈であって系列ではない。地の色で描く。
   context: { light: '#52514e', dark: '#c3c2b7' },
 };
 
@@ -73,7 +76,13 @@ interface ChartProps {
   readonly title: string;
   readonly subtitle?: string;
   readonly x: Float64Array;
-  readonly series: readonly { label: string; values: Float64Array; slot: keyof typeof SERIES }[];
+  readonly series: readonly {
+    label: string;
+    values: Float64Array;
+    slot: keyof typeof SERIES;
+    /** 参照線として破線で描く。系列そのものではないもの。 */
+    dashed?: boolean;
+  }[];
   readonly bands: CourseBands;
   readonly height: number;
   /** true なら 0 を含めた範囲にする。速度のように 0 付近を使わない図では false。 */
@@ -111,7 +120,13 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
       ],
       series: [
         { label: '距離' },
-        ...series.map((s) => ({ label: s.label, stroke: color(s.slot), width: 2, points: { show: false } })),
+        ...series.map((s) => ({
+          label: s.label,
+          stroke: color(s.slot),
+          width: s.dashed === true ? 1.5 : 2,
+          ...(s.dashed === true ? { dash: [4, 3] } : {}),
+          points: { show: false },
+        })),
       ],
       plugins: [coursePlugin(bands)],
     };
@@ -181,6 +196,7 @@ export function FrameCharts() {
   return (
     <Panel title={`レースの詳細（試行 ${detail!.trial}）`}>
       <div className="space-y-4">
+        <TrialNavigation />
         <Chart
           title="速度"
           subtitle="灰色の帯はコーナー、破線は序盤と中盤と終盤とラストの境界。"
@@ -190,7 +206,7 @@ export function FrameCharts() {
           bands={prepared.bands}
           series={[
             { label: '現在速度 (m/s)', values: prepared.speed, slot: 'speed' },
-            { label: '目標速度 (m/s)', values: prepared.target, slot: 'target' },
+            { label: '目標速度 (m/s)', values: prepared.target, slot: 'context', dashed: true },
           ]}
         />
         <Chart
@@ -211,6 +227,59 @@ export function FrameCharts() {
         <EventList />
       </div>
     </Panel>
+  );
+}
+
+/**
+ * どの試行を開いているか、と前後への移動。
+ *
+ * 「試行 0」とだけ出ていても、それが速いほうなのか遅いほうなのかが
+ * 分からない。分布のどこにいるかを併せて出す。
+ */
+function TrialNavigation() {
+  const detail = useStore((s) => s.detail);
+  const results = useStore((s) => s.results);
+  const seed = useStore((s) => s.seed);
+  const showTrial = useStore((s) => s.showTrial);
+  if (detail === null || results.length === 0) return null;
+
+  const time = results[detail.trial]?.raceTime;
+  const rank =
+    time === undefined ? null : results.filter((r) => r.raceTime < time).length;
+  const percentile = rank === null ? null : (rank / results.length) * 100;
+
+  return (
+    <div className="flex flex-wrap items-center gap-3 text-xs">
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          className="rounded-sm border border-rule2 px-2 py-0.5 disabled:opacity-40"
+          onClick={() => showTrial(detail.trial - 1)}
+          disabled={detail.trial <= 0}
+          aria-label="前の試行"
+        >
+          ← 前
+        </button>
+        <button
+          type="button"
+          className="rounded-sm border border-rule2 px-2 py-0.5 disabled:opacity-40"
+          onClick={() => showTrial(detail.trial + 1)}
+          disabled={detail.trial >= results.length - 1}
+          aria-label="次の試行"
+        >
+          次 →
+        </button>
+      </div>
+      <span className="num text-ink2">
+        試行 {detail.trial} / {results.length - 1} ・ シード {seed}
+      </span>
+      {time !== undefined && percentile !== null && (
+        <span className="text-ink3">
+          この 1 本は <span className="num">{formatTime(time)}</span>
+          ・ 速いほうから <span className="num">{percentile.toFixed(0)}</span> %
+        </span>
+      )}
+    </div>
   );
 }
 
