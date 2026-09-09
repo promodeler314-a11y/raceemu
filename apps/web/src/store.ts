@@ -6,7 +6,9 @@ import { toSerializable, toSkillSummaries, type SkillSummary } from '../../../pa
 import { RaceCalculator } from '../../../packages/sim/src/calculator.ts';
 import {
   DEBUFF_TYPES,
+  DerivedSetting,
   defaultSystemSetting,
+  emptyPassiveBonus,
   type PositionKeepMode,
   type RaceSetting,
   type RandomPosition,
@@ -613,6 +615,34 @@ function getDetailField(state: AppState) {
     detailFieldKey = key;
   }
   return detailField;
+}
+
+/**
+ * 適性ややる気の補正を当てたあとのステータス。
+ *
+ * 入力した値がそのまま使われるわけではないので、入力欄の下に出す。
+ * 計算は本体と同じ `DerivedSetting` に任せる。ここで作り直すと、
+ * 本体の式が変わったときに黙ってずれる。
+ */
+export function modifiedStatus(state: {
+  uma: UmaStatus;
+  track: TrackRef;
+  skillIds: readonly string[];
+  options: RunOptions;
+  debuffCounts: Readonly<Record<string, number>>;
+}): Record<'speed' | 'stamina' | 'power' | 'guts' | 'wisdom', number> {
+  const derived = new DerivedSetting(
+    buildSetting(state as AppState),
+    emptyPassiveBonus(),
+    gameData.trackData,
+  );
+  return {
+    speed: derived.modifiedSpeed,
+    stamina: derived.modifiedStamina,
+    power: derived.modifiedPower,
+    guts: derived.modifiedGuts,
+    wisdom: derived.modifiedWisdom,
+  };
 }
 
 export function currentTrackDetail(track: TrackRef) {

@@ -1,10 +1,12 @@
 import { useMemo, useState } from 'react';
 import { FIT_RANKS, type Condition, type FitRank, type Style } from '../../../../packages/sim/src/data/constants.ts';
+import { getSlope, type TrackDetail } from '../../../../packages/sim/src/data/track.ts';
 import {
   costModelFor,
   currentTrackDetail,
   debuffTypes,
   gameData,
+  modifiedStatus,
   skillChoices,
   useStore,
 } from '../store.ts';
@@ -34,6 +36,116 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
  * 設定の列は既に surface の面なので、そこに箱を重ねると枠が二重になる。
  * モックに合わせて、見出しの下の罫線だけで区切る。
  */
+/**
+ * 分割ボタン。
+ *
+ * 選択肢が少ないものは `<select>` より速い。開かなくても全部見えるので、
+ * いま何が選べるのかと、どれを選んでいるのかが同時に分かる。
+ * モックが脚質・やる気・バ場状態・実行オプションでこの形を採っている。
+ */
+export function Segmented<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: T;
+  options: readonly { readonly value: T; readonly label: string }[];
+  onChange: (value: T) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-[11px] text-ink3">{label}</span>
+      <div
+        role="radiogroup"
+        aria-label={label}
+        className="flex h-[30px] overflow-hidden rounded-sm border border-rule2"
+      >
+        {options.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            role="radio"
+            // 「良」のように 1 文字の選択肢は、単独だと何の設定か分からない。
+            // 群の名前を添えて読み上げる。
+            aria-label={`${label} ${option.label}`}
+            aria-checked={value === option.value}
+            onClick={() => onChange(option.value)}
+            className={`flex flex-1 items-center justify-center border-r border-rule px-1 text-xs last:border-r-0 ${
+              value === option.value
+                ? 'bg-acc-tint font-semibold text-acc-ink'
+                : 'bg-surface text-ink2'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * コース形状の小さな図。
+ *
+ * 「コーナー 4」と字で書いてあっても、どこに来るのかは分からない。
+ * コーナーを帯で、勾配を線で出す。詳細の面にある大きな図と同じものを
+ * 縮めたわけではなく、設定を決めるときに要る情報だけを残している。
+ */
+function CourseShape({ detail }: { detail: TrackDetail }) {
+  const length = detail.distance;
+  const x = (position: number) => (position / length) * 100;
+  // 勾配は区間ごとに与えられる。無い区間は 0 として折れ線にする。
+  const points: string[] = [];
+  const step = length / 60;
+  for (let i = 0; i <= 60; i++) {
+    const position = i * step;
+    const slope = getSlope(detail, position);
+    // 上りを上に描く。値は本家の内部値で、±2 程度に収まる。
+    points.push(`${x(position)},${10 - Math.max(-3, Math.min(3, slope)) * 2}`);
+  }
+  return (
+    <div className="rounded-sm border border-rule bg-sunken px-2 py-2">
+      <div className="flex items-baseline justify-between text-[11px] text-ink3">
+        <span>コース形状</span>
+        <span>
+          {detail.turn === 1 ? '右回り' : '左回り'} ・ コーナー {detail.corners.length} ・ 直線{' '}
+          {Math.round(detail.straights.reduce((a, b) => Math.max(a, b.end - b.start), 0))}m
+        </span>
+      </div>
+      <svg viewBox="0 0 100 20" preserveAspectRatio="none" className="mt-1 h-12 w-full">
+        {detail.corners.map((corner, i) => (
+          <rect
+            key={i}
+            x={x(corner.start)}
+            y={0}
+            width={x(corner.end) - x(corner.start)}
+            height={20}
+            className="fill-rule2 opacity-40"
+          >
+            <title>
+              コーナー {i + 1}: {Math.round(corner.start)} から {Math.round(corner.end)} m
+            </title>
+          </rect>
+        ))}
+        <polyline
+          points={points.join(' ')}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={0.6}
+          className="text-ink2"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <div className="flex justify-between text-[11px] text-ink3">
+        <span>0m</span>
+        <span className="num">{length}m</span>
+      </div>
+    </div>
+  );
+}
+
 export function Panel({
   title,
   variant = 'card',
@@ -101,18 +213,17 @@ export function CourseInput() {
             ))}
           </select>
         </Field>
-        <Field label="バ場状態">
-          <select
-            className={fieldCls}
-            value={track.condition}
-            onChange={(e) => setTrack({ condition: Number(e.target.value) })}
-          >
-            <option value={1}>良</option>
-            <option value={2}>稍重</option>
-            <option value={3}>重</option>
-            <option value={4}>不良</option>
-          </select>
-        </Field>
+        <Segmented
+          label="バ場状態"
+          value={String(track.condition)}
+          options={[
+            { value: '1', label: '良' },
+            { value: '2', label: '稍重' },
+            { value: '3', label: '重' },
+            { value: '4', label: '不良' },
+          ]}
+          onChange={(value) => setTrack({ condition: Number(value) })}
+        />
         <Field label="出走頭数">
           <select
             className={fieldCls}
@@ -125,10 +236,16 @@ export function CourseInput() {
         </Field>
       </div>
       {detail !== undefined && (
-        <p className="mt-3 text-xs text-ink3">
-          {detail.distance} m / {detail.surface === 1 ? '芝' : 'ダート'} / コーナー{' '}
-          {detail.corners.length} / 基準タイム {detail.finishTimeMin} から {detail.finishTimeMax} 秒
-        </p>
+        <>
+          <CourseShape detail={detail} />
+          <p className="text-[11px] text-ink3">
+            {detail.surface === 1 ? '芝' : 'ダート'} ・ 基準タイム{' '}
+            <span className="num">
+              {detail.finishTimeMin} から {detail.finishTimeMax}
+            </span>{' '}
+            秒
+          </p>
+        </>
       )}
     </Panel>
   );
@@ -148,18 +265,37 @@ const CONDITION_LABEL: Record<Condition, string> = {
 export function UmaInput() {
   const uma = useStore((s) => s.uma);
   const setUma = useStore((s) => s.setUma);
+  const track = useStore((s) => s.track);
+  const skillIds = useStore((s) => s.skillIds);
+  const options = useStore((s) => s.options);
+  const debuffCounts = useStore((s) => s.debuffCounts);
+  const modified = useMemo(
+    () => modifiedStatus({ uma, track, skillIds, options, debuffCounts }),
+    [uma, track, skillIds, options, debuffCounts],
+  );
 
+  // 入力した値がそのまま使われるわけではないので、補正後の値を下に添える。
+  // 中身はやる気、コースの得意ステータス（courseSetStatus）、バ場、脚質適性など。
+  // どれが効いたかまでは出さない。ここで見たいのは「入力と違う」ことである。
   const stat = (key: 'speed' | 'stamina' | 'power' | 'guts' | 'wisdom', label: string) => (
-    <Field label={label}>
-      <input
-        type="number"
-        className={fieldCls}
-        value={uma[key]}
-        min={1}
-        max={2500}
-        onChange={(e) => setUma({ [key]: Number(e.target.value) })}
-      />
-    </Field>
+    <div className="flex flex-col gap-1">
+      <Field label={label}>
+        <input
+          type="number"
+          className={`${fieldCls} num text-right`}
+          value={uma[key]}
+          min={1}
+          max={2500}
+          onChange={(e) => setUma({ [key]: Number(e.target.value) })}
+        />
+      </Field>
+      <span
+        className="num text-right text-[11px] text-ink3"
+        title="やる気やコースの得意ステータスなどの補正を当てた値。計算にはこちらが使われる"
+      >
+        → {modified[key]}
+      </span>
+    </div>
   );
 
   const fit = (key: 'distanceFit' | 'surfaceFit' | 'styleFit', label: string) => (
@@ -188,33 +324,21 @@ export function UmaInput() {
         {stat('wisdom', '賢さ')}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
-        <Field label="脚質">
-          <select
-            data-testid="style"
-            className={fieldCls}
-            value={uma.style}
-            onChange={(e) => setUma({ style: e.target.value as Style })}
-          >
-            {STYLES.map((style) => (
-              <option key={style} value={style}>
-                {STYLE_LABEL[style]}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="やる気">
-          <select
-            className={fieldCls}
-            value={uma.condition}
-            onChange={(e) => setUma({ condition: e.target.value as Condition })}
-          >
-            {CONDITIONS.map((condition) => (
-              <option key={condition} value={condition}>
-                {CONDITION_LABEL[condition]}
-              </option>
-            ))}
-          </select>
-        </Field>
+        <Segmented
+          label="脚質"
+          value={uma.style}
+          options={STYLES.map((style) => ({ value: style, label: STYLE_LABEL[style] ?? style }))}
+          onChange={(style) => setUma({ style })}
+        />
+        <Segmented
+          label="やる気"
+          value={uma.condition}
+          options={CONDITIONS.map((condition) => ({
+            value: condition,
+            label: CONDITION_LABEL[condition],
+          }))}
+          onChange={(condition) => setUma({ condition })}
+        />
         <Field label="枠番（0 でランダム）">
           <input
             type="number"

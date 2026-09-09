@@ -132,8 +132,8 @@ await goTab('設定');
 await page.fill('input[placeholder="スキル名で検索"]', '真骨頂');
 await page.click('button:has-text("真骨頂")');
 await page.fill('input[placeholder="スキル名で検索"]', '');
-// 並び順で選ぶと、設定列の順序を変えるたびに壊れる。
-await page.selectOption('[data-testid=style]', 'NIGE');
+// 脚質は分割ボタンになった。役割と名前で引く。
+await page.click('[role=radiogroup][aria-label="脚質"] button:has-text("逃げ")');
 const runOnce = async () => {
   await page.click('button:has-text("実行")');
   await page.waitForFunction(
