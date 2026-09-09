@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #2a78d6; text-decoration: none; }
+    a:hover { color: #1c5cab; text-decoration: underline; }
+    .app {
+      --paper: #f5f4f1; --surface: #fcfcfb; --sunken: #eeece7;
+      --rule: #dedbd3; --rule2: #c6c2b8;
+      --ink: #12120f; --ink2: #52514e; --ink3: #8a877e;
+      --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+      --diffTint: #f3f7fd; --primaryBg: var(--ink); --primaryFg: #fff;
+      --warn: #8a5a00; --warnBg: #fdf3dc;
+      --sans: "IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+      font-family: var(--sans); color: var(--ink); background: var(--paper);
+      font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    }
+    .app * { box-sizing: border-box; }
+    .app[data-theme="dark"] {
+      --paper: #17181a; --surface: #1f2123; --sunken: #272a2d;
+      --rule: #34373b; --rule2: #46494e; --ink: #e9e7e2; --ink2: #aaa7a1; --ink3: #77746e;
+      --diffTint: rgba(58, 138, 232, 0.14); --primaryBg: #e9e7e2; --primaryFg: #17181a;
+      --warn: #e0b360; --warnBg: rgba(224, 179, 96, 0.14);
+    }
+    .lbl { font-size: 11px; color: var(--ink3); letter-spacing: 0.02em; }
+    .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .ctl { height: 30px; border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface);
+      color: var(--ink); font-size: 12px; padding: 0 8px; display: flex; align-items: center; cursor: pointer; }
+    .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; }
+    .ptitle { font-size: 13px; font-weight: 600; }
+    .fld { display: flex; flex-direction: column; gap: 4px; }
+    .chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px;
+      border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface); font-size: 11px; }
+    .st { border-collapse: collapse; width: 100%; font-size: 12px; }
+    .st th { text-align: right; font-weight: 500; color: var(--ink3); font-size: 11px;
+      padding: 0 8px 5px; border-bottom: 1px solid var(--rule2); white-space: nowrap; }
+    .st th:first-child, .st td:first-child { text-align: left; }
+    .st td { text-align: right; padding: 5px 8px; border-bottom: 1px solid var(--rule);
+      font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .st td:first-child { font-family: var(--sans); }
+    .st tr.on td { background: var(--diffTint); }
+    .st tr.on td:first-child { box-shadow: inset 2px 0 0 var(--s1); font-weight: 600; }
+    .seg { display: flex; border: 1px solid var(--rule2); border-radius: 3px; overflow: hidden; }
+    .seg > span { flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer;
+      font-size: 12px; color: var(--ink2); background: var(--surface); border-right: 1px solid var(--rule); }
+    .seg > span:last-child { border-right: 0; }
+    .seg > span.on { background: var(--diffTint); color: #1c5cab; font-weight: 600; }
+    .tab { display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3); }
+    .tab.on { font-weight: 600; color: var(--ink); box-shadow: inset 0 -2px 0 var(--s1); }
+  </style>
+</helmet>
+
+<div class="app" data-theme="{{ themeMode }}" style="width: 1440px; height: 1600px; display: flex; flex-direction: column;">
+
+  <header style="height: 52px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--rule2);">
+    <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink2);">RACE EMULATOR</div>
+    <nav style="display: flex; gap: 2px; align-self: stretch;">
+      <span class="tab">設定</span>
+      <span class="tab">結果</span>
+      <span class="tab">比較</span>
+      <span class="tab">詳細</span>
+      <span class="tab on">探索</span>
+    </nav>
+    <div style="flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;">
+      <span style="font-size: 13px; color: var(--ink2);">東京 芝 2400m ／ 差し・スピード寄り</span>
+    </div>
+    <div style="display: flex; align-items: center; gap: 8px; flex: none;">
+      <div class="seg" style="width: 96px; height: 30px;">
+        <span class="{{ themeSegLightClass }}" onClick="{{ setLight }}">ライト</span>
+        <span class="{{ themeSegDarkClass }}" onClick="{{ setDark }}">ダーク</span>
+      </div>
+      <span class="ctl" style="color: var(--ink2);">共有リンク</span>
+    </div>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex;">
+
+    <aside style="width: 280px; flex: none; background: var(--surface); border-right: 1px solid var(--rule2); padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="ptitle">設定</span><span style="flex: 1;"></span><a href="#">編集</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);">
+          <span class="lbl">ウマ娘</span>
+          <span style="font-size: 12px;">差し ・ 好調 ・ 適性 A/A/A</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);">
+          <span class="lbl">コース</span>
+          <span style="font-size: 12px;">東京 芝 2400m ・ 良</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px;">
+          <span class="lbl">所持スキル</span>
+          <span style="font-size: 12px;">12 件 ・ 探索の候補として使用</span>
+        </div>
+      </div>
+      <span class="lbl" style="margin-top: auto;">逆算と探索は共通乱数で通常実行と対応付けられます</span>
+    </aside>
+
+    <section style="flex: 1; min-width: 0; padding: 24px; display: flex; flex-direction: column; gap: 20px; overflow: hidden;">
+
+      <!-- 逆算 -->
+      <div class="panel" style="flex: none; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span class="ptitle">逆算</span>
+          <span class="lbl">目標を先に決めて、必要なステータスを求める ・ 返すのは最小値なので位置取り調整をほとんど払わない前提の答え</span>
+        </div>
+        <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; max-width: 620px;">
+          <div class="fld"><span class="lbl">求めるステータス</span><div class="ctl" style="justify-content: space-between;">スタミナ<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--ink3)" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg></div></div>
+          <div class="fld"><span class="lbl">目標</span><div class="ctl" style="justify-content: space-between;">最大スパート<svg width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="var(--ink3)" stroke-width="1.6"><path d="M4 6.5 8 10.5 12 6.5"/></svg></div></div>
+          <div class="fld"><span class="lbl">試行回数</span><div class="ctl num" style="justify-content: flex-end;">300</div></div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span class="ctl" style="background: var(--primaryBg); border-color: var(--primaryBg); color: var(--primaryFg); font-weight: 600; height: 32px; padding: 0 16px;">逆算する</span>
+          <span class="lbl">レース 3,660 本 ・ 1.42 秒 ・ 探し方は二分探索</span>
+        </div>
+        <div style="display: flex; gap: 24px; align-items: flex-start;">
+          <table class="st" style="width: 220px; flex: none;">
+            <thead><tr><th>達成率</th><th>必要なスタミナ</th></tr></thead>
+            <tbody>
+              <tr><td>50 %</td><td>590</td></tr>
+              <tr><td>80 %</td><td>660</td></tr>
+              <tr class="on"><td>90 %</td><td>750</td></tr>
+              <tr><td>99 %</td><td>890</td></tr>
+            </tbody>
+          </table>
+          <div style="flex: 1; min-width: 0;">
+            <span class="lbl">臨界値の分布 ・ 90% 行 = 現在の設定値 750 の位置</span>
+            <svg width="100%" height="72" viewBox="0 0 400 72" preserveAspectRatio="none" style="display: block; margin-top: 4px;">
+              <rect x="0" y="0" width="400" height="60" style="fill:var(--paper)"/>
+              <path d="M4 58 L20 57 L36 54 L52 48 L68 39 L84 28 L100 18 L116 10 L132 5 L148 3 L164 4 L180 8 L196 15 L212 24 L228 34 L244 43 L260 50 L276 55 L292 57 L308 58 L324 59 L340 59 L356 59 L372 60 L388 60 L396 60" fill="none" stroke="var(--s1)" stroke-width="2"/>
+              <line x1="230" y1="0" x2="230" y2="60" stroke="var(--ink2)" stroke-width="1" stroke-dasharray="3 3"/>
+              <line x1="0" y1="60" x2="400" y2="60" style="stroke:var(--rule2)" stroke-width="1"/>
+              <text x="0" y="70" font-size="9" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">500</text>
+              <text x="392" y="70" text-anchor="end" font-size="9" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">950</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <!-- 組み合わせ探索 -->
+      <div class="panel" style="flex: 1; min-height: 0; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; overflow: hidden;">
+        <div style="display: flex; align-items: baseline; gap: 10px;">
+          <span class="ptitle">組み合わせ探索</span>
+          <span class="lbl">いま選んでいる 12 個を候補に、予算に収まる範囲で最もタイムを縮める組み合わせを探す ・ 候補すべてで 1,240 pt</span>
+        </div>
+        <div style="display: flex; align-items: flex-end; gap: 10px;">
+          <div class="fld"><span class="lbl">スキルポイントの予算</span><div class="ctl num" style="width: 120px; justify-content: flex-end;">900</div></div>
+          <span class="ctl" style="background: var(--primaryBg); border-color: var(--primaryBg); color: var(--primaryFg); font-weight: 600; height: 30px; padding: 0 16px;">探索する</span>
+          <span class="lbl">レース 84,000 本 ・ 構成の評価 312 回 ・ 6.8 秒 ・ 4 巡</span>
+        </div>
+        <div style="border: 1px solid var(--warn); background: var(--warnBg); border-radius: 3px; padding: 6px 10px; font-size: 11px; color: var(--warn);">
+          順位条件を判定していない。脚質と噛み合わない条件のスキルは過大に評価されます。
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <span class="ptitle" style="font-size: 12px;">最良の構成（900 pt / 予算 900 pt）</span>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span class="chip">末脚 <span class="lbl num">Lv3 ・ 240pt</span></span>
+            <span class="chip">直線加速 <span class="lbl num">210pt</span></span>
+            <span class="chip">円弧のマエストロ <span class="lbl num">190pt</span></span>
+            <span class="chip">好転一息 <span class="lbl num">150pt</span></span>
+            <span class="chip">深呼吸 <span class="lbl num">110pt</span></span>
+          </div>
+          <span style="font-size: 12px;">何も取らない場合より <span class="num" style="font-weight: 600;">−1.286</span> 秒速い（誤差 <span class="num">±0.024</span> 秒）</span>
+        </div>
+
+        <div style="flex: 1; min-height: 0; display: grid; grid-template-columns: 1.1fr 1fr; gap: 20px; overflow: hidden;">
+          <div style="display: flex; flex-direction: column; gap: 4px; overflow: hidden;">
+            <span class="lbl">最終段まで残った構成 ・ 短縮量の大きい順</span>
+            <table class="st">
+              <thead><tr><th style="width: 24px;"></th><th>短縮（秒）</th><th>pt</th><th style="text-align: left;">構成</th></tr></thead>
+              <tbody>
+                <tr class="on"><td>採用</td><td>−1.286 ± 0.024</td><td>900</td><td style="text-align: left;">末脚、直線加速、円弧のマエストロ、好転一息、深呼吸</td></tr>
+                <tr><td></td><td>−1.240 ± 0.026</td><td>860</td><td style="text-align: left;">末脚、直線加速、円弧のマエストロ、深呼吸</td></tr>
+                <tr><td></td><td>−1.058 ± 0.028</td><td>690</td><td style="text-align: left;">末脚、直線加速、円弧のマエストロ</td></tr>
+                <tr><td></td><td>−0.822 ± 0.021</td><td>450</td><td style="text-align: left;">末脚、直線加速</td></tr>
+                <tr><td></td><td>−0.611 ± 0.019</td><td>240</td><td style="text-align: left;">末脚</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 4px; overflow: hidden;">
+            <span class="lbl">単体で足したときの効き ・ 並べ替えの手がかり</span>
+            <table class="st">
+              <thead><tr><th style="text-align: left;">スキル</th><th>短縮（秒）</th><th>pt</th><th>ミリ秒/pt</th></tr></thead>
+              <tbody>
+                <tr style="background: var(--sunken);"><td style="text-align: left;">位置取り調整 <span class="lbl">（平均 1.4 回）</span></td><td>0.4120 ± 0.031</td><td>—</td><td>—</td></tr>
+                <tr><td style="text-align: left;">末脚 <span class="lbl num">Lv3</span></td><td>0.6110</td><td>240</td><td>2.546</td></tr>
+                <tr><td style="text-align: left;">直線加速</td><td>0.2280</td><td>210</td><td>1.086</td></tr>
+                <tr><td style="text-align: left;">円弧のマエストロ</td><td>0.1420</td><td>190</td><td>0.747</td></tr>
+                <tr><td style="text-align: left;">好転一息</td><td>0.0980</td><td>150</td><td>0.653</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <footer style="height: 28px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 20px; background: var(--surface); border-top: 1px solid var(--rule); color: var(--ink3); font-size: 11px;">
+    <span>逆算 ・ 探索 ともに共通乱数 0x4A19C2</span>
+    <span style="flex: 1;"></span>
+    <span>計算モデルは <a href="https://github.com/mee1080/umasim" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">mee1080/umasim</a> の移植 ・ AGPL v3 ・ <a href="https://github.com/promodeler314-a11y/raceemu" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">ソースはこちら</a></span>
+  </footer>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1600}}">
+class Component extends DCLogic {
+  state = { dark: false };
+  renderVals() {
+    const dark = this.state.dark;
+    return {
+      themeMode: dark ? 'dark' : 'light',
+      themeSegLightClass: dark ? '' : 'on',
+      themeSegDarkClass: dark ? 'on' : '',
+      setLight: () => this.setState({ dark: false }),
+      setDark: () => this.setState({ dark: true }),
+    };
+  }
+}
+</script>
+</body>
+</html>

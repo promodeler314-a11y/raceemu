@@ -17,6 +17,7 @@
       --rule: #dedbd3; --rule2: #c6c2b8;
       --ink: #12120f; --ink2: #52514e; --ink3: #8a877e;
       --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+      --accTint: #e7effa; --accInk: #1c5cab; --primaryBg: var(--ink); --primaryFg: #fff;
       --sans: "IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
       --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
       font-family: var(--sans); color: var(--ink); background: var(--paper);
@@ -34,16 +35,23 @@
     .seg > span { flex: 1; display: flex; align-items: center; justify-content: center;
       font-size: 12px; color: var(--ink2); background: var(--surface); border-right: 1px solid var(--rule); }
     .seg > span:last-child { border-right: 0; }
-    .seg > span.on { background: #e7effa; color: #1c5cab; font-weight: 600; }
+    .seg > span.on { background: var(--accTint); color: var(--accInk); font-weight: 600; }
+    .app[data-theme="dark"] {
+      --paper: #17181a; --surface: #1f2123; --sunken: #272a2d;
+      --rule: #34373b; --rule2: #46494e; --ink: #e9e7e2; --ink2: #aaa7a1; --ink3: #77746e;
+      --accTint: rgba(58, 138, 232, 0.22); --accInk: #7fb2ea;
+      --primaryBg: #e9e7e2; --primaryFg: #17181a;
+    }
     .chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px;
       border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface); font-size: 12px; }
     .sec-h { display: flex; align-items: center; gap: 8px; height: 34px; border-bottom: 1px solid var(--rule); }
     .sec-t { font-size: 13px; font-weight: 600; }
     .fld { display: flex; flex-direction: column; gap: 4px; }
+    .themeSeg > span { cursor: pointer; }
   </style>
 </helmet>
 
-<div class="app" style="width: 1440px; height: 1080px; display: flex; flex-direction: column;">
+<div class="app" data-theme="{{ themeMode }}" style="width: 1440px; height: 1080px; display: flex; flex-direction: column;">
 
   <!-- ── header ───────────────────────────────────────────── -->
   <header style="height: 52px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--rule2);">
@@ -53,17 +61,22 @@
       <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">結果</span>
       <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">比較</span>
       <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">詳細</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">探索</span>
     </nav>
     <div style="flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;">
       <span style="font-size: 13px; color: var(--ink2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">東京 芝 2400m ／ 差し・スピード寄り</span>
       <span class="lbl" style="flex: none;">未保存</span>
     </div>
     <div style="display: flex; align-items: center; gap: 8px; flex: none;">
+      <div class="seg themeSeg" style="width: 96px; height: 30px;">
+        <span class="{{ themeSegLightClass }}" onClick="{{ setLight }}">ライト</span>
+        <span class="{{ themeSegDarkClass }}" onClick="{{ setDark }}">ダーク</span>
+      </div>
       <span class="ctl" style="gap: 6px; color: var(--ink2);">
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6.5 9.5 9.5 6.5"/><path d="M7 4.5 8.6 2.9a2.4 2.4 0 0 1 3.4 3.4L10.4 7.9"/><path d="M9 11.5 7.4 13.1a2.4 2.4 0 0 1-3.4-3.4L5.6 8.1"/></svg>
         共有リンク
       </span>
-      <span class="ctl" style="background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600;">スナップショットを保存</span>
+      <span class="ctl" style="background: var(--primaryBg); border-color: var(--primaryBg); color: var(--primaryFg); font-weight: 600;">スナップショットを保存</span>
     </div>
   </header>
 
@@ -150,7 +163,7 @@
             スキル名で検索して追加
           </div>
           <div style="display: flex; flex-wrap: wrap; gap: 6px;">
-            <span class="chip" style="border-color: var(--s1); background: #e7effa;">末脚 <span class="lbl num" style="color: #1c5cab;">Lv3</span></span>
+            <span class="chip" style="border-color: var(--s1); background: var(--accTint);">末脚 <span class="lbl num" style="color: var(--accInk);">Lv3</span></span>
             <span class="chip">好転一息</span>
             <span class="chip">円弧のマエストロ</span>
             <span class="chip">直線加速</span>
@@ -256,13 +269,25 @@
     <span>設定は自動保存されます</span>
     <span>最終更新 14:02</span>
     <span style="flex: 1;"></span>
-    <span>計算モデルは mee1080/umasim の移植 ・ AGPL v3 ・ ソース</span>
+    <span>計算モデルは <a href="https://github.com/mee1080/umasim" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">mee1080/umasim</a> の移植 ・ AGPL v3 ・ <a href="https://github.com/promodeler314-a11y/raceemu" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">ソースはこちら</a></span>
   </footer>
 
 </div>
 </x-dc>
 <script data-dc-script data-props='{"$preview":{"width":1440,"height":1080}}'>
-class Component extends DCLogic {}
+class Component extends DCLogic {
+  state = { dark: false };
+  renderVals() {
+    const dark = this.state.dark;
+    return {
+      themeMode: dark ? 'dark' : 'light',
+      themeSegLightClass: dark ? '' : 'on',
+      themeSegDarkClass: dark ? 'on' : '',
+      setLight: () => this.setState({ dark: false }),
+      setDark: () => this.setState({ dark: true }),
+    };
+  }
+}
 </script>
 </body>
 </html>

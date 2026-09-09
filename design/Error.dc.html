@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+JP:wght@400;500;600&display=swap">
+  <style>
+    body { margin: 0; }
+    a { color: #2a78d6; text-decoration: none; }
+    a:hover { color: #1c5cab; text-decoration: underline; }
+    .app {
+      --paper: #f5f4f1; --surface: #fcfcfb; --sunken: #eeece7;
+      --rule: #dedbd3; --rule2: #c6c2b8;
+      --ink: #12120f; --ink2: #52514e; --ink3: #8a877e;
+      --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+      --diffTint: #f3f7fd; --primaryBg: var(--ink); --primaryFg: #fff;
+      --err: #b3261e; --errBg: #fbecea; --errInk: #7a1a15;
+      --sans: "IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+      font-family: var(--sans); color: var(--ink); background: var(--paper);
+      font-size: 13px; line-height: 1.5; -webkit-font-smoothing: antialiased;
+    }
+    .app * { box-sizing: border-box; }
+    .app[data-theme="dark"] {
+      --paper: #17181a; --surface: #1f2123; --sunken: #272a2d;
+      --rule: #34373b; --rule2: #46494e; --ink: #e9e7e2; --ink2: #aaa7a1; --ink3: #77746e;
+      --diffTint: rgba(58, 138, 232, 0.14); --primaryBg: #e9e7e2; --primaryFg: #17181a;
+      --err: #ff8a80; --errBg: rgba(179, 38, 30, 0.16); --errInk: #ffb4a9;
+    }
+    .lbl { font-size: 11px; color: var(--ink3); letter-spacing: 0.02em; }
+    .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+    .ctl { height: 30px; border: 1px solid var(--rule2); border-radius: 3px; background: var(--surface);
+      color: var(--ink); font-size: 12px; padding: 0 8px; display: flex; align-items: center; cursor: pointer; }
+    .panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 3px; }
+    .ptitle { font-size: 13px; font-weight: 600; }
+    .seg { display: flex; border: 1px solid var(--rule2); border-radius: 3px; overflow: hidden; }
+    .seg > span { flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer;
+      font-size: 12px; color: var(--ink2); background: var(--surface); border-right: 1px solid var(--rule); }
+    .seg > span:last-child { border-right: 0; }
+    .seg > span.on { background: var(--diffTint); color: #1c5cab; font-weight: 600; }
+    .tab { display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3); }
+    .tab.on { font-weight: 600; color: var(--ink); box-shadow: inset 0 -2px 0 var(--s1); }
+  </style>
+</helmet>
+
+<div class="app" data-theme="{{ themeMode }}" style="width: 1440px; height: 1160px; display: flex; flex-direction: column;">
+
+  <header style="height: 52px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--rule2);">
+    <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink2);">RACE EMULATOR</div>
+    <nav style="display: flex; gap: 2px; align-self: stretch;">
+      <span class="tab">設定</span>
+      <span class="tab on">結果</span>
+      <span class="tab">比較</span>
+      <span class="tab">詳細</span>
+      <span class="tab">探索</span>
+    </nav>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 8px; flex: none;">
+      <div class="seg" style="width: 96px; height: 30px;">
+        <span class="{{ themeSegLightClass }}" onClick="{{ setLight }}">ライト</span>
+        <span class="{{ themeSegDarkClass }}" onClick="{{ setDark }}">ダーク</span>
+      </div>
+      <span class="ctl" style="color: var(--ink2);">共有リンク</span>
+      <span class="ctl" style="background: var(--primaryBg); border-color: var(--primaryBg); color: var(--primaryFg); font-weight: 600;">スナップショットを保存</span>
+    </div>
+  </header>
+
+  <div style="flex: 1; min-height: 0; display: flex;">
+
+    <aside style="width: 280px; flex: none; background: var(--surface); border-right: 1px solid var(--rule2); padding: 16px; display: flex; flex-direction: column; gap: 16px; overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="ptitle">設定</span><span style="flex: 1;"></span><a href="#">編集</a>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);">
+          <span class="lbl">ウマ娘</span>
+          <span style="font-size: 12px;">差し ・ 好調 ・ 適性 A/A/A</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 2px; padding-bottom: 10px; border-bottom: 1px solid var(--rule);">
+          <span class="lbl">コース</span>
+          <span style="font-size: 12px;">東京 芝 2400m ・ 良</span>
+        </div>
+      </div>
+      <span class="lbl" style="margin-top: auto;">前回の完了実行 ・ 2:24.526 ・ 14:02</span>
+    </aside>
+
+    <section style="flex: 1; min-width: 0; padding: 24px; display: flex; flex-direction: column; gap: 14px;">
+
+      <!-- run bar (mid-run) -->
+      <div class="panel" style="flex: none; height: 60px; display: flex; align-items: center; gap: 14px; padding: 0 20px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span class="lbl">試行回数</span>
+          <div class="ctl num" style="width: 96px; justify-content: flex-end; font-size: 13px;">10,000</div>
+        </div>
+        <span class="ctl" style="border-color: var(--err); color: var(--err); font-weight: 600; height: 34px; padding: 0 16px;">中断</span>
+        <div style="display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0;">
+          <div style="flex: 1; height: 4px; border-radius: 2px; background: var(--sunken);"><div style="width: 42%; height: 4px; border-radius: 2px; background: var(--s1);"></div></div>
+          <span class="lbl num" style="flex: none;">実行中 ・ 4,200 / 10,000 ・ 経過 0.6 秒</span>
+        </div>
+      </div>
+
+      <!-- error banner -->
+      <div style="border: 1px solid var(--err); background: var(--errBg); border-radius: 3px; padding: 10px 14px; display: flex; align-items: flex-start; gap: 10px;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--err)" stroke-width="1.5" style="flex: none; margin-top: 1px;"><circle cx="8" cy="8" r="6.5"/><path d="M8 5v4"/><circle cx="8" cy="11.2" r="0.6" fill="var(--err)" stroke="none"/></svg>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 2px;">
+          <span style="font-size: 12px; font-weight: 600; color: var(--errInk);">試行 6,481 でエラーが発生しました</span>
+          <span style="font-size: 12px; color: var(--errInk);">乱数シードが範囲外でした。共通乱数の設定を確認してください。エラーが起きた試行以降は集計から除外しています。</span>
+        </div>
+        <span style="font-size: 12px; color: var(--errInk); text-decoration: underline; cursor: pointer; flex: none;">閉じる</span>
+      </div>
+
+      <!-- neutral notice -->
+      <div style="border: 1px solid var(--rule2); background: var(--sunken); border-radius: 3px; padding: 10px 14px; display: flex; align-items: flex-start; gap: 10px;">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--ink2)" stroke-width="1.5" style="flex: none; margin-top: 1px;"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v4"/><circle cx="8" cy="4.8" r="0.6" fill="var(--ink2)" stroke="none"/></svg>
+        <span style="flex: 1; font-size: 12px; color: var(--ink2);">スキルデータを更新しました。次回の実行から反映されます。</span>
+        <span style="font-size: 12px; color: var(--ink2); text-decoration: underline; cursor: pointer; flex: none;">閉じる</span>
+      </div>
+
+      <!-- interrupted state -->
+      <div class="panel" style="flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; padding: 24px;">
+        <div style="width: 520px; display: flex; flex-direction: column; gap: 18px; align-items: center; text-align: center;">
+          <svg width="44" height="44" viewBox="0 0 48 48" fill="none" stroke="var(--ink3)" stroke-width="1.6">
+            <circle cx="24" cy="24" r="18"/><path d="M19 17v14"/><path d="M29 17v14"/>
+          </svg>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-size: 18px; font-weight: 600;">42% で中断しました</div>
+            <div style="font-size: 13px; color: var(--ink2); text-wrap: pretty;">
+              4,200 件のうち、ここまでの結果はすでに集まっています。続きから再開すると、残り 5,800 件だけを追加で走らせます。
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <span class="ctl" style="height: 34px; padding: 0 16px;">ここまでの結果を見る</span>
+            <span class="ctl" style="height: 34px; padding: 0 16px; background: var(--primaryBg); border-color: var(--primaryBg); color: var(--primaryFg); font-weight: 600;">続きから再開する</span>
+          </div>
+        </div>
+      </div>
+
+    </section>
+  </div>
+
+  <footer style="height: 28px; flex: none; display: flex; align-items: center; gap: 16px; padding: 0 20px; background: var(--surface); border-top: 1px solid var(--rule); color: var(--ink3); font-size: 11px;">
+    <span>中断 ・ 42% ・ 4,200 / 10,000</span>
+    <span style="flex: 1;"></span>
+    <span>計算モデルは <a href="https://github.com/mee1080/umasim" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">mee1080/umasim</a> の移植 ・ AGPL v3 ・ <a href="https://github.com/promodeler314-a11y/raceemu" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">ソースはこちら</a></span>
+  </footer>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:1160}}">
+class Component extends DCLogic {
+  state = { dark: false };
+  renderVals() {
+    const dark = this.state.dark;
+    return {
+      themeMode: dark ? 'dark' : 'light',
+      themeSegLightClass: dark ? '' : 'on',
+      themeSegDarkClass: dark ? 'on' : '',
+      setLight: () => this.setState({ dark: false }),
+      setDark: () => this.setState({ dark: true }),
+    };
+  }
+}
+</script>
+</body>
+</html>

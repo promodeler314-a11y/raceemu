@@ -17,6 +17,7 @@
       --rule: #dedbd3; --rule2: #c6c2b8;
       --ink: #12120f; --ink2: #52514e; --ink3: #8a877e;
       --s1: #2a78d6; --s2: #eb6834; --s3: #1baf7a;
+      --accTint: #e7effa; --accInk: #1c5cab; --primaryBg: var(--ink); --primaryFg: #fff;
       --sans: "IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", sans-serif;
       --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
       font-family: var(--sans); color: var(--ink); background: var(--paper);
@@ -38,10 +39,21 @@
     table.t td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--rule);
       font-family: var(--mono); font-variant-numeric: tabular-nums; }
     table.t td:first-child { font-family: var(--sans); }
+    .app[data-theme="dark"] {
+      --paper: #17181a; --surface: #1f2123; --sunken: #272a2d;
+      --rule: #34373b; --rule2: #46494e; --ink: #e9e7e2; --ink2: #aaa7a1; --ink3: #77746e;
+      --accTint: rgba(58, 138, 232, 0.22); --accInk: #7fb2ea;
+      --primaryBg: #e9e7e2; --primaryFg: #17181a;
+    }
+    .seg { display: flex; border: 1px solid var(--rule2); border-radius: 3px; overflow: hidden; }
+    .seg > span { flex: 1; display: flex; align-items: center; justify-content: center; cursor: pointer;
+      font-size: 12px; color: var(--ink2); background: var(--surface); border-right: 1px solid var(--rule); }
+    .seg > span:last-child { border-right: 0; }
+    .seg > span.on { background: var(--accTint); color: var(--accInk); font-weight: 600; }
   </style>
 </helmet>
 
-<div class="app" style="width: 1440px; height: 1240px; display: flex; flex-direction: column;">
+<div class="app" data-theme="{{ themeMode }}" style="width: 1440px; height: 1240px; display: flex; flex-direction: column;">
 
   <header style="height: 52px; flex: none; display: flex; align-items: center; gap: 20px; padding: 0 20px; background: var(--surface); border-bottom: 1px solid var(--rule2);">
     <div style="font-family: var(--mono); font-size: 11px; letter-spacing: 0.14em; color: var(--ink2);">RACE EMULATOR</div>
@@ -50,13 +62,18 @@
       <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; font-weight: 600; color: var(--ink); box-shadow: inset 0 -2px 0 var(--s1);">結果</span>
       <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">比較</span>
       <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">詳細</span>
+      <span style="display: flex; align-items: center; padding: 0 12px; font-size: 13px; color: var(--ink3);">探索</span>
     </nav>
     <div style="flex: 1; display: flex; align-items: center; gap: 8px; min-width: 0;">
       <span style="font-size: 13px; color: var(--ink2);">東京 芝 2400m ／ 差し・スピード寄り</span>
     </div>
     <div style="display: flex; align-items: center; gap: 8px; flex: none;">
+      <div class="seg" style="width: 96px; height: 30px;">
+        <span class="{{ themeSegLightClass }}" onClick="{{ setLight }}">ライト</span>
+        <span class="{{ themeSegDarkClass }}" onClick="{{ setDark }}">ダーク</span>
+      </div>
       <span class="ctl" style="color: var(--ink2);">共有リンク</span>
-      <span class="ctl" style="background: var(--ink); border-color: var(--ink); color: #fff; font-weight: 600;">スナップショットを保存</span>
+      <span class="ctl" style="background: var(--primaryBg); border-color: var(--primaryBg); color: var(--primaryFg); font-weight: 600;">スナップショットを保存</span>
     </div>
   </header>
 
@@ -138,7 +155,7 @@
           <div style="display: flex; flex-direction: column; gap: 2px; padding-right: 24px; border-right: 1px solid var(--rule); min-width: 236px;">
             <span class="lbl">平均タイム</span>
             <span style="font-size: 44px; font-weight: 600; line-height: 1.1; letter-spacing: -0.01em;">2:24.312</span>
-            <span style="font-size: 12px; color: var(--ink2);">基準比 <span class="num">−0.214</span> 秒 短縮 ・ 標準誤差 <span class="num">±0.008</span> 秒</span>
+            <span style="font-size: 12px; color: var(--ink2);">基準スナップショット比 <span class="num">−0.214</span> 秒 短縮 ・ 標準誤差 <span class="num">±0.008</span> 秒</span>
           </div>
           <div style="flex: 1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 20px; align-items: center;">
             <div class="tile"><span class="lbl">最速タイム</span><span class="tval">2:23.108</span></div>
@@ -160,17 +177,17 @@
           </div>
           <div style="position: relative;">
             <svg width="1080" height="250" viewBox="0 0 1080 250">
-              <rect x="60" y="24" width="1000" height="176" fill="#fcfcfb"/>
-    <line x1="60" y1="200" x2="1060" y2="200" stroke="#e6e3dc" stroke-width="1"/>
-    <text x="52" y="203.5" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">0</text>
-    <line x1="60" y1="157.5" x2="1060" y2="157.5" stroke="#e6e3dc" stroke-width="1"/>
-    <text x="52" y="161" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">200</text>
-    <line x1="60" y1="115" x2="1060" y2="115" stroke="#e6e3dc" stroke-width="1"/>
-    <text x="52" y="118.5" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">400</text>
-    <line x1="60" y1="72.5" x2="1060" y2="72.5" stroke="#e6e3dc" stroke-width="1"/>
-    <text x="52" y="76" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">600</text>
-    <line x1="60" y1="30" x2="1060" y2="30" stroke="#e6e3dc" stroke-width="1"/>
-    <text x="52" y="33.5" text-anchor="end" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">800</text>
+              <rect x="60" y="24" width="1000" height="176" style="fill:var(--surface)"/>
+    <line x1="60" y1="200" x2="1060" y2="200" style="stroke:var(--rule)" stroke-width="1"/>
+    <text x="52" y="203.5" text-anchor="end" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">0</text>
+    <line x1="60" y1="157.5" x2="1060" y2="157.5" style="stroke:var(--rule)" stroke-width="1"/>
+    <text x="52" y="161" text-anchor="end" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">200</text>
+    <line x1="60" y1="115" x2="1060" y2="115" style="stroke:var(--rule)" stroke-width="1"/>
+    <text x="52" y="118.5" text-anchor="end" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">400</text>
+    <line x1="60" y1="72.5" x2="1060" y2="72.5" style="stroke:var(--rule)" stroke-width="1"/>
+    <text x="52" y="76" text-anchor="end" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">600</text>
+    <line x1="60" y1="30" x2="1060" y2="30" style="stroke:var(--rule)" stroke-width="1"/>
+    <text x="52" y="33.5" text-anchor="end" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">800</text>
     <rect x="60" y="198.3" width="23" height="1.7" rx="2" fill="#2a78d6"/>
     <rect x="85" y="197.2" width="23" height="2.8" rx="2" fill="#2a78d6"/>
     <rect x="110" y="195.5" width="23" height="4.5" rx="2" fill="#2a78d6"/>
@@ -211,19 +228,19 @@
     <rect x="985" y="197.2" width="23" height="2.8" rx="2" fill="#2a78d6"/>
     <rect x="1010" y="198.3" width="23" height="1.7" rx="2" fill="#2a78d6"/>
     <rect x="1035" y="199.2" width="23" height="0.8" rx="2" fill="#2a78d6"/>
-    <line x1="271.5" y1="24" x2="271.5" y2="200" stroke="#52514e" stroke-width="1" stroke-dasharray="3 3"/>
-    <text x="271.5" y="18" text-anchor="middle" font-size="10" fill="#52514e" font-family="IBM Plex Mono, monospace">p5 2:23.68</text>
-    <line x1="496.5" y1="24" x2="496.5" y2="200" stroke="#52514e" stroke-width="1" stroke-dasharray="3 3"/>
-    <text x="496.5" y="18" text-anchor="middle" font-size="10" fill="#52514e" font-family="IBM Plex Mono, monospace">p50 2:24.31</text>
-    <line x1="771.5" y1="24" x2="771.5" y2="200" stroke="#52514e" stroke-width="1" stroke-dasharray="3 3"/>
-    <text x="771.5" y="18" text-anchor="middle" font-size="10" fill="#52514e" font-family="IBM Plex Mono, monospace">p95 2:25.20</text>
-    <text x="71.5" y="218" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:23.0</text>
-    <text x="371.5" y="218" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:24.0</text>
-    <text x="696.5" y="218" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:25.0</text>
-    <text x="996.5" y="218" text-anchor="middle" font-size="10" fill="#8a877e" font-family="IBM Plex Mono, monospace">2:26.0</text>
-              <line x1="60" y1="200" x2="1060" y2="200" stroke="#c6c2b8" stroke-width="1"/>
-              <text x="60" y="243" font-size="10" fill="#8a877e">タイム</text>
-              <text x="1060" y="243" text-anchor="end" font-size="10" fill="#8a877e">試行数</text>
+    <line x1="271.5" y1="24" x2="271.5" y2="200" style="stroke:var(--ink2)" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="271.5" y="18" text-anchor="middle" font-size="10" style="fill:var(--ink2)" font-family="IBM Plex Mono, monospace">p5 2:23.68</text>
+    <line x1="496.5" y1="24" x2="496.5" y2="200" style="stroke:var(--ink2)" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="496.5" y="18" text-anchor="middle" font-size="10" style="fill:var(--ink2)" font-family="IBM Plex Mono, monospace">p50 2:24.31</text>
+    <line x1="771.5" y1="24" x2="771.5" y2="200" style="stroke:var(--ink2)" stroke-width="1" stroke-dasharray="3 3"/>
+    <text x="771.5" y="18" text-anchor="middle" font-size="10" style="fill:var(--ink2)" font-family="IBM Plex Mono, monospace">p95 2:25.20</text>
+    <text x="71.5" y="218" text-anchor="middle" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">2:23.0</text>
+    <text x="371.5" y="218" text-anchor="middle" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">2:24.0</text>
+    <text x="696.5" y="218" text-anchor="middle" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">2:25.0</text>
+    <text x="996.5" y="218" text-anchor="middle" font-size="10" style="fill:var(--ink3)" font-family="IBM Plex Mono, monospace">2:26.0</text>
+              <line x1="60" y1="200" x2="1060" y2="200" style="stroke:var(--rule2)" stroke-width="1"/>
+              <text x="60" y="243" font-size="10" style="fill:var(--ink3)">タイム</text>
+              <text x="1060" y="243" text-anchor="end" font-size="10" style="fill:var(--ink3)">試行数</text>
             </svg>
             <div style="position: absolute; left: 540px; top: 26px; background: var(--surface); border: 1px solid var(--rule2); border-radius: 3px; padding: 7px 9px; display: flex; flex-direction: column; gap: 2px; box-shadow: 0 1px 3px rgba(18,18,15,0.08);">
               <span class="num" style="font-size: 12px; font-weight: 600;">2:24.32 – 2:24.40</span>
@@ -245,16 +262,16 @@
               <th>2 回発動</th><th>フェーズ接続</th><th>速度上昇の無効</th><th style="width: 130px;">発動位置の分布</th>
             </tr></thead>
             <tbody>
-              <tr><td>末脚 <span class="lbl num">Lv3</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 82px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>98.2%</div></td><td>1612 m</td><td>—</td><td>84.1%</td><td>6.2%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="74" y="4" width="6" height="14" fill="#2a78d6"/><rect x="80" y="1" width="6" height="17" fill="#2a78d6"/><rect x="86" y="7" width="6" height="11" fill="#2a78d6"/><rect x="92" y="12" width="6" height="6" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>好転一息</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>100.0%</div></td><td>318 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="12" y="2" width="6" height="16" fill="#2a78d6"/><rect x="18" y="6" width="6" height="12" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>直線加速</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 77px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>91.4%</div></td><td>1735 m</td><td>12.0%</td><td>61.3%</td><td>18.7%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="82" y="3" width="6" height="15" fill="#2a78d6"/><rect x="88" y="6" width="6" height="12" fill="#2a78d6"/><rect x="94" y="10" width="6" height="8" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>円弧のマエストロ</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 63px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>74.6%</div></td><td>903 m</td><td>8.1%</td><td>—</td><td>2.4%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="30" y="5" width="6" height="13" fill="#2a78d6"/><rect x="36" y="2" width="6" height="16" fill="#2a78d6"/><rect x="64" y="9" width="6" height="9" fill="#2a78d6"/><rect x="70" y="11" width="6" height="7" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>深呼吸</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>100.0%</div></td><td>655 m</td><td>—</td><td>—</td><td>—</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="28" y="1" width="6" height="17" fill="#2a78d6"/><rect x="34" y="8" width="6" height="10" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>昂ぶり</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 52px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>62.0%</div></td><td>1268 m</td><td>—</td><td>41.2%</td><td>9.8%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="54" y="6" width="6" height="12" fill="#2a78d6"/><rect x="60" y="3" width="6" height="15" fill="#2a78d6"/><rect x="66" y="10" width="6" height="8" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>食い下がり</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 46px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>55.3%</div></td><td>2042 m</td><td>—</td><td>22.7%</td><td>31.4%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="98" y="4" width="6" height="14" fill="#2a78d6"/><rect x="104" y="8" width="6" height="10" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>危険回避 <span style="color: var(--ink3);">△</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 29px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>34.8%</div></td><td>1104 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="44" y="9" width="6" height="9" fill="#2a78d6"/><rect x="50" y="7" width="6" height="11" fill="#2a78d6"/><rect x="56" y="12" width="6" height="6" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>アガッてきた！ <span style="color: var(--ink3);">△</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 18px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>21.6%</div></td><td>1489 m</td><td>—</td><td>12.3%</td><td>4.1%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="70" y="11" width="6" height="7" fill="#2a78d6"/><rect x="76" y="13" width="6" height="5" fill="#2a78d6"/></svg></td></tr>
-              <tr><td>ハヤテ一文字</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: #eeece7;"><div style="width: 10px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>12.4%</div></td><td>236 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" fill="#f5f4f1"/><rect x="8" y="13" width="6" height="5" fill="#2a78d6"/><rect x="14" y="14" width="6" height="4" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>末脚 <span class="lbl num">Lv3</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 82px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>98.2%</div></td><td>1612 m</td><td>—</td><td>84.1%</td><td>6.2%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="74" y="4" width="6" height="14" fill="#2a78d6"/><rect x="80" y="1" width="6" height="17" fill="#2a78d6"/><rect x="86" y="7" width="6" height="11" fill="#2a78d6"/><rect x="92" y="12" width="6" height="6" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>好転一息</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 84px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>100.0%</div></td><td>318 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="12" y="2" width="6" height="16" fill="#2a78d6"/><rect x="18" y="6" width="6" height="12" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>直線加速</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 77px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>91.4%</div></td><td>1735 m</td><td>12.0%</td><td>61.3%</td><td>18.7%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="82" y="3" width="6" height="15" fill="#2a78d6"/><rect x="88" y="6" width="6" height="12" fill="#2a78d6"/><rect x="94" y="10" width="6" height="8" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>円弧のマエストロ</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 63px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>74.6%</div></td><td>903 m</td><td>8.1%</td><td>—</td><td>2.4%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="30" y="5" width="6" height="13" fill="#2a78d6"/><rect x="36" y="2" width="6" height="16" fill="#2a78d6"/><rect x="64" y="9" width="6" height="9" fill="#2a78d6"/><rect x="70" y="11" width="6" height="7" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>深呼吸</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 84px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>100.0%</div></td><td>655 m</td><td>—</td><td>—</td><td>—</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="28" y="1" width="6" height="17" fill="#2a78d6"/><rect x="34" y="8" width="6" height="10" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>昂ぶり</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 52px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>62.0%</div></td><td>1268 m</td><td>—</td><td>41.2%</td><td>9.8%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="54" y="6" width="6" height="12" fill="#2a78d6"/><rect x="60" y="3" width="6" height="15" fill="#2a78d6"/><rect x="66" y="10" width="6" height="8" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>食い下がり</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 46px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>55.3%</div></td><td>2042 m</td><td>—</td><td>22.7%</td><td>31.4%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="98" y="4" width="6" height="14" fill="#2a78d6"/><rect x="104" y="8" width="6" height="10" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>危険回避 <span style="color: var(--ink3);">△</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 29px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>34.8%</div></td><td>1104 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="44" y="9" width="6" height="9" fill="#2a78d6"/><rect x="50" y="7" width="6" height="11" fill="#2a78d6"/><rect x="56" y="12" width="6" height="6" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>アガッてきた！ <span style="color: var(--ink3);">△</span></td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 18px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>21.6%</div></td><td>1489 m</td><td>—</td><td>12.3%</td><td>4.1%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="70" y="11" width="6" height="7" fill="#2a78d6"/><rect x="76" y="13" width="6" height="5" fill="#2a78d6"/></svg></td></tr>
+              <tr><td>ハヤテ一文字</td><td><div style="display: flex; align-items: center; gap: 8px; justify-content: flex-end;"><div style="width: 84px; height: 6px; border-radius: 3px; background: var(--sunken);"><div style="width: 10px; height: 6px; border-radius: 3px; background: #2a78d6;"></div></div>12.4%</div></td><td>236 m</td><td>—</td><td>—</td><td>0.0%</td><td><svg width="120" height="18"><rect x="0" y="0" width="120" height="18" style="fill:var(--paper)"/><rect x="8" y="13" width="6" height="5" fill="#2a78d6"/><rect x="14" y="14" width="6" height="4" fill="#2a78d6"/></svg></td></tr>
             </tbody>
           </table>
         </div>
@@ -267,13 +284,25 @@
     <span>10,000 試行 ・ 基準シード 0x4A19C2</span>
     <span>最終実行 14:07</span>
     <span style="flex: 1;"></span>
-    <span>計算モデルは mee1080/umasim の移植 ・ AGPL v3 ・ ソース</span>
+    <span>計算モデルは <a href="https://github.com/mee1080/umasim" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">mee1080/umasim</a> の移植 ・ AGPL v3 ・ <a href="https://github.com/promodeler314-a11y/raceemu" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">ソースはこちら</a></span>
   </footer>
 
 </div>
 </x-dc>
 <script data-dc-script data-props='{"$preview":{"width":1440,"height":1240}}'>
-class Component extends DCLogic {}
+class Component extends DCLogic {
+  state = { dark: false };
+  renderVals() {
+    const dark = this.state.dark;
+    return {
+      themeMode: dark ? 'dark' : 'light',
+      themeSegLightClass: dark ? '' : 'on',
+      themeSegDarkClass: dark ? 'on' : '',
+      setLight: () => this.setState({ dark: false }),
+      setDark: () => this.setState({ dark: true }),
+    };
+  }
+}
 </script>
 </body>
 </html>

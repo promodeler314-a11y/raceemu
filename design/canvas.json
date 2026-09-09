@@ -3,7 +3,9 @@
     { "file": "Main.dc.html",    "title": "1 設定",         "x": 0,    "y": 0,    "w": 1440, "h": 1080 },
     { "file": "Summary.dc.html", "title": "2 実行とサマリ", "x": 1600, "y": 0,    "w": 1440, "h": 1240 },
     { "file": "Compare.dc.html", "title": "3 比較",         "x": 0,    "y": 1440, "w": 1440, "h": 1180 },
-    { "file": "Detail.dc.html",  "title": "4 詳細",         "x": 1600, "y": 1440, "w": 1440, "h": 1240 }
+    { "file": "Detail.dc.html",  "title": "4 詳細",         "x": 1600, "y": 1440, "w": 1440, "h": 1240 },
+    { "file": "Error.dc.html",   "title": "5 エラー・中断と再開", "x": 0,    "y": 2760, "w": 1440, "h": 1160 },
+    { "file": "Solve.dc.html",   "title": "6 逆算・組み合わせ探索", "x": 1600, "y": 2760, "w": 1440, "h": 1600 }
   ],
   "annotations": [
     { "id": "note-tone", "x": -400, "y": 0, "w": 300,
