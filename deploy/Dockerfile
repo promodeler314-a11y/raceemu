@@ -25,6 +25,8 @@ ENV NODE_ENV=production
 # 落としたい場合は tsx を dependencies に移すか、Worker を含めて
 # あらかじめコンパイルする必要がある。
 # 読み取りに使う tesseract.js は実行時に要るので dependencies にある。
+# sharp（読み取り前の二値化）はネイティブの二値を積む。build と runtime が
+# 同じ node:22-slim（glibc）なので、build 側で入れたものをそのまま使える。
 COPY --from=build /app /app
 ENV RACEEMU_STATIC_ROOT=/app/apps/web/dist
 ENV RACEEMU_TESSDATA=/app/tessdata

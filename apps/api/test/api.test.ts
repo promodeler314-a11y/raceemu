@@ -57,6 +57,7 @@ function config(overrides: Partial<Config> = {}): Config {
     staticRoot: null,
     tessdataPath: null,
     maxImageBytes: 8 * 1024 * 1024,
+    ocrThreshold: 128,
     ...overrides,
   };
 }

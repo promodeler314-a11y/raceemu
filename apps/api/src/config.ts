@@ -78,6 +78,12 @@ export interface Config {
   readonly tessdataPath: string | null;
   /** 読み取りに送れる画像の大きさ */
   readonly maxImageBytes: number;
+  /**
+   * 読み取り前の二値化の閾値。0 から 255。
+   * 合成した見本で 170 が良かった（docs/ocr-design.md 5 節）が、
+   * 本物の画面では確かめていない。合わなければコードを変えずに調整できる。
+   */
+  readonly ocrThreshold: number;
 }
 
 function num(name: string, fallback: number): number {
@@ -120,5 +126,6 @@ export function loadConfig(): Config {
     staticRoot: process.env['RACEEMU_STATIC_ROOT'] ?? null,
     tessdataPath: process.env['RACEEMU_TESSDATA'] ?? null,
     maxImageBytes: num('RACEEMU_MAX_IMAGE_BYTES', 8 * 1024 * 1024),
+    ocrThreshold: num('RACEEMU_OCR_THRESHOLD', 170),
   };
 }
