@@ -90,10 +90,13 @@ $ curl -s -H "Authorization: Bearer $(cat /tmp/t)" https://ghcr.io/v2/promodeler
 
 ```
 kubectl apply -f deploy/k8s.yaml
-kubectl rollout status deploy/raceemu
-kubectl port-forward deploy/raceemu 8080:8080   # 手元から確かめる
+kubectl rollout status deploy/raceemu -n raceemu
+kubectl port-forward deploy/raceemu 8080:8080 -n raceemu   # 手元から確かめる
 curl -s localhost:8080/api/health
 ```
+
+マニフェストは `raceemu` という名前空間を作ってその中に置く。
+名前空間を指定しないと、`kubectl apply` を実行した人の現在のコンテキストの名前空間にそのまま入ってしまい、次の 5.3 節で使う Service の DNS 名が人によって変わってしまう。
 
 `/api/health` が返す `concurrencySource` が `cgroup` であれば、[設計](server-design.md)の 4.1 節の前提どおりに並列数を読めている。
 `availableParallelism` と出ていたらクォータを読めておらず、ノードのコア数で走っている。
@@ -103,13 +106,17 @@ curl -s localhost:8080/api/health
 タグが同じ `main` のままなので、`apply` では何も変わらない。
 
 ```
-kubectl rollout restart deploy/raceemu
+kubectl rollout restart deploy/raceemu -n raceemu
 ```
 
 ### 5.3 外に出す
 
-Service（`raceemu.default.svc.cluster.local:80`）を cloudflared の宛先にする。
+Service（`raceemu.raceemu.svc.cluster.local:80`）を cloudflared の宛先にする。
 Ingress は要らない。
+
+トンネルをリモート管理（`cloudflared tunnel run --token ...`）で立てている場合、宛先の設定はクラスタ内ではなく Cloudflare のダッシュボード（Zero Trust → Networks → Tunnels → 該当のトンネル → Public Hostname）にある。
+Service の URL 欄にはスキーム（`http://`）を付けず、ホスト名とポートだけを入れる。
+Type を別に選ぶ欄がある。
 
 **認証は持たせていない。**
 [設計](server-design.md)の 5 節のとおり、Cloudflare Access を前に置く前提である。

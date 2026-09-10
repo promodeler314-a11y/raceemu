@@ -6,14 +6,25 @@
 # ghcr.io に置く。手元で組んで転送する手順を挟まない。
 # 版を固定したいときは :main を :sha-xxxxxxx に書き換える。
 #
+# 名前空間を明示している。指定が無いと kubectl apply を実行した人の
+# 現在のコンテキストの名前空間にそのまま入ってしまい、Service の DNS 名
+# （<名前>.<名前空間>.svc.cluster.local）が人によって変わる。
+# cloudflared の宛先を後から調べ直す手間を無くすため、ここで固定する。
+#
 # 認証は持たせていない。Cloudflare Access を前に置く前提である。
-# 外への口は Service（raceemu.default.svc.cluster.local:80）を
+# 外への口は Service（raceemu.raceemu.svc.cluster.local:80）を
 # cloudflared の宛先にすれば足りる。Ingress は要らない。
 # docs/server-design.md の 5 節と docs/deploy.md の 5 節を参照。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: raceemu
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: raceemu
+  namespace: raceemu
 spec:
   replicas: 1
   selector:
@@ -64,6 +75,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: raceemu
+  namespace: raceemu
 spec:
   selector: { app: raceemu }
   ports:
