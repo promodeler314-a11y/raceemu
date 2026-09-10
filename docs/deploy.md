@@ -69,10 +69,22 @@ Pages は誰でも開ける置き場であり、k3s は[探索をサーバ側で
 pull request では組むだけで置かない。
 `Dockerfile` が壊れていることにマージしてから気付く、という事故をここで止める。
 
-**最初の一回だけ、パッケージを公開に切り替える。**
-GitHub Container Registry のパッケージは、公開リポジトリから置いても既定では非公開である。
-`https://github.com/users/promodeler314-a11y/packages/container/raceemu/settings` で公開にすると、クラスタ側に資格情報が要らなくなる。
-非公開のままにする場合は、`ghcr.io` を引ける `imagePullSecret` を作って `deploy/k8s.yaml` の `spec.template.spec` に足す。
+**パッケージは公開で置かれる。**
+最初の 1 本を置いたあと、資格情報なしで引けることを確かめた。
+
+```
+$ curl -s "https://ghcr.io/token?scope=repository:promodeler314-a11y/raceemu:pull&service=ghcr.io" | jq -r .token > /tmp/t
+$ curl -s -H "Authorization: Bearer $(cat /tmp/t)" https://ghcr.io/v2/promodeler314-a11y/raceemu/tags/list
+{"name":"promodeler314-a11y/raceemu","tags":["main","sha-c8f79e6"]}
+```
+
+クラスタ側に `imagePullSecret` は要らない。
+非公開にしたくなった場合は、パッケージの設定で切り替えたうえで、`ghcr.io` を引ける `imagePullSecret` を作って `deploy/k8s.yaml` の `spec.template.spec` に足す。
+
+**組んでいるのは `linux/amd64` だけである。**
+ノードが arm64 なら引けない。
+そのときはワークフローの `build-push-action` に `platforms: linux/amd64,linux/arm64` を足す。
+組む時間は倍以上になる（QEMU を挟むため）ので、要ると分かってから足す。
 
 ### 5.2 置く
 
