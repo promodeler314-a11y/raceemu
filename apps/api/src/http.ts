@@ -134,6 +134,8 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         concurrency: config.concurrency,
         concurrencySource: config.concurrencySource,
         maxRacesPerJob: config.maxRacesPerJob,
+        // 読み取りが使える版かどうかを、画面を触らずに確かめられるようにする
+        ocr: ocr !== null,
         ...runner.stats(),
       });
       return;

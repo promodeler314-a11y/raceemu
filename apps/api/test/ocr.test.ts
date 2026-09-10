@@ -76,6 +76,17 @@ describe('読み取りの口', () => {
     }
   }
 
+  it('/api/health に読み取りが使えるかどうかを出す', async () => {
+    await withServer({}, async (base) => {
+      const off = (await (await fetch(`${base}/api/health`)).json()) as { ocr: boolean };
+      expect(off.ocr).toBe(false);
+    });
+    await withServer({ tessdataPath: TESSDATA }, async (base) => {
+      const on = (await (await fetch(`${base}/api/health`)).json()) as { ocr: boolean };
+      expect(on.ocr).toBe(true);
+    });
+  });
+
   it('学習データの置き場が無ければ 501 を返す', async () => {
     await withServer({}, async (base) => {
       const res = await fetch(`${base}/api/ocr/skills`, {

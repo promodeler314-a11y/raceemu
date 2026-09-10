@@ -13,6 +13,25 @@ import { Panel } from './Inputs.tsx';
 const NO_ENDPOINT =
   '読み取りの口が無い。GitHub Pages に置いた版はサーバを持たないので、この機能は自前で立てた版でだけ使える。';
 
+/**
+ * JSON でない応答が返ったときに、何が起きたのかを言い分ける。
+ *
+ * 静的配信だけの環境なら口が無い。
+ * それ以外で HTML が返るのは、途中に認証や proxy の画面が挟まっているか、
+ * サーバが M10 より前の版であるときである。
+ * どちらなのかを人が切り分けられるよう、状態番号をそのまま出す。
+ */
+function explainNonJson(res: Response): string {
+  if (res.redirected) {
+    return `読み取りの口ではなく別の画面に飛ばされた（最終 ${res.status}）。認証が切れていないか確かめる。`;
+  }
+  if (res.status === 404 || res.status === 405) return NO_ENDPOINT;
+  return (
+    `サーバが JSON ではない応答を返した（${res.status}）。` +
+    'サーバの版が古いか、途中に認証や proxy の画面が挟まっている。/api/health を開くと切り分けられる。'
+  );
+}
+
 interface Match {
   readonly id: string;
   readonly name: string;
@@ -62,7 +81,7 @@ export function ImportPanel() {
       // 中身が JSON かどうかで判断する。HTML を JSON として読むと落ちる。
       const contentType = res.headers.get('content-type') ?? '';
       if (!contentType.includes('application/json')) {
-        setMessage(NO_ENDPOINT);
+        setMessage(explainNonJson(res));
         return;
       }
 
@@ -70,7 +89,7 @@ export function ImportPanel() {
       try {
         body = (await res.json()) as typeof body;
       } catch {
-        setMessage(NO_ENDPOINT);
+        setMessage(explainNonJson(res));
         return;
       }
 
