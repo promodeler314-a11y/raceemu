@@ -52,6 +52,39 @@ describe.skipIf(!available)('画面の読み取り', () => {
   }, 120000);
 });
 
+describe('読み取りの失敗', () => {
+  // tesseract.js は errorHandler を渡さないと worker の受け口で throw し、
+  // uncaughtException になってプロセスごと落ちる。渡すと今度は promise が
+  // 解決も拒否もしないまま残る。どちらでもないことを押さえる。
+  it('学習データが無ければ、理由の付いた失敗になる', async () => {
+    const broken = new OcrEngine({
+      tessdataPath: '/does-not-exist',
+      startupTimeoutMs: 20_000,
+      recognizeTimeoutMs: 20_000,
+    });
+    try {
+      await expect(broken.recognize(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).rejects.toThrow(
+        /読み取りに失敗した/,
+      );
+    } finally {
+      await broken.dispose();
+    }
+  }, 60000);
+
+  it.skipIf(!available)('失敗しても次の依頼は通る', async () => {
+    const engine2 = new OcrEngine({ tessdataPath: TESSDATA, startupTimeoutMs: 60_000 });
+    try {
+      // 画像として読めないものを送って失敗させる
+      await expect(engine2.recognize(Buffer.from('画像ではない'))).rejects.toThrow();
+      // worker を畳んで作り直しているので、次は通る
+      const { text } = await engine2.recognize(readFileSync('apps/api/test/fixtures/skill-list.png'));
+      expect(text).toContain('狼');
+    } finally {
+      await engine2.dispose();
+    }
+  }, 120000);
+});
+
 describe('読み取りの口', () => {
   const config: Config = {
     port: 0, concurrency: 1, concurrencySource: 'env', maxRunning: 1, maxQueued: 1,
@@ -75,6 +108,17 @@ describe('読み取りの口', () => {
       await new Promise<void>((done) => server.close(() => done()));
     }
   }
+
+  it('/api/health に読み取りが使えるかどうかを出す', async () => {
+    await withServer({}, async (base) => {
+      const off = (await (await fetch(`${base}/api/health`)).json()) as { ocr: boolean };
+      expect(off.ocr).toBe(false);
+    });
+    await withServer({ tessdataPath: TESSDATA }, async (base) => {
+      const on = (await (await fetch(`${base}/api/health`)).json()) as { ocr: boolean };
+      expect(on.ocr).toBe(true);
+    });
+  });
 
   it('学習データの置き場が無ければ 501 を返す', async () => {
     await withServer({}, async (base) => {
@@ -108,6 +152,23 @@ describe('読み取りの口', () => {
       expect(res.status).toBe(413);
     });
   });
+
+  it('読み取りが失敗しても JSON を返す（HTML にしない）', async () => {
+    await withServer(
+      { tessdataPath: '/does-not-exist', maxImageBytes: 8 * 1024 * 1024 },
+      async (base) => {
+        const res = await fetch(`${base}/api/ocr/skills`, {
+          method: 'POST',
+          headers: { 'content-type': 'image/png' },
+          body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+        });
+        expect(res.status).toBe(500);
+        expect(res.headers.get('content-type')).toContain('application/json');
+        const body = (await res.json()) as { error: string };
+        expect(body.error).toMatch(/読み取りに失敗した/);
+      },
+    );
+  }, 60000);
 
   it.skipIf(!available)('画像を送るとスキルが返る', async () => {
     await withServer({ tessdataPath: TESSDATA, maxImageBytes: 8 * 1024 * 1024 }, async (base) => {

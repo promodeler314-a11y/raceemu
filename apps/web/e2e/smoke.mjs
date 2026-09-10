@@ -16,6 +16,14 @@ const fail = (message) => {
 };
 
 const server = createServer(async (req, res) => {
+  // GitHub Pages と同じ振る舞いにする。POST は受け付けず、本文は HTML で返す。
+  // 「JSON が返る前提」で書いた画面があると、ここで初めて露見する。
+  if (req.method !== 'GET' && req.method !== 'HEAD') {
+    req.resume();
+    res.writeHead(405, { 'content-type': 'text/html; charset=utf-8' });
+    res.end('<!DOCTYPE html><html><body><h1>405</h1></body></html>');
+    return;
+  }
   try {
     const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
     const file = join(root, path === '/' ? 'index.html' : path);
@@ -323,6 +331,20 @@ const optionState = await page.evaluate(() => ({
     .filter((v) => v === 'ALL').length,
 }));
 if (optionState.adjust === 0) fail('スキル発動率の選択が反映されていない');
+
+// 読み取り: 静的配信だけの環境では、口が無いことを伝えて終わる。
+// 状態番号ではなく中身が JSON かどうかで判断していないと、HTML を読もうとして落ちる。
+await goTab('設定');
+const importSection = 'section.rounded-sm:has(h2:text("画面から取り込む"))';
+await page.setInputFiles(`${importSection} input[type=file]`, 'apps/api/test/fixtures/skill-list.png');
+await page.waitForTimeout(1200);
+const importNotes = await page.$$eval(`${importSection} p`, (ps) => ps.map((p) => p.textContent?.trim() ?? ''));
+const importNote = importNotes[importNotes.length - 1];
+console.log('--- 読み取り（サーバ無し）:', importNote);
+if (!importNote.includes('読み取りの口が無い')) {
+  fail(`口が無いことを伝えていない: ${importNote}`);
+}
+if (/JSON|Unexpected token/i.test(importNote)) fail(`生の例外が画面に出ている: ${importNote}`);
 
 // 共有: URL に載せて開き直し、設定が戻ることを確かめる
 await page.click('button:has-text("設定を URL に")');
