@@ -122,8 +122,21 @@ export function ImportPanel() {
   return (
     <Panel title="画面から取り込む">
       <p className="text-xs text-ink3">
-        スキル画面の写真を送ると、写っているスキル名を読み取って所持スキルの候補にする。
+        スキル一覧の写真を送ると、写っているスキル名を読み取って所持スキルの候補にする。
         読み取りはサーバ側で動くので、自前で立てた版でだけ使える。
+      </p>
+      <p className="mt-1 text-xs text-ink3">
+        ステータスやキャラの写真を含む画面全体ではなく、スキル名が並んだ部分だけを切り抜いて送る。
+        アイコンや背景の模様が文字に被ると、読み取りの精度が大きく落ちる（
+        <a
+          href="https://github.com/promodeler314-a11y/raceemu/blob/main/docs/ocr-design.md"
+          target="_blank"
+          rel="noreferrer"
+          className="underline"
+        >
+          詳細
+        </a>
+        ）。
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <input
