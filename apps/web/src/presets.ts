@@ -1,5 +1,5 @@
 import type { TrackRef, UmaStatus } from '../../../packages/sim/src/setting.ts';
-import { gameData } from './store.ts';
+import { gameData } from './skills.ts';
 
 /**
  * 最初に開いた人が押せる設定。
