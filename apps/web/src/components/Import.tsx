@@ -9,6 +9,10 @@ import { Panel } from './Inputs.tsx';
  * GitHub Pages に置いた版にはサーバが無いので、その場合は口が無いことを伝える。
  */
 
+/** 口そのものが無いときに出す文言 */
+const NO_ENDPOINT =
+  '読み取りの口が無い。GitHub Pages に置いた版はサーバを持たないので、この機能は自前で立てた版でだけ使える。';
+
 interface Match {
   readonly id: string;
   readonly name: string;
@@ -52,13 +56,28 @@ export function ImportPanel() {
         headers: { 'content-type': file.type || 'image/png' },
         body: file,
       });
-      if (res.status === 404 || res.status === 501) {
-        setMessage(
-          '読み取りの口が無い。GitHub Pages に置いた版はサーバを持たないので、この機能は自前で立てた版でだけ使える。',
-        );
+
+      // 静的ファイルしか置いていない環境では、POST に HTML が返る。
+      // 状態番号は環境によって 404 にも 405 にも 200 にもなるので、
+      // 中身が JSON かどうかで判断する。HTML を JSON として読むと落ちる。
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!contentType.includes('application/json')) {
+        setMessage(NO_ENDPOINT);
         return;
       }
-      const body = (await res.json()) as { matches?: Match[]; error?: string; elapsedMs?: number };
+
+      let body: { matches?: Match[]; error?: string; elapsedMs?: number };
+      try {
+        body = (await res.json()) as typeof body;
+      } catch {
+        setMessage(NO_ENDPOINT);
+        return;
+      }
+
+      if (res.status === 404) {
+        setMessage(NO_ENDPOINT);
+        return;
+      }
       if (!res.ok) {
         setMessage(body.error ?? `読み取りに失敗した（${res.status}）`);
         return;
