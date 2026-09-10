@@ -10,6 +10,8 @@ import {
   skillChoices,
   useStore,
 } from '../store.ts';
+import { NO_CHARA, skillIndex } from '../skills.ts';
+import type { SkillData } from '../../../../packages/sim/src/skill/types.ts';
 import type {
   PositionKeepMode,
   RandomPosition,
@@ -357,6 +359,106 @@ export function UmaInput() {
   );
 }
 
+/** 固有と進化の札。押すと持つかどうかが変わる。 */
+function SkillChip({
+  skill,
+  selected,
+  onToggle,
+}: {
+  skill: SkillData;
+  selected: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onToggle}
+      className={`rounded-sm border px-2 py-1 text-sm ${
+        selected ? 'border-acc-ink bg-acc-tint text-acc-ink' : 'border-rule2 text-ink2'
+      }`}
+    >
+      {selected ? '✓ ' : ''}
+      {skill.name}
+    </button>
+  );
+}
+
+/**
+ * キャラと、そのキャラの固有・進化。
+ *
+ * 本家は固有と進化を一覧に出さず、キャラを選んでから取らせる。
+ * 誰の固有なのかが画面に出ないと、別のキャラの固有を混ぜても気付けない。
+ * 固有レベルもここに置く。固有を持っていないときは効かないので、そのときは
+ * 触れないようにしてある。
+ */
+function UniqueSkillInput() {
+  const charaName = useStore((s) => s.uma.charaName);
+  const uniqueLevel = useStore((s) => s.uma.uniqueLevel);
+  const setUma = useStore((s) => s.setUma);
+  const setCharaName = useStore((s) => s.setCharaName);
+  const skillIds = useStore((s) => s.skillIds);
+  const toggleSkill = useStore((s) => s.toggleSkill);
+
+  const uniques = skillIndex.uniquesOf(charaName);
+  const evos = skillIndex.evosOf(charaName);
+  const hasUnique = uniques.some((skill) => skillIds.includes(skill.id));
+
+  return (
+    <div className="rounded-sm border border-rule p-2">
+      <Field label="キャラ（固有と進化）">
+        <select
+          className={fieldCls}
+          value={charaName}
+          onChange={(e) => setCharaName(e.target.value)}
+        >
+          <option value={NO_CHARA}>未選択</option>
+          {skillIndex.charas.map((chara) => (
+            <option key={chara} value={chara}>
+              {chara}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {charaName !== NO_CHARA && (
+        <div className="mt-2 flex flex-wrap items-center gap-1">
+          {uniques.map((skill) => (
+            <SkillChip
+              key={skill.id}
+              skill={skill}
+              selected={skillIds.includes(skill.id)}
+              onToggle={() => toggleSkill(skill.id)}
+            />
+          ))}
+          <label className="ml-1 flex items-center gap-1 text-xs text-ink3">
+            固有Lv
+            <select
+              className="rounded-sm border border-rule2 bg-surface px-1 py-0.5 text-xs disabled:text-ink3"
+              value={uniqueLevel}
+              disabled={!hasUnique}
+              onChange={(e) => setUma({ uniqueLevel: Number(e.target.value) })}
+            >
+              {[1, 2, 3, 4, 5, 6].map((level) => (
+                <option key={level} value={level}>
+                  {level}
+                </option>
+              ))}
+            </select>
+          </label>
+          {evos.map((skill) => (
+            <SkillChip
+              key={skill.id}
+              skill={skill}
+              selected={skillIds.includes(skill.id)}
+              onToggle={() => toggleSkill(skill.id)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SkillInput() {
   const skillIds = useStore((s) => s.skillIds);
   const toggleSkill = useStore((s) => s.toggleSkill);
@@ -368,29 +470,30 @@ export function SkillInput() {
 
   const matched = useMemo(() => {
     if (query.trim() === '') return [];
-    return skillChoices.filter((c) => c.name.includes(query.trim())).slice(0, 40);
+    return skillChoices.filter((skill) => skill.name.includes(query.trim())).slice(0, 40);
   }, [query]);
 
   const selected = skillIds.map((id) => gameData.skillsById.get(id)!).filter(Boolean);
 
   return (
     <Panel title={`スキル（${skillIds.length} 個）`} variant="plain">
+      <UniqueSkillInput />
       <input
-        className={fieldCls}
+        className={`${fieldCls} mt-2`}
         placeholder="スキル名で検索"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
       />
       {matched.length > 0 && (
         <ul className="mt-2 max-h-48 overflow-y-auto rounded-sm border border-rule text-sm">
-          {matched.map(({ name, skill }) => (
+          {matched.map((skill) => (
             <li key={skill.id}>
               <button
                 type="button"
                 className="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-sunken"
                 onClick={() => toggleSkill(skill.id)}
               >
-                <span>{name}</span>
+                <span>{skill.name}</span>
                 <span className="text-xs text-ink3">
                   {skillIds.includes(skill.id) ? '選択中' : skill.rarity}
                 </span>
@@ -402,7 +505,7 @@ export function SkillInput() {
       {selected.length > 0 && (
         <>
           <div className="mt-3 overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm" data-testid="held-skills">
               <thead>
                 <tr className="border-b border-rule text-xs text-ink3">
                   <th scope="col" className="py-1 text-left font-normal">スキル</th>
@@ -421,20 +524,30 @@ export function SkillInput() {
                   >
                     <th scope="row" className="py-1 text-left font-normal">
                       {skill.name}
+                      {skill.holder !== null && (
+                        <span className="ml-1 text-[11px] text-ink3">
+                          {skill.rarity === 'unique' ? '固有' : '進化'}
+                        </span>
+                      )}
                     </th>
                     <td className="py-1 text-right">
-                      <select
-                        className="rounded-sm border border-rule2 bg-surface px-1 py-0.5 text-xs"
-                        value={hintLevels[skill.id] ?? 0}
-                        aria-label={`${skill.name} のヒントレベル`}
-                        onChange={(e) => setHintLevel(skill.id, Number(e.target.value))}
-                      >
-                        {[0, 1, 2, 3, 4, 5].map((level) => (
-                          <option key={level} value={level}>
-                            Lv{level}
-                          </option>
-                        ))}
-                      </select>
+                      {/* 固有はスキルポイントで取るものではないので、ヒントも効かない。 */}
+                      {skill.rarity === 'unique' ? (
+                        <span className="text-xs text-ink3">—</span>
+                      ) : (
+                        <select
+                          className="rounded-sm border border-rule2 bg-surface px-1 py-0.5 text-xs"
+                          value={hintLevels[skill.id] ?? 0}
+                          aria-label={`${skill.name} のヒントレベル`}
+                          onChange={(e) => setHintLevel(skill.id, Number(e.target.value))}
+                        >
+                          {[0, 1, 2, 3, 4, 5].map((level) => (
+                            <option key={level} value={level}>
+                              Lv{level}
+                            </option>
+                          ))}
+                        </select>
+                      )}
                     </td>
                     <td className="py-1 text-right tabular-nums">{costModel.cost(skill.id)}</td>
                     <td className="py-1 text-right">

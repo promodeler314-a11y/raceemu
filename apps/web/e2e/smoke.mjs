@@ -127,6 +127,33 @@ if (skillRows.length !== 2) fail(`スキルの行数が想定と違う: ${skillR
 await goTab('詳細');
 console.log('uPlot の図の数:', await page.locator('.u-wrap').count());
 
+// 固有スキル: 一覧には出ず、キャラを選んで取る
+await goTab('設定');
+await page.fill('input[placeholder="スキル名で検索"]', 'シューティングスター');
+const sameName = await page.locator('ul li button:has-text("シューティングスター")').allTextContents();
+// 固有と継承版は名前が同じで、一覧に出てよいのは継承版だけである。
+if (sameName.length !== 1 || !sameName[0].includes('inherit')) {
+  fail(`一覧に固有が出ている: ${sameName.join(' / ')}`);
+}
+await page.fill('input[placeholder="スキル名で検索"]', '');
+
+const charaSelect = page.getByLabel('キャラ（固有と進化）');
+await charaSelect.selectOption('[スペシャルドリーマー]スペシャルウィーク');
+const heldNames = async () =>
+  (await page.$$eval('[data-testid="held-skills"] tbody tr th', (ths) =>
+    ths.map((th) => th.textContent?.trim() ?? ''),
+  ));
+const withUnique = await heldNames();
+console.log('--- キャラを選んだあとの所持スキル:', withUnique.join(' / '));
+if (!withUnique.some((name) => name.startsWith('シューティングスター') && name.includes('固有'))) {
+  fail('キャラを選んでも固有が入らない');
+}
+await charaSelect.selectOption('');
+const withoutUnique = await heldNames();
+if (withoutUnique.some((name) => name.startsWith('シューティングスター'))) {
+  fail('キャラを未選択に戻しても固有が残っている');
+}
+
 // 順位条件: フィールドを入れると、脚質と噛み合わないスキルの発動率が落ちる
 await goTab('設定');
 await page.fill('input[placeholder="スキル名で検索"]', '真骨頂');

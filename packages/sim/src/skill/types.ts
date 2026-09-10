@@ -466,6 +466,11 @@ export class SkillData {
      * （apps/web/vite.config.ts の trimSkillData）。
      */
     readonly info: readonly string[],
+    /**
+     * 固有と進化の持ち主。`[勝負服]ウマ娘名` の形で、他のレア度では null。
+     * 画面でキャラを選ぶときに引く。Worker 側では落としてあり、常に null になる。
+     */
+    readonly holder: string | null = null,
   ) {
     this.invokes = invokes;
   }
@@ -481,6 +486,7 @@ export class SkillData {
       raw.activateLot ?? 1,
       (raw.invokes ?? []).map((inv) => Invoke.fromRaw(inv)),
       raw.info ?? [],
+      raw.holder ?? null,
     );
   }
 
@@ -495,6 +501,7 @@ export class SkillData {
       this.activateLot,
       this.invokes.map((inv) => inv.applyLevel(level)),
       this.info,
+      this.holder,
     );
   }
 }

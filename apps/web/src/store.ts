@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { loadGameData } from '../../../packages/data/src/browser.ts';
 import { browserWorkerFactory } from '../../../packages/sim/src/parallel/browser.ts';
 import { SimulationCancelled, WorkerPool } from '../../../packages/sim/src/parallel/pool.ts';
 import { toSerializable, toSkillSummaries, type SkillSummary } from '../../../packages/sim/src/parallel/protocol.ts';
@@ -25,9 +24,10 @@ import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts'
 import { decodeShareState, encodeShareState } from './share.ts';
 import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
 import { resolveSkillIds, type Preset } from './presets.ts';
+import { gameData, skillChoices, skillIndex, NO_CHARA } from './skills.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
-export const gameData = loadGameData();
+export { gameData, skillChoices };
 const system = defaultSystemSetting();
 
 /**
@@ -63,10 +63,6 @@ export function defaultRunOptions(): RunOptions {
 }
 
 export const debuffTypes = DEBUFF_TYPES;
-
-export const skillChoices = [...gameData.skillsByName.entries()]
-  .map(([name, list]) => ({ name, skill: list[0]! }))
-  .sort((a, b) => a.name.localeCompare(b.name, 'ja'));
 
 let pool: WorkerPool | null = null;
 function getPool(): WorkerPool {
@@ -223,6 +219,8 @@ interface AppState {
   setTrack: (patch: Partial<TrackRef>) => void;
   toggleSkill: (id: string) => void;
   clearSkills: () => void;
+  /** キャラを選ぶ。固有と進化はここからしか入らない。 */
+  setCharaName: (charaName: string) => void;
   /** プリセットを丸ごと当てる。ウマ娘・コース・スキルを一度に差し替える。 */
   applyPreset: (preset: Preset) => void;
   setCount: (count: number) => void;
@@ -249,6 +247,19 @@ interface AppState {
   applyShared: () => boolean;
   /** 保存してある設定とスナップショットを読み、そのあと共有 URL を当てる。 */
   bootstrap: () => Promise<void>;
+}
+
+/**
+ * 読み込んだ設定にキャラを補う。
+ *
+ * 共有 URL はキャラを載せていない。持っているスキルの持ち主から引けるので、
+ * 書式を増やさずに済む。保存してあった設定やスナップショットも、この変更より
+ * 前のものはキャラが空なので、同じ道で埋まる。
+ * 固有も進化も持っていないときは引けないため、そのまま残す。
+ */
+function withChara(uma: UmaStatus, skillIds: readonly string[]): UmaStatus {
+  const chara = skillIndex.charaOf(skillIds);
+  return chara === NO_CHARA ? uma : { ...uma, charaName: chara };
 }
 
 const saveSettings = debounceSave<PersistedSettings>('settings');
@@ -318,14 +329,16 @@ export const useStore = create<AppState>((set, get) => ({
   dismissNotice: () => set({ notice: null }),
   setUma: (patch) => set((s) => ({ uma: { ...s.uma, ...patch } })),
   setTrack: (patch) => set((s) => ({ track: { ...s.track, ...patch } })),
-  toggleSkill: (id) =>
+  toggleSkill: (id) => set((s) => ({ skillIds: skillIndex.toggle(s.skillIds, id) })),
+  clearSkills: () => set((s) => ({ uma: { ...s.uma, charaName: NO_CHARA }, skillIds: [] })),
+  setCharaName: (charaName) =>
     set((s) => ({
-      skillIds: s.skillIds.includes(id) ? s.skillIds.filter((x) => x !== id) : [...s.skillIds, id],
+      uma: { ...s.uma, charaName },
+      skillIds: skillIndex.applyChara(s.skillIds, charaName),
     })),
-  clearSkills: () => set({ skillIds: [] }),
   applyPreset: (preset) =>
     set({
-      uma: { charaName: '', ...preset.uma },
+      uma: { charaName: NO_CHARA, ...preset.uma },
       track: preset.track,
       skillIds: resolveSkillIds(preset.skillNames),
     }),
@@ -506,7 +519,7 @@ export const useStore = create<AppState>((set, get) => ({
     const snapshot = get().snapshots.find((x) => x.id === id);
     if (snapshot === undefined) return;
     set({
-      uma: snapshot.uma,
+      uma: withChara(snapshot.uma, snapshot.skillIds),
       track: snapshot.track,
       skillIds: [...snapshot.skillIds],
       options: snapshot.options,
@@ -585,7 +598,7 @@ export const useStore = create<AppState>((set, get) => ({
     ]);
     if (!shared && settings !== null) {
       set({
-        uma: settings.uma,
+        uma: withChara(settings.uma, settings.skillIds),
         track: settings.track,
         skillIds: [...settings.skillIds],
         count: settings.count,
@@ -620,7 +633,7 @@ export const useStore = create<AppState>((set, get) => ({
       return false;
     }
     set({
-      uma: shared.uma,
+      uma: withChara(shared.uma, shared.skillIds),
       track: shared.track,
       skillIds: [...shared.skillIds],
       count: shared.count,

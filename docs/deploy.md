@@ -9,9 +9,9 @@
 
 | ファイル | 大きさ |
 | --- | ---: |
-| `index.html` | 0.59 kB |
-| `assets/index-*.css` | 15.5 kB（gzip 4.2 kB） |
-| `assets/index-*.js` | 1.44 MB（gzip 220 kB） |
+| `index.html` | 1.26 kB |
+| `assets/index-*.css` | 19.6 kB（gzip 5.0 kB） |
+| `assets/index-*.js` | 1.55 MB（gzip 250 kB） |
 | `assets/browser-worker-*.js` | 1.17 MB |
 
 面倒になりがちな条件が四つとも外れている。

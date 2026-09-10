@@ -12,10 +12,15 @@ import tailwindcss from '@tailwindcss/vite';
  * - `info`：条件と効果を日本語で書いた説明。約 220 kB ある。
  *   いまは誰も読んでいない。設計書 6.3 節の「近似の表示」で使う目が
  *   あるので、そのときは別ファイルとして取りに行く。
- * - `description`, `holder`：型にも計算にも現れない。
+ * - `description`：型にも計算にも現れない。
+ * - `holder`：固有と進化の持ち主。画面でキャラを選ぶのに要るので本体には
+ *   残し、計算しかしない Worker からだけ落とす。本体は 53 kB（gzip で 21 kB）
+ *   増える。907 件が 266 通りの文字列を指すので、表に畳めば縮むが、
+ *   読み込み側の形を変えることになるのでそこまではしていない。
  */
-function trimSkillData(): Plugin {
-  const dropped = ['info', 'description', 'holder'];
+const MAIN_DROPPED = ['info', 'description'];
+
+function trimSkillData(dropped: readonly string[]): Plugin {
   return {
     name: 'raceemu-trim-skill-data',
     enforce: 'pre',
@@ -29,8 +34,8 @@ function trimSkillData(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [trimSkillData(), react(), tailwindcss()],
+  plugins: [trimSkillData(MAIN_DROPPED), react(), tailwindcss()],
   base: './',
   build: { target: 'es2022' },
-  worker: { format: 'es', plugins: () => [trimSkillData()] },
+  worker: { format: 'es', plugins: () => [trimSkillData([...MAIN_DROPPED, 'holder'])] },
 });
