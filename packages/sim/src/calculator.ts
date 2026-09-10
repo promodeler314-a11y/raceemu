@@ -11,7 +11,7 @@ import {
 } from './data/constants.ts';
 import { ORDER_RATE_CONTINUE_TYPES, resolveOrderRateContinue } from './data/orderRate.ts';
 import type { RaceTrack } from './data/track.ts';
-import { FieldView, type FieldBundle } from './field/field.ts';
+import { RecordedField, type FieldBundle, type FieldView } from './field/field.ts';
 import { RngSet } from './rng.ts';
 import {
   DerivedSetting,
@@ -58,12 +58,24 @@ export class RaceCalculator {
     private readonly trackData: Record<number, RaceTrack>,
   ) {}
 
+  /**
+   * 走らせずに初期状態だけを作る。
+   * 全頭を同時に走らせる駆動側が、各頭ぶんの状態を先に揃えるために使う。
+   */
+  createState(
+    setting: RaceSetting,
+    options: { seed: number; trial: number; recordFrames?: boolean; field?: FieldView | null },
+  ): RaceState {
+    const rng = new RngSet(options.seed, options.trial);
+    return this.initializeState(setting, rng, options.recordFrames ?? false, false, options.field ?? null);
+  }
+
   simulate(setting: RaceSetting, options: SimulateOptions): SimulateOutput {
     const rng = new RngSet(options.seed, options.trial);
     const bundle = options.field ?? null;
     // 束の中から試行番号で 1 本選ぶ。同じ試行番号なら同じフィールドになるので、
     // 共通乱数によるペア比較がフィールドを含めて成立する。
-    const field = bundle === null ? null : new FieldView(bundle, options.trial);
+    const field = bundle === null ? null : new RecordedField(bundle, options.trial);
     const state = this.initializeState(setting, rng, options.recordFrames ?? false, false, field);
     const result = progressRace(state);
     return { result, state };
@@ -334,13 +346,14 @@ function updateOrderRateContinue(state: RaceState): void {
   }
 }
 
-function updateFrame(state: RaceState): boolean {
+export function updateFrame(state: RaceState): boolean {
   const simulation = state.simulation;
   const setting = state.setting;
   const system = state.system;
 
   if (simulation.frameElapsed > 5000 || simulation.position >= setting.courseLength) return true;
-  if (state.paceMaker !== null) updateFrame(state.paceMaker);
+  // 自分で作った先頭馬だけを進める。外から与えられた相手は駆動側が進める。
+  if (state.ownedPaceMaker !== null) updateFrame(state.ownedPaceMaker);
 
   simulation.startPosition = simulation.position;
   const startSp = simulation.sp;
@@ -700,7 +713,7 @@ export function calcSpurtDistance(state: RaceState, v: number): number {
   return numerator / denominator + 60;
 }
 
-function goal(state: RaceState): RaceSimulationResult {
+export function goal(state: RaceState): RaceSimulationResult {
   const simulation = state.simulation;
   const setting = state.setting;
   const excessTime = (simulation.position - setting.courseLength) / simulation.totalSpeed;

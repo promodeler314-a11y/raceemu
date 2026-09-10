@@ -7,7 +7,7 @@ import {
   orderRateBoundaries,
   resolveOrderRateContinue,
 } from '../src/data/orderRate.ts';
-import { buildFieldBundle, defaultFieldProfile, FieldView } from '../src/field/field.ts';
+import { buildFieldBundle, defaultFieldProfile, RecordedField } from '../src/field/field.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { WorkerPool } from '../src/parallel/pool.ts';
 import { toSerializable, toSkillSummaries } from '../src/parallel/protocol.ts';
@@ -68,7 +68,7 @@ describe('フィールド軌跡モデル', () => {
   });
 
   it('順位が 1 から出走頭数の範囲に収まる', () => {
-    const view = new FieldView(bundle, 0);
+    const view = new RecordedField(bundle, 0);
     for (const frame of [0, 100, 500, 1000]) {
       for (const position of [0, 500, 1200, 2400]) {
         const order = view.order(frame, position);
@@ -79,7 +79,7 @@ describe('フィールド軌跡モデル', () => {
   });
 
   it('前に出るほど順位が上がる', () => {
-    const view = new FieldView(bundle, 3);
+    const view = new RecordedField(bundle, 3);
     const behind = view.order(600, 100);
     const ahead = view.order(600, 3000);
     expect(ahead).toBeLessThanOrEqual(behind);
@@ -180,7 +180,7 @@ describe('距離差の条件', () => {
   });
 
   it('相対位置は 0 から 100 に収まり、先頭ほど小さい', () => {
-    const view = new FieldView(bundle, 0);
+    const view = new RecordedField(bundle, 0);
     for (const frame of [0, 200, 600, 1200]) {
       for (const position of [0, 300, 1200, 2000]) {
         const spread = view.spread(frame, position);
@@ -226,7 +226,7 @@ describe('距離差の条件', () => {
   });
 
   it('先頭との距離が脚質の順に開く', () => {
-    const view = new FieldView(bundle, 0);
+    const view = new RecordedField(bundle, 0);
     const midRace = (style: 'NIGE' | 'SEN' | 'SASI' | 'OI') => {
       const { state } = calculator.simulate(setting(style), {
         seed: 11,

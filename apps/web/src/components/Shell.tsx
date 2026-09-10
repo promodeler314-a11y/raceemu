@@ -14,6 +14,7 @@ const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   { id: 'summary', label: '結果' },
   { id: 'compare', label: '比較' },
   { id: 'detail', label: '詳細' },
+  { id: 'field', label: '勝率' },
   { id: 'solve', label: '探索' },
 ];
 
@@ -94,14 +95,15 @@ export function Header() {
   return (
     <header className="flex flex-none flex-wrap items-center gap-x-5 gap-y-2 border-b border-rule2 bg-surface px-5 py-2 md:h-[52px] md:flex-nowrap md:py-0">
       <h1 className="font-mono text-[11px] tracking-[0.14em] text-ink2">RACE EMULATOR</h1>
-      <nav className="flex gap-0.5 self-stretch overflow-x-auto" aria-label="画面">
+      {/* タブが増えると狭い幅では収まらないので、はみ出すぶんは横に送る */}
+      <nav className="flex min-w-0 max-w-full gap-0.5 self-stretch overflow-x-auto" aria-label="画面">
         {TABS.map(({ id, label }) => (
           <button
             key={id}
             type="button"
             aria-current={tab === id ? 'page' : undefined}
             onClick={() => setTab(id)}
-            className={`flex items-center px-3 text-[13px] ${
+            className={`flex flex-none items-center px-3 text-[13px] ${
               tab === id ? 'font-semibold text-ink shadow-[inset_0_-2px_0_var(--color-s1)]' : 'text-ink3'
             }`}
           >
@@ -109,7 +111,8 @@ export function Header() {
           </button>
         ))}
       </nav>
-      <div className="flex min-w-0 flex-1 items-center gap-2">
+      {/* 狭い幅ではタブが折り返すので、この行も折り返せるようにしておく */}
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
         <span className="truncate text-[13px] text-ink2">{condition}</span>
         {summary === null && <span className="flex-none text-[11px] text-ink3">未実行</span>}
       </div>

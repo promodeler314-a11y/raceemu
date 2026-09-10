@@ -1,7 +1,13 @@
 import { create } from 'zustand';
 import { browserWorkerFactory } from '../../../packages/sim/src/parallel/browser.ts';
 import { SimulationCancelled, WorkerPool } from '../../../packages/sim/src/parallel/pool.ts';
-import { toSerializable, toSkillSummaries, type SkillSummary } from '../../../packages/sim/src/parallel/protocol.ts';
+import {
+  MULTI_FIELDS,
+  toSerializable,
+  toSkillSummaries,
+  unpackMultiEntry,
+  type SkillSummary,
+} from '../../../packages/sim/src/parallel/protocol.ts';
 import { RaceCalculator } from '../../../packages/sim/src/calculator.ts';
 import {
   DEBUFF_TYPES,
@@ -17,6 +23,8 @@ import {
 } from '../../../packages/sim/src/setting.ts';
 import { summarize, type SimulationSummary } from '../../../packages/sim/src/summary.ts';
 import { buildFieldBundle, defaultFieldProfile } from '../../../packages/sim/src/field/field.ts';
+import { OrderTally, type OrderSummary } from '../../../packages/sim/src/multi/summary.ts';
+import type { Style } from '../../../packages/sim/src/data/constants.ts';
 import { resolveMethod } from '../../../packages/solver/src/critical.ts';
 import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
@@ -84,7 +92,23 @@ export interface PersistedSettings {
 }
 
 /** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
-export type Tab = 'settings' | 'summary' | 'compare' | 'detail' | 'solve';
+export type Tab = 'settings' | 'summary' | 'compare' | 'detail' | 'solve' | 'field';
+
+/** 相手 1 頭ぶんの設定 */
+export interface Opponent {
+  readonly id: number;
+  readonly uma: UmaStatus;
+  readonly skillIds: readonly string[];
+}
+
+/** 全頭同時に走らせた結果 */
+export interface MultiResult {
+  /** 出走順ごとの着順の集計。0 番が自分。 */
+  readonly summaries: readonly OrderSummary[];
+  readonly trials: number;
+  readonly elapsedMs: number;
+  readonly cancelled: boolean;
+}
 
 export type Theme = 'light' | 'dark';
 
@@ -208,6 +232,13 @@ interface AppState {
   /** スキル ID からヒントレベル（0 から 5）。0 の項目は持たない。 */
   hintLevels: Record<string, number>;
 
+  /** 相手の設定。頭数はコースの出走頭数から自分を引いた数に合わせる。 */
+  opponents: Opponent[];
+  multiTrials: number;
+  multiRunning: boolean;
+  multiResult: MultiResult | null;
+  multiProgress: number;
+
   optimizeBudget: number;
   optimizeResult: OptimizeResult | null;
   optimizeLog: string[];
@@ -241,6 +272,11 @@ interface AppState {
   saveSnapshot: () => void;
   removeSnapshot: (id: number) => void;
   restoreSnapshot: (id: number) => void;
+  setOpponent: (id: number, patch: Partial<UmaStatus>) => void;
+  toggleOpponentSkill: (id: number, skillId: string) => void;
+  resetOpponents: () => void;
+  setMultiTrials: (trials: number) => void;
+  runMulti: () => Promise<void>;
   setOptimizeBudget: (budget: number) => void;
   runOptimize: () => Promise<void>;
   shareUrl: () => string;
@@ -320,6 +356,12 @@ export const useStore = create<AppState>((set, get) => ({
   debuffCounts: {},
   hintLevels: {},
 
+  opponents: [],
+  multiTrials: 500,
+  multiRunning: false,
+  multiResult: null,
+  multiProgress: 0,
+
   optimizeBudget: 600,
   optimizeResult: null,
   optimizeLog: [],
@@ -345,6 +387,89 @@ export const useStore = create<AppState>((set, get) => ({
   setCount: (count) => set({ count }),
   setUseField: (useField) => set({ useField }),
   setSeed: (seed) => set({ seed }),
+  setOpponent: (id, patch) =>
+    set((s) => ({
+      opponents: s.opponents.map((o) => (o.id === id ? { ...o, uma: { ...o.uma, ...patch } } : o)),
+    })),
+  toggleOpponentSkill: (id, skillId) =>
+    set((s) => ({
+      opponents: s.opponents.map((o) =>
+        o.id === id
+          ? {
+              ...o,
+              skillIds: o.skillIds.includes(skillId)
+                ? o.skillIds.filter((x) => x !== skillId)
+                : [...o.skillIds, skillId],
+            }
+          : o,
+      ),
+    })),
+  resetOpponents: () => set({ opponents: defaultOpponents(get().track.gateCount) }),
+  setMultiTrials: (multiTrials) => set({ multiTrials }),
+
+  /**
+   * 出走する全頭を同時に走らせ、着順の分布を出す。
+   *
+   * 1 試行が頭数ぶん重いので、Worker に投げて進捗を返す。
+   * 中断したときは、そこまでに終わった試行だけを集計する。
+   */
+  runMulti: async () => {
+    const state = get();
+    if (state.running || state.multiRunning || state.optimizeRunning) return;
+    const opponents = state.opponents.length > 0 ? state.opponents : defaultOpponents(state.track.gateCount);
+    if (state.opponents.length === 0) set({ opponents });
+    controller = new AbortController();
+    set({ multiRunning: true, multiProgress: 0, error: null, multiResult: null });
+    const started = performance.now();
+    try {
+      const entries = [
+        toSerializable(buildSetting(state)),
+        ...opponents.map((opponent) =>
+          toSerializable({
+            ...buildSetting(state),
+            uma: opponent.uma,
+            skills: opponent.skillIds.map((id) => gameData.skillsById.get(id)!).filter(Boolean),
+          }),
+        ),
+      ];
+      const { packed, entries: width, cancelled } = await getPool().runMulti(entries, system, {
+        count: state.multiTrials,
+        seed: state.seed,
+        onProgress: (done) => set({ multiProgress: done }),
+        signal: controller.signal,
+        keepPartial: true,
+      });
+      const tally = new OrderTally(width);
+      const trials = width === 0 ? 0 : packed.length / (width * MULTI_FIELDS);
+      for (let t = 0; t < trials; t++) {
+        tally.add({
+          entries: [...Array(width).keys()].map((index) => ({
+            index,
+            ...unpackMultiEntry(packed, (t * width + index) * MULTI_FIELDS),
+          })),
+          states: [],
+          frames: 0,
+        });
+      }
+      set({
+        multiResult: {
+          summaries: tally.summarizeAll(),
+          trials,
+          elapsedMs: performance.now() - started,
+          cancelled: cancelled === true,
+        },
+        tab: 'field',
+      });
+    } catch (error) {
+      if (!(error instanceof SimulationCancelled)) {
+        set({ error: error instanceof Error ? error.message : String(error) });
+      }
+    } finally {
+      set({ multiRunning: false, multiProgress: 0 });
+      controller = null;
+    }
+  },
+
   setOptimizeBudget: (optimizeBudget) => set({ optimizeBudget }),
   setOptions: (patch) => set((s) => ({ options: { ...s.options, ...patch } })),
   setDebuffCount: (id, count) =>
@@ -646,6 +771,26 @@ export const useStore = create<AppState>((set, get) => ({
     return true;
   },
 }));
+
+/**
+ * 相手の既定。フィールド軌跡モデルと同じ想定から作るので、
+ * 二つの方式を同じ相手で比べられる。
+ */
+export function defaultOpponents(gateCount: number): Opponent[] {
+  const profile = defaultFieldProfile(gateCount);
+  const styles: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
+  const list: Opponent[] = [];
+  for (const style of styles) {
+    for (let i = 0; i < (profile.counts[style] ?? 0); i++) {
+      list.push({
+        id: list.length + 1,
+        uma: { ...profile.uma, charaName: '', style, gateNumber: 0 },
+        skillIds: [],
+      });
+    }
+  }
+  return list;
+}
 
 /** 順位条件を判定するときの相手の想定。頭数は 9 と 12 だけを扱う。 */
 function fieldSpec(state: AppState) {

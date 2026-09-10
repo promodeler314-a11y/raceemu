@@ -205,5 +205,70 @@ export interface CriticalResponse {
   readonly races: number;
 }
 
-export type WorkerRequest = ChunkRequest | CriticalRequest;
-export type WorkerResponse = ChunkResponse | CriticalResponse | ErrorResponse;
+/**
+ * 全頭同時のレースの依頼。
+ * 出走頭ぶんの設定をそのまま渡す。束と違って作り置きするものが無いので、
+ * Worker 側でのキャッシュは要らない。
+ */
+export interface MultiRequest {
+  readonly kind: 'multi';
+  readonly id: number;
+  readonly entries: readonly SerializableRaceSetting[];
+  readonly system: SystemSetting;
+  readonly seed: number;
+  readonly from: number;
+  readonly count: number;
+}
+
+export interface MultiResponse {
+  readonly kind: 'multi';
+  readonly id: number;
+  /** 試行ごと、出走順ごとに MULTI_FIELDS 個ずつ並ぶ */
+  readonly packed: Float64Array;
+}
+
+/** 出走 1 頭あたりに詰める値の数。着順のあとに RESULT_FIELDS 個続く。 */
+export const MULTI_FIELDS = RESULT_FIELDS + 1;
+
+export function packMultiEntry(
+  packed: Float64Array,
+  offset: number,
+  order: number,
+  result: RaceSimulationResult,
+): void {
+  packed[offset] = order;
+  packed[offset + 1] = result.raceTime;
+  packed[offset + 2] = result.raceTimeDelta;
+  packed[offset + 3] = result.raceTimeWithoutRunUp;
+  packed[offset + 4] = result.maxSpurt ? 1 : 0;
+  packed[offset + 5] = result.spDiff;
+  packed[offset + 6] = result.positionCompetitionCount;
+  packed[offset + 7] = result.staminaKeepDistance;
+  packed[offset + 8] = result.competeFightFinished ? 1 : 0;
+  packed[offset + 9] = result.competeFightTime;
+  packed[offset + 10] = result.goalSp;
+}
+
+export function unpackMultiEntry(
+  packed: Float64Array,
+  offset: number,
+): { order: number; result: RaceSimulationResult } {
+  return {
+    order: packed[offset]!,
+    result: {
+      raceTime: packed[offset + 1]!,
+      raceTimeDelta: packed[offset + 2]!,
+      raceTimeWithoutRunUp: packed[offset + 3]!,
+      maxSpurt: packed[offset + 4] === 1,
+      spDiff: packed[offset + 5]!,
+      positionCompetitionCount: packed[offset + 6]!,
+      staminaKeepDistance: packed[offset + 7]!,
+      competeFightFinished: packed[offset + 8] === 1,
+      competeFightTime: packed[offset + 9]!,
+      goalSp: packed[offset + 10]!,
+    },
+  };
+}
+
+export type WorkerRequest = ChunkRequest | CriticalRequest | MultiRequest;
+export type WorkerResponse = ChunkResponse | CriticalResponse | MultiResponse | ErrorResponse;

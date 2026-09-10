@@ -252,15 +252,32 @@ export class RaceState {
     readonly simulation: RaceSimulationState,
     readonly system: SystemSetting,
     readonly rng: RngSet,
-    readonly paceMaker: RaceState | null,
+    /**
+     * 自分で作って自分で進める先頭馬。
+     * 全頭を同時に走らせるときは、進めるのが駆動側になるので null にし、
+     * 代わりに paceMakerSource で実在の先頭を指す。
+     */
+    readonly ownedPaceMaker: RaceState | null,
     /** フレーム列を記録するか。統計だけが要る試行では false にして割り当てを減らす。 */
     readonly recordFrames: boolean,
     /**
      * 他のウマ娘の位置。無ければ順位条件は満たしている前提のままになる。
      * docs/order-condition.md を参照。
      */
-    readonly field: FieldView | null = null,
+    public field: FieldView | null = null,
   ) {}
+
+  /**
+   * 外から与える先頭馬の取り出し口。
+   * 毎フレーム呼ばれるので、そのフレームで最も前にいる相手を返してよい。
+   */
+  paceMakerSource: (() => RaceState | null) | null = null;
+
+  /** 位置取りの判定が見る先頭馬 */
+  get paceMaker(): RaceState | null {
+    if (this.ownedPaceMaker !== null) return this.ownedPaceMaker;
+    return this.paceMakerSource === null ? null : this.paceMakerSource();
+  }
 
   /** 1 位を 1 とする順位。フィールドが無ければ null。 */
   get order(): number | null {

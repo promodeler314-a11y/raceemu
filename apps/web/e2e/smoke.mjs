@@ -244,6 +244,41 @@ await page.locator(optimizeSection).screenshot({ path: 'docs/images/m7-optimize.
 await goTab('設定');
 await page.click('button:has-text("すべて外す")');
 
+// 勝率: 全頭を同時に走らせ、着順が出ることを確かめる
+// 脚質は前の段で変えてあるので、ここで決め直してから測る
+await goTab('設定');
+await page.click('[role=radiogroup][aria-label="脚質"] button:has-text("先行")');
+await goTab('勝率');
+await page.waitForTimeout(300);
+await page.fill('input[type=number][max="50000"]', '200');
+const multiStarted = Date.now();
+await page.click('button:has-text("勝率を出す")');
+await page.waitForFunction(
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('計算中')),
+  null,
+  { timeout: 300000 },
+);
+await page.waitForTimeout(300);
+console.log('--- 勝率（9 頭同時、200 試行）:', Date.now() - multiStarted, 'ms（UI 操作込み）');
+const orderRows = await readTable('着順');
+for (const row of orderRows) console.log(' ', row.join(' | '));
+if (orderRows.length !== 10) fail(`着順の行数が想定と違う: ${orderRows.length}`);
+const cells = orderRows.slice(1).map((r) => r.map((c) => Number.parseFloat(c)));
+const winSum = cells.reduce((a, r) => a + r[1], 0);
+if (Math.abs(winSum - 100) > 0.6) fail(`勝率の合計が 100 % にならない: ${winSum}`);
+// 平均着順の平均は (頭数 + 1) / 2 になる
+const meanOfMeanOrder = cells.reduce((a, r) => a + r[4], 0) / cells.length;
+if (Math.abs(meanOfMeanOrder - 5) > 0.05) fail(`平均着順の平均が 5 にならない: ${meanOfMeanOrder}`);
+// 複勝率 >= 連対率 >= 勝率 は常に成り立つ
+for (const r of cells) {
+  if (!(r[3] >= r[2] && r[2] >= r[1])) fail(`複勝率と連対率と勝率の大小が合わない: ${r.join(' ')}`);
+}
+// 自分は相手より強くしてあるので、勝率は 1/9 より高い
+if (!(cells[0][1] > 11.1)) fail(`自分の勝率が低すぎる: ${cells[0][1]}`);
+await page.locator('section:has(h2:text("相手"))').screenshot({ path: 'docs/images/m9-field.png' });
+// 相手の入力欄もステータスと同じ上限を持つので、設定に戻してから次へ進む
+await goTab('設定');
+
 // 比較: 設定を変えてもう一度実行し、2 列並ぶことを確かめる
 await page.click('button:has-text("スナップショットを保存")');
 await page.fill('input[type=number][max="2500"] >> nth=0', '1400');
