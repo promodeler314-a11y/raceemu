@@ -2,6 +2,17 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // base: './' で資産を相対参照にしている（サブパスに置くため）。
+      // 末尾に "/" が無いと、ブラウザは資産の URL を今いる階層の親から解決してしまい
+      // （例 "/raceemu" → "/assets/..."）、真っ白な画面になる。ここで先に付け直す。
+      (function () {
+        var path = location.pathname;
+        if (!path.endsWith('/') && !/\.[^/]+$/.test(path)) {
+          location.replace(path + '/' + location.search + location.hash);
+        }
+      })();
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E%F0%9F%8F%87%3C/text%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
