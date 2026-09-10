@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { loadGameData } from '../../../data/src/browser.ts';
-import { runChunk, runCriticalChunk } from './runner.ts';
+import { runChunk, runCriticalChunk, runMultiChunk } from './runner.ts';
 import type { WorkerRequest } from './protocol.ts';
 
 const data = loadGameData();
@@ -19,6 +19,18 @@ self.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
         request.critical,
       );
       (self as unknown as Worker).postMessage({ kind: 'critical', id: request.id, values, races }, [values.buffer as ArrayBuffer]);
+      return;
+    }
+    if (request.kind === 'multi') {
+      const packed = runMultiChunk(
+        data,
+        request.entries,
+        request.system,
+        request.seed,
+        request.from,
+        request.count,
+      );
+      (self as unknown as Worker).postMessage({ kind: 'multi', id: request.id, packed }, [packed.buffer as ArrayBuffer]);
       return;
     }
     const { packed, skillStats } = runChunk(

@@ -61,7 +61,8 @@ export function defaultFieldProfile(gateCount: number): FieldProfile {
   return { counts: { NIGE: nige, SEN: sen, SASI: sasi, OI: oi, OONIGE: 0 }, uma };
 }
 
-function opponentSettings(
+/** 相手の想定から、相手 N-1 頭ぶんの設定を作る。全頭同時に走らせる側でも使う。 */
+export function opponentSettings(
   profile: FieldProfile,
   track: TrackRef,
   skills: readonly SkillData[],
@@ -135,7 +136,31 @@ export function buildFieldBundle(
  * レース中の順位を、フィールドの 1 本と自分の位置から求める。
  * 毎フレームの計算は頭数に比例するだけで、多くても 18 回の比較で済む。
  */
-export class FieldView {
+/**
+ * 順位と距離差の問い合わせ口。
+ *
+ * 条件の判定側はこの 5 つしか呼ばない。
+ * あらかじめ作った束を読む実装と、同時に走っている他頭を読む実装があり、
+ * 差し替えても判定側は変わらない。
+ * docs/multi-horse-design.md 2 節を参照。
+ */
+export interface FieldView {
+  readonly opponents: number;
+  readonly gateCount: number;
+  /** 1 位を 1 とする順位 */
+  order(frameElapsed: number, position: number): number;
+  /** 先頭との距離。自分が先頭なら 0。 */
+  distanceFromTop(frameElapsed: number, position: number): number;
+  /** すぐ前にいるウマ娘との距離。前がいなければ無限。 */
+  distanceToFront(frameElapsed: number, position: number): number;
+  /** すぐ後ろにいるウマ娘との距離。後ろがいなければ無限。 */
+  distanceToBehind(frameElapsed: number, position: number): number;
+  /** 先頭から最後方までの隔たり。全員が同じ位置なら 0。 */
+  spread(frameElapsed: number, position: number): number;
+}
+
+/** あらかじめ作った束の 1 本を読む実装 */
+export class RecordedField implements FieldView {
   private readonly sample: FieldSample;
 
   constructor(

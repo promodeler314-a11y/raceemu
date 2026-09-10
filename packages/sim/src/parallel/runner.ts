@@ -2,10 +2,13 @@ import { RaceCalculator } from '../calculator.ts';
 import type { SystemSetting } from '../setting.ts';
 import type { RaceSimulationResult } from '../state.ts';
 import { buildFieldBundle, type FieldBundle } from '../field/field.ts';
+import { runMultiRace } from '../multi/race.ts';
 import type { CriticalSpec, FieldSpec } from './protocol.ts';
 import {
   fromSerializable,
   packResults,
+  MULTI_FIELDS,
+  packMultiEntry,
   SKILL_STAT,
   SKILL_STAT_FIELDS,
   type SerializableRaceSetting,
@@ -147,4 +150,31 @@ export function runCriticalChunk(
     values[i] = found;
   }
   return { values, races };
+}
+
+/**
+ * 全頭同時のレースの塊を計算する。
+ *
+ * 束を作り置きする必要が無いので、キャッシュも要らない。
+ * そのぶん 1 試行あたりの仕事は頭数に比例して増える。
+ */
+export function runMultiChunk(
+  data: SimData,
+  entries: readonly SerializableRaceSetting[],
+  system: SystemSetting,
+  seed: number,
+  from: number,
+  count: number,
+): Float64Array {
+  const resolved = entries.map((setting) => ({ setting: fromSerializable(setting, data) }));
+  const calculator = new RaceCalculator(system, data.trackData);
+  const packed = new Float64Array(count * entries.length * MULTI_FIELDS);
+  for (let i = 0; i < count; i++) {
+    const output = runMultiRace(calculator, resolved, { seed, trial: from + i });
+    for (const entry of output.entries) {
+      const offset = (i * entries.length + entry.index) * MULTI_FIELDS;
+      packMultiEntry(packed, offset, entry.order, entry.result);
+    }
+  }
+  return packed;
 }

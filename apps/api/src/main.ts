@@ -24,6 +24,11 @@ server.listen(config.port, () => {
       `（${config.concurrencySource} から決定）/ 1 ジョブ上限 ${config.maxRacesPerJob.toLocaleString()} レース`,
   );
   if (config.staticRoot !== null) console.log(`静的ファイル: ${config.staticRoot}`);
+  console.log(
+    config.tessdataPath === null
+      ? '画面の読み取り: 無効（RACEEMU_TESSDATA が未指定）'
+      : `画面の読み取り: ${config.tessdataPath}`,
+  );
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {

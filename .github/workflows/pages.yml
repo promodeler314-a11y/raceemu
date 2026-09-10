@@ -29,6 +29,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm typecheck
+      # 画面の読み取りの検査は学習データが要る。無ければその検査だけ飛ぶので、
+      # ここで取っておかないと繋がっていることを誰も確かめない。
+      - run: node scripts/fetch-tessdata.mjs
       - run: pnpm test
       - run: pnpm build
 

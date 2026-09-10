@@ -71,6 +71,13 @@ export interface Config {
   readonly jobTtlMs: number;
   /** 静的ファイルの置き場。同一オリジンで配るために使う。 */
   readonly staticRoot: string | null;
+  /**
+   * `jpn.traineddata` の置き場。null なら画面の読み取りは受け付けない。
+   * 35 MB あるのでリポジトリには置かず、イメージを組むときに取ってくる。
+   */
+  readonly tessdataPath: string | null;
+  /** 読み取りに送れる画像の大きさ */
+  readonly maxImageBytes: number;
 }
 
 function num(name: string, fallback: number): number {
@@ -111,5 +118,7 @@ export function loadConfig(): Config {
     maxRacesPerJob: num('RACEEMU_MAX_RACES', 2_000_000),
     jobTtlMs: num('RACEEMU_JOB_TTL_MS', 30 * 60 * 1000),
     staticRoot: process.env['RACEEMU_STATIC_ROOT'] ?? null,
+    tessdataPath: process.env['RACEEMU_TESSDATA'] ?? null,
+    maxImageBytes: num('RACEEMU_MAX_IMAGE_BYTES', 8 * 1024 * 1024),
   };
 }

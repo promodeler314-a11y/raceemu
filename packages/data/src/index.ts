@@ -21,3 +21,5 @@ export function buildGameData(coursesJson: unknown, skillsJson: unknown): GameDa
   }
   return { trackData, skills, skillsById, skillsByName };
 }
+
+export * from './skill-match.ts';

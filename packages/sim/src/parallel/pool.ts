@@ -1,12 +1,14 @@
 import type { SystemSetting } from '../setting.ts';
 import type { RaceSimulationResult } from '../state.ts';
 import {
+  MULTI_FIELDS,
   SKILL_STAT_FIELDS,
   unpackResults,
   type ChunkRequest,
   type CriticalRequest,
   type CriticalSpec,
   type FieldSpec,
+  type MultiRequest,
   type SerializableRaceSetting,
   type WorkerRequest,
   type WorkerResponse,
@@ -50,6 +52,14 @@ export interface RunOptions {
    * 何も残らないと、長く走らせたあとに手を止めた人が全部やり直すことになる。
    */
   readonly keepPartial?: boolean;
+}
+
+export interface MultiOutput {
+  /** 試行ごと、出走順ごとに MULTI_FIELDS 個ずつ並ぶ */
+  readonly packed: Float64Array;
+  /** 出走頭数 */
+  readonly entries: number;
+  readonly cancelled?: boolean;
 }
 
 export interface CriticalOutput {
@@ -263,6 +273,60 @@ export class WorkerPool {
   }
 
   /** 試行ごとの臨界値を求める。 */
+  /**
+   * 全頭同時のレースを試行のぶんだけ回す。
+   * 1 試行が頭数ぶん重いので、塊は小さめにして進捗が細かく返るようにする。
+   */
+  async runMulti(
+    entries: readonly SerializableRaceSetting[],
+    system: SystemSetting,
+    options: RunOptions,
+  ): Promise<MultiOutput> {
+    const total = options.count;
+    const width = entries.length * MULTI_FIELDS;
+    if (total <= 0 || entries.length === 0) return { packed: new Float64Array(0), entries: entries.length };
+    const seed = options.seed ?? 1;
+    const packed = new Float64Array(total * width);
+
+    let cancelled = false;
+    let filled = 0;
+    try {
+      await this.dispatchAll(
+        total,
+        Math.max(1, options.chunkSize ?? 32),
+        options,
+        (id, from, count): MultiRequest => ({
+          kind: 'multi',
+          id,
+          entries: [...entries],
+          system,
+          seed,
+          from,
+          count,
+        }),
+        (response, from, count) => {
+          if (response.kind !== 'multi') return;
+          packed.set(response.packed, from * width);
+          filled += count;
+        },
+      );
+    } catch (error) {
+      if (!(error instanceof SimulationCancelled) || options.keepPartial !== true) throw error;
+      cancelled = true;
+    }
+    if (!cancelled) return { packed, entries: entries.length };
+    // 塊は順不同で終わるので、埋まった試行だけを詰め直す
+    const kept = new Float64Array(filled * width);
+    let out = 0;
+    for (let trial = 0; trial < total; trial++) {
+      // 着順は 1 以上なので、0 のままなら埋まっていない
+      if (packed[trial * width] === 0) continue;
+      kept.set(packed.subarray(trial * width, (trial + 1) * width), out * width);
+      out++;
+    }
+    return { packed: kept.subarray(0, out * width), entries: entries.length, cancelled };
+  }
+
   async runCritical(
     setting: SerializableRaceSetting,
     system: SystemSetting,

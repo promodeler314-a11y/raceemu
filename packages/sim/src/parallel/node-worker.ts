@@ -1,6 +1,6 @@
 import { parentPort } from 'node:worker_threads';
 import { loadGameData } from '../../../data/src/node.ts';
-import { runChunk, runCriticalChunk } from './runner.ts';
+import { runChunk, runCriticalChunk, runMultiChunk } from './runner.ts';
 import type { WorkerRequest } from './protocol.ts';
 
 const port = parentPort;
@@ -21,6 +21,18 @@ port.on('message', (request: WorkerRequest) => {
         request.critical,
       );
       port.postMessage({ kind: 'critical', id: request.id, values, races }, [values.buffer as ArrayBuffer]);
+      return;
+    }
+    if (request.kind === 'multi') {
+      const packed = runMultiChunk(
+        data,
+        request.entries,
+        request.system,
+        request.seed,
+        request.from,
+        request.count,
+      );
+      port.postMessage({ kind: 'multi', id: request.id, packed }, [packed.buffer as ArrayBuffer]);
       return;
     }
     const { packed, skillStats } = runChunk(
