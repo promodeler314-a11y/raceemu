@@ -4,7 +4,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { GameData } from '../../../packages/data/src/index.ts';
 import type { Config } from './config.ts';
+import { SkillMatcher } from '../../../packages/data/src/skill-match.ts';
 import { JobRunner, QueueFullError, type Job } from './jobs.ts';
+import { OcrEngine } from './ocr.ts';
 import { checkRequest, RequestError } from './request.ts';
 
 /**
@@ -38,6 +40,21 @@ function sendJson(res: ServerResponse, status: number, body: unknown): void {
   });
   res.end(text);
 }
+
+/** 画像を丸ごと受け取る。文字の本文より大きいので上限を別に持つ。 */
+async function readBinaryBody(req: IncomingMessage, limit: number): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = chunk as Buffer;
+    size += buffer.length;
+    if (size > limit) throw new RequestError(`画像が大きすぎる（上限 ${Math.floor(limit / 1024 / 1024)} MB）`);
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
+const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/bmp'];
 
 async function readBody(req: IncomingMessage): Promise<string> {
   const chunks: Buffer[] = [];
@@ -91,6 +108,11 @@ async function serveStatic(root: string, pathname: string, res: ServerResponse):
 }
 
 export function createApiServer(config: Config, data: GameData, runner: JobRunner) {
+  // 読み取りは要求されたときに初めて立ち上げる。
+  // 学習データの置き場が指定されていなければ、口ごと閉じる。
+  const ocr = config.tessdataPath === null ? null : new OcrEngine({ tessdataPath: config.tessdataPath });
+  const matcher = new SkillMatcher(data.skills);
+
   return createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
       if (!res.headersSent) {
@@ -154,6 +176,44 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         return;
       }
       sendJson(res, 405, { error: `${method} は受け付けない` });
+      return;
+    }
+
+    if (path === '/api/ocr/skills' && method === 'POST') {
+      if (ocr === null) {
+        sendJson(res, 501, {
+          error: '画面の読み取りは有効になっていない。RACEEMU_TESSDATA に学習データの置き場を指定する。',
+        });
+        return;
+      }
+      const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim();
+      if (!IMAGE_TYPES.includes(type)) {
+        sendJson(res, 415, { error: `content-type は ${IMAGE_TYPES.join(' / ')} のいずれかにする` });
+        return;
+      }
+      let image: Buffer;
+      try {
+        image = await readBinaryBody(req, config.maxImageBytes);
+      } catch (error) {
+        sendJson(res, 413, { error: error instanceof Error ? error.message : String(error) });
+        return;
+      }
+      if (image.length === 0) {
+        sendJson(res, 400, { error: '本文が空である' });
+        return;
+      }
+      const { text, elapsedMs } = await ocr.recognize(image);
+      const matches = matcher.matchAll(text).map((found) => ({
+        id: found.skill.id,
+        name: found.skill.name,
+        rarity: found.skill.rarity,
+        sp: found.skill.sp,
+        text: found.text,
+        score: found.score,
+        margin: found.margin,
+        runnerUp: found.runnerUp === null ? null : { id: found.runnerUp.id, name: found.runnerUp.name },
+      }));
+      sendJson(res, 200, { text, matches, elapsedMs });
       return;
     }
 

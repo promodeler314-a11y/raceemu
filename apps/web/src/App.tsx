@@ -6,6 +6,7 @@ import { CompareOutput } from './components/Compare.tsx';
 import { InversePanel } from './components/Inverse.tsx';
 import { OptimizePanel } from './components/Optimize.tsx';
 import { FieldPanel } from './components/Field.tsx';
+import { ImportPanel } from './components/Import.tsx';
 import { ErrorBanner } from './components/Notices.tsx';
 import { Footer, Header, SettingsRail } from './components/Shell.tsx';
 import { PRESETS } from './presets.ts';
@@ -51,6 +52,7 @@ export default function App() {
             <UmaInput />
             <CourseInput />
             <SkillInput />
+            <ImportPanel />
             <OptionsInput />
           </section>
         ) : (

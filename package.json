@@ -14,7 +14,9 @@
     "monotonicity": "tsx packages/solver/src/monotonicity-check.ts",
     "optimize": "tsx packages/solver/src/optimize-cli.ts",
     "api": "tsx apps/api/src/main.ts",
-    "multi": "tsx packages/sim/src/multi/cli.ts"
+    "multi": "tsx packages/sim/src/multi/cli.ts",
+    "fetch-tessdata": "node scripts/fetch-tessdata.mjs",
+    "e2e:import": "node apps/web/e2e/import.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -24,6 +26,7 @@
     "@vitejs/plugin-react": "^6.1.1",
     "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
+    "tesseract.js": "7",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "vite": "^8.2.2",

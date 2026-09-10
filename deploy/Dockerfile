@@ -8,8 +8,11 @@ RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY packages/ packages/
 COPY apps/ apps/
+COPY scripts/ scripts/
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
+# 画面の読み取りに使う学習データ。35 MB あるのでリポジトリには置かず、ここで取る。
+RUN node scripts/fetch-tessdata.mjs /app/tessdata
 
 FROM node:22-slim AS runtime
 WORKDIR /app
@@ -23,6 +26,7 @@ ENV NODE_ENV=production
 # あらかじめコンパイルする必要がある。
 COPY --from=build /app /app
 ENV RACEEMU_STATIC_ROOT=/app/apps/web/dist
+ENV RACEEMU_TESSDATA=/app/tessdata
 EXPOSE 8080
 USER node
 # シグナルを PID 1 で受けたいので、パッケージマネージャを挟まない。

@@ -55,6 +55,8 @@ function config(overrides: Partial<Config> = {}): Config {
     maxRacesPerJob: 2_000_000,
     jobTtlMs: 60_000,
     staticRoot: null,
+    tessdataPath: null,
+    maxImageBytes: 8 * 1024 * 1024,
     ...overrides,
   };
 }
