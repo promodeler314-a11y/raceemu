@@ -229,6 +229,11 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
 
     if (config.staticRoot !== null && (method === 'GET' || method === 'HEAD')) {
       if (await serveStatic(config.staticRoot, path, res)) return;
+      // サブパスに置いたとき、手前の reverse proxy がその接頭辞を外さずに
+      // 転送してくる場合がある（例 "/raceemu/assets/x.js" をそのまま渡す）。
+      // 資産はこの階層に無いので、先頭の 1 段を外した経路でも試す。
+      const stripped = path.replace(/^\/[^/]+/, '') || '/';
+      if (stripped !== path && (await serveStatic(config.staticRoot, stripped, res))) return;
       // 見つからないものは index.html に落とす。共有 URL はハッシュなので
       // 本来は要らないが、後で経路を足したときに 404 で詰まらないようにする。
       if (await serveStatic(config.staticRoot, '/index.html', res)) return;

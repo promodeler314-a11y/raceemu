@@ -50,6 +50,22 @@ page.on('console', (m) => {
 });
 
 try {
+  // サブパスに置いたとき、末尾の "/" が無いと資産の相対参照が親の階層から
+  // 解決されて真っ白になる（自前の k3s で実際に起きた）。手前の proxy が
+  // 接頭辞を外さずに転送してくる場合も想定し、apps/api の実サーバで確かめる。
+  {
+    const subPage = await browser.newPage();
+    const subErrors = [];
+    subPage.on('pageerror', (e) => subErrors.push(String(e)));
+    await subPage.goto(`http://localhost:${port}/raceemu`, { waitUntil: 'load' });
+    const landed = new URL(subPage.url()).pathname;
+    if (landed !== '/raceemu/') fail(`末尾に "/" が付け直されていない: ${landed}`);
+    const heading = await subPage.textContent('h1').catch(() => null);
+    if (heading === null || heading.trim() === '') fail('サブパスから開くと画面が真っ白になる');
+    if (subErrors.length > 0) fail(`サブパスから開くとエラーが出る: ${subErrors.join(', ')}`);
+    await subPage.close();
+  }
+
   await page.goto(`http://localhost:${port}/`, { waitUntil: 'load' });
   // 左の面全体も section なので、内側のパネルを取る
   const section = 'section.rounded-sm:has(h2:text("画面から取り込む"))';

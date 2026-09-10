@@ -31,18 +31,6 @@ const server = createServer(async (req, res) => {
     res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
     res.end(body);
   } catch {
-    // 自前の k3s（apps/api）は拡張子の無い未知のパスを index.html に落とす。
-    // ここでも同じ形にして、サブパスに置いたときの挙動を確かめられるようにする。
-    if (extname(req.url ?? '') === '') {
-      try {
-        const body = await readFile(join(root, 'index.html'));
-        res.writeHead(200, { 'content-type': 'text/html' });
-        res.end(body);
-        return;
-      } catch {
-        // 落ちる
-      }
-    }
     res.writeHead(404);
     res.end('not found');
   }
@@ -88,23 +76,6 @@ page.on('console', (m) => {
   if (m.text().startsWith('Failed to load resource')) return;
   errors.push(m.text());
 });
-
-// サブパスに置いたとき、末尾の "/" が無いと資産の相対参照が親の階層から
-// 解決されて真っ白になる（実際に自前の k3s で起きた）。index.html の
-// 先頭で "/" を付け直すようにしたので、ここで確かめる。
-{
-  const subpath = await context.newPage();
-  const subErrors = [];
-  subpath.on('pageerror', (e) => subErrors.push(String(e)));
-  await subpath.goto('http://localhost:4173/raceemu', { waitUntil: 'load' });
-  const landed = new URL(subpath.url()).pathname;
-  console.log('--- 末尾 "/" の無いサブパスから開いた先:', landed);
-  if (landed !== '/raceemu/') fail(`末尾に "/" が付け直されていない: ${landed}`);
-  const title = await subpath.textContent('h1').catch(() => null);
-  if (title === null || title.trim() === '') fail('サブパスから開くと画面が真っ白になる');
-  if (subErrors.length > 0) fail(`サブパスから開くとエラーが出る: ${subErrors.join(', ')}`);
-  await subpath.close();
-}
 
 await page.goto('http://localhost:4173/', { waitUntil: 'load' });
 // ヘッダにタブが入ったので、面を移ってから触る。
