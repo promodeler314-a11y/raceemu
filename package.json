@@ -26,7 +26,6 @@
     "@vitejs/plugin-react": "^6.1.1",
     "playwright": "^1.62.1",
     "tailwindcss": "^4.3.3",
-    "tesseract.js": "7",
     "tsx": "^4.23.13",
     "typescript": "^5.9.3",
     "vite": "^8.2.2",
@@ -35,6 +34,7 @@
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "tesseract.js": "7",
     "uplot": "^1.6.32",
     "zustand": "^5.0.15"
   }

@@ -24,6 +24,7 @@ ENV NODE_ENV=production
 # それで devDependencies を落とさずそのまま持ってきている。
 # 落としたい場合は tsx を dependencies に移すか、Worker を含めて
 # あらかじめコンパイルする必要がある。
+# 読み取りに使う tesseract.js は実行時に要るので dependencies にある。
 COPY --from=build /app /app
 ENV RACEEMU_STATIC_ROOT=/app/apps/web/dist
 ENV RACEEMU_TESSDATA=/app/tessdata
