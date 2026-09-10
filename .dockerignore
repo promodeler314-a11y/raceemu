@@ -1,0 +1,11 @@
+# イメージを組むのに要らないものは送らない。
+# node_modules を送るとコンテキストが数百 MB になり、しかもホスト側の
+# バイナリが混ざる。依存はイメージの中で入れ直す。
+node_modules
+**/node_modules
+.git
+.github
+apps/web/dist
+docs
+design
+*.tsbuildinfo

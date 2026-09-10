@@ -10,6 +10,10 @@
 https://promodeler314-a11y.github.io/raceemu/
 
 `main` に入ると[ワークフロー](.github/workflows/pages.yml)が `typecheck`、`test`、`build`、`e2e` を通してから配る。
+
+自前の k3s に置く道もある。
+[別のワークフロー](.github/workflows/image.yml)が `ghcr.io/promodeler314-a11y/raceemu` を更新するので、`kubectl apply -f deploy/k8s.yaml` で置く。
+こちらは静的ファイルと[探索をサーバ側で回す口](docs/server-design.md)を同じオリジンから配る。
 詳しくは[配信](docs/deploy.md)を参照。
 
 ## 画面
