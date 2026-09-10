@@ -1,8 +1,15 @@
 # k3s に置くときの最小の構成。
-# 名前空間・イメージ・ホスト名は環境に合わせて書き換える。
+#
+#   kubectl apply -f deploy/k8s.yaml
+#
+# イメージは .github/workflows/image.yml が main への取り込みごとに
+# ghcr.io に置く。手元で組んで転送する手順を挟まない。
+# 版を固定したいときは :main を :sha-xxxxxxx に書き換える。
 #
 # 認証は持たせていない。Cloudflare Access を前に置く前提である。
-# docs/server-design.md の 5 節を参照。
+# 外への口は Service（raceemu.default.svc.cluster.local:80）を
+# cloudflared の宛先にすれば足りる。Ingress は要らない。
+# docs/server-design.md の 5 節と docs/deploy.md の 5 節を参照。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -17,7 +24,9 @@ spec:
     spec:
       containers:
         - name: raceemu
-          image: raceemu:latest
+          image: ghcr.io/promodeler314-a11y/raceemu:main
+          # :main は同じ名前のまま中身が変わる。入れ替えるたびに引き直す。
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
           env:

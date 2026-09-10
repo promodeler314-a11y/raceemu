@@ -51,3 +51,54 @@
 - **モバイルでの Worker 数。** 既定は `hardwareConcurrency - 1`（`packages/sim/src/parallel/browser.ts`）なので、8 コアの端末では 7 本立ち上がり、それぞれ 1.17 MB を読む。上限を切るかは実機で測ってから決める。
 - **ES module 形式の Worker。** `vite.config.ts` で `worker.format` を `es` にしている。Firefox は 114 から対応した。
 - **反映までの間。** GitHub Pages の CDN は `index.html` を数分ほど持つ。資産のファイル名にはハッシュが付くので古い資産を掴むことはないが、更新が見えるまでに間がある。
+
+## 5. 自前の k3s に置く
+
+GitHub Pages と自前の k3s は、どちらか一方を選ぶものではない。
+Pages は誰でも開ける置き場であり、k3s は[探索をサーバ側で回す](server-design.md)ための置き場である。
+`apps/api` は静的ファイルも同じオリジンから配るので、k3s に置いたものだけでもアプリとして完結する。
+
+### 5.1 イメージ
+
+[ワークフロー](../.github/workflows/image.yml)が `main` への取り込みごとに `ghcr.io/promodeler314-a11y/raceemu` を更新する。
+タグは `main` と `sha-<短縮>` の 2 つで、常用は `main`、動いている版を固定したいときは `sha` を指す。
+
+手元で組んで転送する手順は置いていない。
+挟むと、何が動いているのかがコミットから追えなくなる。
+
+pull request では組むだけで置かない。
+`Dockerfile` が壊れていることにマージしてから気付く、という事故をここで止める。
+
+**最初の一回だけ、パッケージを公開に切り替える。**
+GitHub Container Registry のパッケージは、公開リポジトリから置いても既定では非公開である。
+`https://github.com/users/promodeler314-a11y/packages/container/raceemu/settings` で公開にすると、クラスタ側に資格情報が要らなくなる。
+非公開のままにする場合は、`ghcr.io` を引ける `imagePullSecret` を作って `deploy/k8s.yaml` の `spec.template.spec` に足す。
+
+### 5.2 置く
+
+```
+kubectl apply -f deploy/k8s.yaml
+kubectl rollout status deploy/raceemu
+kubectl port-forward deploy/raceemu 8080:8080   # 手元から確かめる
+curl -s localhost:8080/api/health
+```
+
+`/api/health` が返す `concurrencySource` が `cgroup` であれば、[設計](server-design.md)の 4.1 節の前提どおりに並列数を読めている。
+`availableParallelism` と出ていたらクォータを読めておらず、ノードのコア数で走っている。
+`RACEEMU_CONCURRENCY` を置いて明示する。
+
+新しいイメージに入れ替えるときは次のとおりである。
+タグが同じ `main` のままなので、`apply` では何も変わらない。
+
+```
+kubectl rollout restart deploy/raceemu
+```
+
+### 5.3 外に出す
+
+Service（`raceemu.default.svc.cluster.local:80`）を cloudflared の宛先にする。
+Ingress は要らない。
+
+**認証は持たせていない。**
+[設計](server-design.md)の 5 節のとおり、Cloudflare Access を前に置く前提である。
+探索は 1 本で 25 万レース規模になるので、誰でも投げられる状態で外に出すと、そのまま計算資源を配ることになる。
