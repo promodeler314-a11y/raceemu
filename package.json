@@ -34,6 +34,7 @@
   "dependencies": {
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "sharp": "^0.35.4",
     "tesseract.js": "7",
     "uplot": "^1.6.32",
     "zustand": "^5.0.15"

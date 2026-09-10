@@ -1,4 +1,5 @@
 import { createWorker, type Worker } from 'tesseract.js';
+import { preprocessForOcr } from './preprocess.ts';
 
 /**
  * 画面の写真から文字を読む。
@@ -35,6 +36,12 @@ export interface OcrOptions {
   readonly startupTimeoutMs?: number;
   /** 1 枚の読み取りに待つ上限 */
   readonly recognizeTimeoutMs?: number;
+  /**
+   * 二値化の閾値。0 から 255。指定しなければ既定値を使う。
+   * 実機の写真で試して合わなければ調整できるように外に出してある。
+   * docs/ocr-design.md の 5 節を参照。
+   */
+  readonly threshold?: number;
 }
 
 const DEFAULT_STARTUP_TIMEOUT_MS = 60_000;
@@ -133,7 +140,14 @@ export class OcrEngine {
         const worker = await this.ensureWorker();
         const signal = this.signal;
         const started = performance.now();
-        const work = worker.recognize(image);
+        // 二値化まで済ませてから渡す。tesseract 自身の自動二値化は、
+        // 色つきのアイコンや模様のある背景では失敗する（docs/ocr-design.md 5 節）。
+        // 前処理そのものが失敗したら（壊れた画像など）、無加工のまま渡す。
+        // 前処理の不備で本来読めるはずの画像まで読めなくするよりましである。
+        const prepared = await preprocessForOcr(image, { threshold: this.options.threshold }).catch(
+          () => image,
+        );
+        const work = worker.recognize(prepared);
         const { data } = await withTimeout(
           signal === null ? work : Promise.race([work, signal.promise]),
           this.options.recognizeTimeoutMs ?? DEFAULT_RECOGNIZE_TIMEOUT_MS,

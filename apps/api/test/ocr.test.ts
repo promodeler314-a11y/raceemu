@@ -35,12 +35,43 @@ const EXPECTED = [
   '末脚',
 ];
 
+/** 実際に読み取りを試した実機の画面に写っていた、21 件のスキル名。 */
+const HARD_EXPECTED = [
+  '聖夜のミラクルラン！',
+  'ワクワククライマックス',
+  'スカーレットリリィの高揚',
+  'アド・アストラ',
+  '夏ウマ娘○',
+  '弧線のプロフェッサー',
+  'ハヤテ一文字',
+  '中距離直線○',
+  '差し直線○',
+  '十万バリキ',
+  '小休憩',
+  'スリーセブン',
+  'ウマ好み',
+  '尻尾の滝登り',
+  '下り坂巧者',
+  '食らいつき',
+  '連鎖反応',
+  '活路を拓く！',
+  '千鍛万錬',
+  '前人未到',
+  '奮い立つ心',
+];
+
 describe.skipIf(!available)('画面の読み取り', () => {
   it('見本の画像からスキルを引き当てる', async () => {
     const image = readFileSync('apps/api/test/fixtures/skill-list.png');
     const { text } = await engine!.recognize(image);
-    const found = matcher.matchAll(text).map((m) => m.skill.name);
-    for (const name of EXPECTED) expect(found).toContain(name);
+    const found = matcher.matchAll(text);
+    for (const name of EXPECTED) {
+      const match = found.find((m) => m.skill.name === name);
+      expect(match, `${name} が見つからない`).toBeDefined();
+      // 前処理の閾値がずれると、正しいスキルは引けても確信度が落ちて
+      // 画面で「要確認」の扱いになる。ここで確信度の劣化も検出する。
+      expect(match!.score, `${name} の確信度が低い`).toBeGreaterThanOrEqual(0.99);
+    }
     // 見本に無いものを拾っていない
     expect(found.length).toBe(EXPECTED.length);
   }, 120000);
@@ -49,6 +80,21 @@ describe.skipIf(!available)('画面の読み取り', () => {
     const image = readFileSync('apps/api/test/fixtures/skill-list.png');
     const [a, b] = await Promise.all([engine!.recognize(image), engine!.recognize(image)]);
     expect(b.text).toBe(a.text);
+  }, 120000);
+
+  /**
+   * 実機同等の難しさ（背景の模様、丸いアイコン、装飾つきの金枠、縦に長い一覧）
+   * を持つ見本で、二値化の前処理が効いていることを確かめる。
+   *
+   * この前処理を入れる前は、この見本で 21 件中 14 件しか引き当てられなかった。
+   * docs/ocr-design.md の 5 節に実測の経緯がある。
+   */
+  it('実機同等の難しさの見本でも、大半のスキルを引き当てる', async () => {
+    const image = readFileSync('apps/api/test/fixtures/hard-skill-list.png');
+    const { text } = await engine!.recognize(image);
+    const found = new Set(matcher.matchAll(text).map((m) => m.skill.name));
+    const missed = HARD_EXPECTED.filter((name) => !found.has(name));
+    expect(missed, `引き当てられなかった: ${missed.join('、')}`).toEqual([]);
   }, 120000);
 });
 
@@ -89,7 +135,7 @@ describe('読み取りの口', () => {
   const config: Config = {
     port: 0, concurrency: 1, concurrencySource: 'env', maxRunning: 1, maxQueued: 1,
     maxRacesPerJob: 1000, jobTtlMs: 60_000, staticRoot: null,
-    tessdataPath: null, maxImageBytes: 1024,
+    tessdataPath: null, maxImageBytes: 1024, ocrThreshold: 128,
   };
 
   async function withServer(

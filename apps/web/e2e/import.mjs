@@ -65,8 +65,12 @@ try {
     '弧線のプロフェッサー', '円弧のマエストロ', '中距離コーナー○', '中距離直線○',
     '一匹狼', '好転一息', '正攻法', '真骨頂', 'スリップストリーム', '末脚',
   ];
+  // 確信度が低い行は、同じセルに読み取った文字と紛らわしい候補の名前が続けて入る
+  // （Import.tsx の「要確認」の注記）。前方一致で見る。
   const names = rows.map((r) => (r[1] ?? '').replace('（所持済み）', ''));
-  for (const name of expected) if (!names.includes(name)) fail(`${name} が候補に出ていない`);
+  for (const name of expected) {
+    if (!names.some((n) => n.startsWith(name))) fail(`${name} が候補に出ていない`);
+  }
 
   const before = await page.locator('button:has-text("選んだ")').textContent();
   console.log('--- 取り込みボタン:', before?.trim());

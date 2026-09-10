@@ -110,7 +110,10 @@ async function serveStatic(root: string, pathname: string, res: ServerResponse):
 export function createApiServer(config: Config, data: GameData, runner: JobRunner) {
   // 読み取りは要求されたときに初めて立ち上げる。
   // 学習データの置き場が指定されていなければ、口ごと閉じる。
-  const ocr = config.tessdataPath === null ? null : new OcrEngine({ tessdataPath: config.tessdataPath });
+  const ocr =
+    config.tessdataPath === null
+      ? null
+      : new OcrEngine({ tessdataPath: config.tessdataPath, threshold: config.ocrThreshold });
   const matcher = new SkillMatcher(data.skills);
 
   return createServer((req, res) => {
