@@ -195,6 +195,8 @@ export interface InverseResult {
   readonly to: number;
   readonly step: number;
   readonly method: 'bisect' | 'scan';
+  /** 位置取り調整の回数ごとの最小値。試行ごとに ADJUSTMENT_COUNT_BUCKETS 個ずつ並ぶ。 */
+  readonly byCount?: Float64Array;
 }
 
 export interface DetailData {
@@ -224,6 +226,8 @@ interface AppState {
   inverseStatus: TargetStatus;
   inverseGoal: Goal;
   inverseCount: number;
+  /** 位置取り調整の回数ごとに段階表示するか。二分探索が使えなくなるぶん遅くなる。 */
+  inverseByAdjustmentCount: boolean;
   inverseResult: InverseResult | null;
   /** 順位条件を実際に判定するか。false なら本家と同じく満たしている前提。 */
   useField: boolean;
@@ -268,7 +272,12 @@ interface AppState {
   theme: Theme;
   setTheme: (theme: Theme) => void;
   showTrial: (trial: number) => void;
-  setInverse: (patch: { status?: TargetStatus; goal?: Goal; count?: number }) => void;
+  setInverse: (patch: {
+    status?: TargetStatus;
+    goal?: Goal;
+    count?: number;
+    byAdjustmentCount?: boolean;
+  }) => void;
   solveInverse: () => Promise<void>;
   saveSnapshot: () => void;
   removeSnapshot: (id: number) => void;
@@ -353,6 +362,7 @@ export const useStore = create<AppState>((set, get) => ({
   inverseStatus: 'stamina',
   inverseGoal: { kind: 'maxSpurt' },
   inverseCount: 500,
+  inverseByAdjustmentCount: false,
   inverseResult: null,
   useField: false,
   options: defaultRunOptions(),
@@ -563,6 +573,7 @@ export const useStore = create<AppState>((set, get) => ({
       inverseStatus: patch.status ?? s.inverseStatus,
       inverseGoal: patch.goal ?? s.inverseGoal,
       inverseCount: patch.count ?? s.inverseCount,
+      inverseByAdjustmentCount: patch.byAdjustmentCount ?? s.inverseByAdjustmentCount,
     })),
 
   solveInverse: async () => {
@@ -576,9 +587,11 @@ export const useStore = create<AppState>((set, get) => ({
     const to = 1600;
     const step = 10;
     const goal = state.inverseGoal;
-    const method = resolveMethod({ status: state.inverseStatus, goal, from, to, step });
+    const byAdjustmentCount = state.inverseByAdjustmentCount;
+    // 回数ごとの内訳が要るときは二分探索では拾えないので、常に全走査にする。
+    const method = byAdjustmentCount ? 'scan' : resolveMethod({ status: state.inverseStatus, goal, from, to, step });
     try {
-      const { values, races } = await getPool().runCritical(
+      const { values, races, byCount } = await getPool().runCritical(
         toSerializable(buildSetting(state)),
         system,
         {
@@ -589,6 +602,7 @@ export const useStore = create<AppState>((set, get) => ({
           to,
           step,
           method,
+          byAdjustmentCount,
         },
         {
           count: state.inverseCount,
@@ -608,6 +622,7 @@ export const useStore = create<AppState>((set, get) => ({
           to,
           step,
           method,
+          byCount,
         },
       });
     } catch (error) {

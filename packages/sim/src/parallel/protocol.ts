@@ -2,7 +2,9 @@ import type { RaceTrack } from '../data/track.ts';
 import type { FieldProfile } from '../field/field.ts';
 import type { RaceSetting, SystemSetting, TrackRef } from '../setting.ts';
 import type { SkillData } from '../skill/types.ts';
-import type { RaceSimulationResult } from '../state.ts';
+import { ADJUSTMENT_COUNT_BUCKETS, type RaceSimulationResult } from '../state.ts';
+
+export { ADJUSTMENT_COUNT_BUCKETS };
 
 /**
  * Worker との受け渡しに使う形。構造化クローンで送れるプレーンな値だけを持つ。
@@ -195,6 +197,11 @@ export interface CriticalSpec {
   readonly to: number;
   readonly step: number;
   readonly method: 'bisect' | 'scan';
+  /**
+   * 位置取り調整の回数ごとに最小値を求めるか。
+   * true の場合、二分探索は使えないので全走査になる（method の指定によらない）。
+   */
+  readonly byAdjustmentCount?: boolean;
 }
 
 export interface CriticalResponse {
@@ -203,6 +210,11 @@ export interface CriticalResponse {
   /** 試行ごとの臨界値。達成できなければ NaN。 */
   readonly values: Float64Array;
   readonly races: number;
+  /**
+   * byAdjustmentCount を指定したときだけ入る。試行ごとに ADJUSTMENT_COUNT_BUCKETS 個ずつ並ぶ。
+   * 試行 t で調整が k 回だけ起きて目標を満たす最小値は `byCount[t * ADJUSTMENT_COUNT_BUCKETS + k]`。
+   */
+  readonly byCount?: Float64Array;
 }
 
 /**

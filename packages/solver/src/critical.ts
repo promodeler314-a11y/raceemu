@@ -1,7 +1,10 @@
 import { RaceCalculator } from '../../sim/src/calculator.ts';
 import type { RaceTrack } from '../../sim/src/data/track.ts';
 import type { RaceSetting, SystemSetting } from '../../sim/src/setting.ts';
+import { ADJUSTMENT_COUNT_BUCKETS } from '../../sim/src/state.ts';
 import { achieved, withStatus, type Goal, type TargetStatus } from './target.ts';
+
+export { ADJUSTMENT_COUNT_BUCKETS };
 
 /**
  * 試行ごとの臨界値を求める。
@@ -186,4 +189,73 @@ export function achievementCurve(
   rates: readonly number[] = [0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99],
 ): { rate: number; value: number }[] {
   return rates.map((rate) => ({ rate, value: requiredValue(values, rate) }));
+}
+
+/**
+ * 1 試行ぶんの、位置取り調整の回数ごとの臨界値を求める。
+ *
+ * 調整が起きるかどうかは、その時点の残りスタミナで決まる分岐（持久力温存に
+ * 入るかどうか）に左右されるため、逆算するステータスの値によって同じ試行でも
+ * 調整の回数が変わりうる。回数ごとに最小値を求めておけば「調整が k 回だけ
+ * 起きた場合に必要な値」を段階的に示せる。二分探索では回数が拾えないので、
+ * 常に全走査になる。
+ */
+export function criticalValuesByAdjustmentCountForTrial(
+  calculator: RaceCalculator,
+  setting: RaceSetting,
+  seed: number,
+  trial: number,
+  options: CriticalOptions,
+  values = makeValues(options),
+): { byCount: Float64Array; races: number } {
+  const byCount = new Float64Array(ADJUSTMENT_COUNT_BUCKETS).fill(Number.NaN);
+  let races = 0;
+  let filled = 0;
+  for (let i = 0; i < values.length && filled < ADJUSTMENT_COUNT_BUCKETS; i++) {
+    races++;
+    const result = calculator.simulate(withStatus(setting, options.status, values[i]!), { seed, trial }).result;
+    if (!achieved(options.goal, result)) continue;
+    const bucket = Math.min(result.positionCompetitionCount, ADJUSTMENT_COUNT_BUCKETS - 1);
+    if (Number.isNaN(byCount[bucket]!)) {
+      byCount[bucket] = values[i]!;
+      filled++;
+    }
+  }
+  return { byCount, races };
+}
+
+export interface CriticalDistributionByAdjustmentCount {
+  /** 試行ごとに ADJUSTMENT_COUNT_BUCKETS 個ずつ並ぶ。 */
+  readonly values: Float64Array;
+  readonly trials: number;
+  readonly races: number;
+}
+
+export function criticalDistributionByAdjustmentCount(
+  setting: RaceSetting,
+  system: SystemSetting,
+  trackData: Record<number, RaceTrack>,
+  options: CriticalOptions,
+  seed: number,
+  from: number,
+  count: number,
+): CriticalDistributionByAdjustmentCount {
+  const calculator = new RaceCalculator(system, trackData);
+  const values = makeValues(options);
+  const out = new Float64Array(count * ADJUSTMENT_COUNT_BUCKETS);
+  let races = 0;
+  for (let i = 0; i < count; i++) {
+    const trialResult = criticalValuesByAdjustmentCountForTrial(calculator, setting, seed, from + i, options, values);
+    out.set(trialResult.byCount, i * ADJUSTMENT_COUNT_BUCKETS);
+    races += trialResult.races;
+  }
+  return { values: out, trials: count, races };
+}
+
+/** ADJUSTMENT_COUNT_BUCKETS 個ずつ並んだ配列から、調整の回数 k の分布だけを取り出す。 */
+export function pickAdjustmentCount(byCountValues: Float64Array, count: number): Float64Array {
+  const trials = byCountValues.length / ADJUSTMENT_COUNT_BUCKETS;
+  const out = new Float64Array(trials);
+  for (let i = 0; i < trials; i++) out[i] = byCountValues[i * ADJUSTMENT_COUNT_BUCKETS + count]!;
+  return out;
 }

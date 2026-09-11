@@ -1,6 +1,6 @@
 import { RaceCalculator } from '../calculator.ts';
 import type { SystemSetting } from '../setting.ts';
-import type { RaceSimulationResult } from '../state.ts';
+import { ADJUSTMENT_COUNT_BUCKETS, type RaceSimulationResult } from '../state.ts';
 import { buildFieldBundle, type FieldBundle } from '../field/field.ts';
 import { runMultiRace } from '../multi/race.ts';
 import type { CriticalSpec, FieldSpec } from './protocol.ts';
@@ -100,19 +100,24 @@ export function runCriticalChunk(
   from: number,
   count: number,
   spec: CriticalSpec,
-): { values: Float64Array; races: number } {
+): { values: Float64Array; races: number; byCount?: Float64Array } {
   const resolved = fromSerializable(setting, data);
   const calculator = new RaceCalculator(system, data.trackData);
   const points: number[] = [];
   for (let value = spec.from; value <= spec.to; value += spec.step) points.push(value);
 
   const values = new Float64Array(count);
+  const byCount = spec.byAdjustmentCount
+    ? new Float64Array(count * ADJUSTMENT_COUNT_BUCKETS).fill(Number.NaN)
+    : undefined;
   let races = 0;
 
-  const achieved = (index: number, trial: number): boolean => {
+  const simulateAt = (index: number, trial: number): RaceSimulationResult => {
     races++;
     const uma = { ...resolved.uma, [spec.status]: points[index]! };
-    const result = calculator.simulate({ ...resolved, uma }, { seed, trial }).result;
+    return calculator.simulate({ ...resolved, uma }, { seed, trial }).result;
+  };
+  const achieves = (result: RaceSimulationResult): boolean => {
     switch (spec.goalKind) {
       case 'maxSpurt':
         return result.maxSpurt;
@@ -126,22 +131,37 @@ export function runCriticalChunk(
   for (let i = 0; i < count; i++) {
     const trial = from + i;
     let found = Number.NaN;
-    if (spec.method === 'scan') {
+
+    if (byCount !== undefined) {
+      // 回数ごとの最小値も要るので、二分探索は使わず全走査にする。
+      const offset = i * ADJUSTMENT_COUNT_BUCKETS;
+      let filled = 0;
+      for (let j = 0; j < points.length && filled < ADJUSTMENT_COUNT_BUCKETS; j++) {
+        const result = simulateAt(j, trial);
+        if (!achieves(result)) continue;
+        if (Number.isNaN(found)) found = points[j]!;
+        const bucket = Math.min(result.positionCompetitionCount, ADJUSTMENT_COUNT_BUCKETS - 1);
+        if (Number.isNaN(byCount[offset + bucket]!)) {
+          byCount[offset + bucket] = points[j]!;
+          filled++;
+        }
+      }
+    } else if (spec.method === 'scan') {
       for (let j = 0; j < points.length; j++) {
-        if (achieved(j, trial)) {
+        if (achieves(simulateAt(j, trial))) {
           found = points[j]!;
           break;
         }
       }
     } else {
       const last = points.length - 1;
-      if (achieved(0, trial)) found = points[0]!;
-      else if (achieved(last, trial)) {
+      if (achieves(simulateAt(0, trial))) found = points[0]!;
+      else if (achieves(simulateAt(last, trial))) {
         let lo = 0;
         let hi = last;
         while (hi - lo > 1) {
           const mid = (lo + hi) >> 1;
-          if (achieved(mid, trial)) hi = mid;
+          if (achieves(simulateAt(mid, trial))) hi = mid;
           else lo = mid;
         }
         found = points[hi]!;
@@ -149,7 +169,7 @@ export function runCriticalChunk(
     }
     values[i] = found;
   }
-  return { values, races };
+  return byCount === undefined ? { values, races } : { values, races, byCount };
 }
 
 /**
