@@ -87,6 +87,17 @@ export function pairedDiff(baseline: Evaluation, candidate: Evaluation): PairedD
   };
 }
 
+/**
+ * 1 回の評価を全 Worker に割り振るための塊の大きさ。
+ *
+ * `pool.run` の既定の塊は 256 で、序盤の段（200 試行など）は 1 塊に収まって
+ * しまい、Worker が 1 つしか働かない。段の試行数を Worker 数で割った大きさに
+ * すれば、1 回の評価だけで全 Worker に散らばる。
+ */
+function spreadChunkSize(trials: number, concurrency: number): number {
+  return Math.max(1, Math.ceil(trials / Math.max(1, concurrency)));
+}
+
 export class Evaluator {
   private readonly cache = new Map<string, Evaluation>();
   /** 走らせたレースの総数 */
@@ -111,6 +122,7 @@ export class Evaluator {
       count: trials,
       seed: this.context.seed,
       field: this.context.field ?? null,
+      chunkSize: spreadChunkSize(trials, this.context.pool.concurrency),
     });
     const times = new Float64Array(results.length);
     const maxSpurt = new Uint8Array(results.length);
@@ -169,6 +181,7 @@ export async function measurePositionCompetition(
     count: trials,
     seed: context.seed,
     field: context.field ?? null,
+    chunkSize: spreadChunkSize(trials, context.pool.concurrency),
   });
   const times = new Float64Array(results.length);
   const maxSpurt = new Uint8Array(results.length);
