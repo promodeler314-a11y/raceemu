@@ -28,6 +28,11 @@ import type { Style } from '../../../packages/sim/src/data/constants.ts';
 import { resolveMethod } from '../../../packages/solver/src/critical.ts';
 import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
+import {
+  buildPlanCandidates,
+  type PlanCandidates,
+} from '../../../packages/solver/src/candidates.ts';
+import type { DeckData } from '../../../packages/data/src/deck.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
 import type { Individual } from './individualsApi.ts';
@@ -37,6 +42,18 @@ import { gameData, skillChoices, skillIndex, NO_CHARA } from './skills.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
 export { gameData, skillChoices };
+
+/**
+ * サポートカードと育成ウマ娘。
+ *
+ * 育成計画から候補を組み立てるときにしか要らず、それだけで数百 KB ある。
+ * 最初の読み込みに乗せたくないので、計画に切り替えたときに取りに行く。
+ */
+let deckPromise: Promise<DeckData> | null = null;
+function fetchDeckData(): Promise<DeckData> {
+  deckPromise ??= import('../../../packages/data/src/deck-browser.ts').then((m) => m.loadDeckData());
+  return deckPromise;
+}
 const system = defaultSystemSetting();
 
 /**
@@ -90,7 +107,32 @@ export interface PersistedSettings {
   readonly debuffCounts: Readonly<Record<string, number>>;
   readonly hintLevels: Readonly<Record<string, number>>;
   readonly useField: boolean;
+  readonly plan?: PlanSetting;
 }
+
+/**
+ * 育成計画の入力。
+ *
+ * 候補をいま選んでいるスキルからではなく入手経路から作るときに使う。
+ * docs/solver-design.md 7 節を参照。共有 URL には載せない。
+ */
+export interface PlanSetting {
+  readonly enabled: boolean;
+  readonly charaId: number | null;
+  readonly charaRank: number;
+  readonly cardIds: readonly number[];
+  readonly openWhites: boolean;
+  readonly openInheritedUniques: boolean;
+}
+
+export const DEFAULT_PLAN: PlanSetting = {
+  enabled: false,
+  charaId: null,
+  charaRank: 5,
+  cardIds: [],
+  openWhites: true,
+  openInheritedUniques: true,
+};
 
 /** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
 export type Tab = 'settings' | 'summary' | 'compare' | 'detail' | 'solve' | 'field';
@@ -248,6 +290,11 @@ interface AppState {
   optimizeResult: OptimizeResult | null;
   optimizeLog: string[];
   optimizeRunning: boolean;
+  plan: PlanSetting;
+  /** サポートカードと育成ウマ娘。読み込むまでは null。 */
+  deck: DeckData | null;
+  /** 直前の探索で使った候補。経路と割引を結果の表示に使う。 */
+  planCandidates: PlanCandidates | null;
 
   dismissError: () => void;
   dismissNotice: () => void;
@@ -290,6 +337,10 @@ interface AppState {
   setMultiTrials: (trials: number) => void;
   runMulti: () => Promise<void>;
   setOptimizeBudget: (budget: number) => void;
+  setPlan: (patch: Partial<PlanSetting>) => void;
+  /** サポートカードと育成ウマ娘を読み込む。すでに読んであれば何もしない。 */
+  loadDeck: () => Promise<void>;
+  togglePlanCard: (id: number) => void;
   runOptimize: () => Promise<void>;
   shareUrl: () => string;
   applyShared: () => boolean;
@@ -308,6 +359,36 @@ interface AppState {
 function withChara(uma: UmaStatus, skillIds: readonly string[]): UmaStatus {
   const chara = skillIndex.charaOf(skillIds);
   return chara === NO_CHARA ? uma : { ...uma, charaName: chara };
+}
+
+/**
+ * 育成計画から候補を組み立てる。
+ *
+ * 静的な絞り込みにレースの設定が要るので、いま画面に入っている設定から作る。
+ * コースや脚質を変えると候補も変わる。
+ */
+export function planCandidatesOf(state: AppState): PlanCandidates | null {
+  if (state.deck === null) return null;
+  const derived = new DerivedSetting(
+    { ...buildSetting(state), skills: [] },
+    emptyPassiveBonus(),
+    gameData.trackData,
+  );
+  return buildPlanCandidates(
+    gameData.skills,
+    gameData.skillsByName,
+    state.deck,
+    derived,
+    {
+      charaId: state.plan.charaId,
+      charaRank: state.plan.charaRank,
+      cards: state.plan.cardIds.map((id) => ({ id })),
+    },
+    {
+      openWhites: state.plan.openWhites,
+      openInheritedUniques: state.plan.openInheritedUniques,
+    },
+  );
 }
 
 const saveSettings = debounceSave<PersistedSettings>('settings');
@@ -376,6 +457,9 @@ export const useStore = create<AppState>((set, get) => ({
   multiProgress: 0,
 
   optimizeBudget: 600,
+  plan: DEFAULT_PLAN,
+  deck: null,
+  planCandidates: null,
   optimizeResult: null,
   optimizeLog: [],
   optimizeRunning: false,
@@ -490,6 +574,27 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setOptimizeBudget: (optimizeBudget) => set({ optimizeBudget }),
+  setPlan: (patch) => {
+    set((s) => ({ plan: { ...s.plan, ...patch } }));
+    if (patch.enabled === true) void get().loadDeck();
+  },
+  loadDeck: async () => {
+    if (get().deck !== null) return;
+    try {
+      set({ deck: await fetchDeckData() });
+    } catch {
+      set({ error: 'サポートカードと育成ウマ娘のデータを読み込めませんでした。' });
+    }
+  },
+  togglePlanCard: (id) =>
+    set((s) => {
+      const held = s.plan.cardIds.includes(id);
+      // デッキは 6 枚まで。7 枚目を選んだら、いちばん古いものを押し出す。
+      const next = held
+        ? s.plan.cardIds.filter((x) => x !== id)
+        : [...s.plan.cardIds, id].slice(-6);
+      return { plan: { ...s.plan, cardIds: next } };
+    }),
   setOptions: (patch) => set((s) => ({ options: { ...s.options, ...patch } })),
   setDebuffCount: (id, count) =>
     set((s) => {
@@ -684,26 +789,51 @@ export const useStore = create<AppState>((set, get) => ({
    * 何千本も走らせなくても順序が付く。
    */
   runOptimize: async () => {
+    if (get().running || get().optimizeRunning) return;
+    if (get().plan.enabled) await get().loadDeck();
     const state = get();
-    if (state.running || state.optimizeRunning) return;
-    if (state.skillIds.length < 2) {
-      set({ error: '候補にするスキルを 2 つ以上選ぶ' });
+
+    // 育成計画からのときは、候補を手持ちではなく入手経路から作る。
+    // docs/solver-design.md 7 節を参照。
+    const plan = state.plan.enabled ? planCandidatesOf(state) : null;
+    const candidates = plan === null ? [...state.skillIds] : [...plan.skillIds];
+    const hintLevels = plan === null ? state.hintLevels : plan.hintLevels;
+    const always =
+      plan === null
+        ? []
+        : plan.alwaysSkillIds
+            .map((id) => gameData.skillsById.get(id))
+            .filter((skill): skill is NonNullable<typeof skill> => skill !== undefined);
+
+    if (candidates.length < 2) {
+      set({
+        error:
+          plan === null
+            ? '候補にするスキルを 2 つ以上選ぶ'
+            : '候補が集まらない。育成ウマ娘かサポートカードを選ぶか、白と固有の継承版を開く',
+      });
       return;
     }
     controller = new AbortController();
-    set({ optimizeRunning: true, error: null, optimizeResult: null, optimizeLog: [] });
+    set({
+      optimizeRunning: true,
+      error: null,
+      optimizeResult: null,
+      optimizeLog: [],
+      planCandidates: plan,
+    });
     try {
       const result = await optimizeSkills(
         {
           pool: getPool(),
           system,
-          base: toSerializable({ ...buildSetting(state), skills: [] }),
-          cost: costModelFor(state.hintLevels),
+          base: toSerializable({ ...buildSetting(state), skills: always }),
+          cost: costModelFor(hintLevels),
           seed: state.seed,
           field: fieldSpec(state),
         },
         {
-          candidates: [...state.skillIds],
+          candidates,
           budget: state.optimizeBudget,
           signal: controller.signal,
           onProgress: (message) => set((s) => ({ optimizeLog: [...s.optimizeLog, message] })),
@@ -756,6 +886,8 @@ export const useStore = create<AppState>((set, get) => ({
         debuffCounts: { ...settings.debuffCounts },
         hintLevels: { ...settings.hintLevels },
         useField: settings.useField,
+        // 育成計画は後から足した項目なので、古い保存には入っていない。
+        plan: { ...DEFAULT_PLAN, ...settings.plan },
       });
     }
     if (snapshots !== null) set({ snapshots });
@@ -905,6 +1037,7 @@ function settingsOf(state: AppState): PersistedSettings {
     debuffCounts: state.debuffCounts,
     hintLevels: state.hintLevels,
     useField: state.useField,
+    plan: state.plan,
   };
 }
 
@@ -918,6 +1051,7 @@ const SETTING_KEYS = [
   'debuffCounts',
   'hintLevels',
   'useField',
+  'plan',
 ] as const;
 
 useStore.subscribe((state, previous) => {

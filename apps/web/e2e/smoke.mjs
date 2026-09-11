@@ -249,6 +249,30 @@ if (!referenceRow[0].includes('買えない')) fail('参考行に買えない旨
 if (referenceRow[2] !== '—') fail(`参考行に pt が入っている: ${referenceRow[2]}`);
 console.log('  参考行:', referenceRow[0], '/', referenceRow[1]);
 await page.locator(optimizeSection).screenshot({ path: 'docs/images/m7-optimize.png' });
+
+// 育成計画: 候補を手持ちではなく入手経路から組み立てる。
+// サポートカードと育成ウマ娘のデータは別の塊に切ってあるので、
+// 切り替えたあとに読み込みを待つ。
+await page.click('label:has-text("育成計画") input[type=radio]');
+await page.waitForSelector('[data-testid=plan-candidates]', { timeout: 60000 });
+const planText = (await page.textContent('[data-testid=plan-candidates]')).trim();
+console.log('--- 育成計画');
+console.log(' ', planText);
+const planCount = Number(/候補 (\d+) 個/.exec(planText)[1]);
+// 手持ち 3 個から、白と固有の継承版が開いた数に変わる。
+if (!(planCount > 100)) fail(`育成計画の候補が少なすぎる: ${planCount}`);
+await page.click('label:has-text("固有の継承版") input[type=checkbox]');
+await page.waitForFunction(
+  (before) => {
+    const text = document.querySelector('[data-testid=plan-candidates]')?.textContent ?? '';
+    return Number(/候補 (\d+) 個/.exec(text)?.[1] ?? before) < before;
+  },
+  planCount,
+  { timeout: 10000 },
+);
+console.log(' ', (await page.textContent('[data-testid=plan-candidates]')).trim());
+await page.click('label:has-text("いま選んでいるスキル") input[type=radio]');
+
 await goTab('設定');
 await page.click('button:has-text("すべて外す")');
 

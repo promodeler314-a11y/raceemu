@@ -19,6 +19,8 @@ export interface CostModel {
   totalCost(skillIds: readonly string[]): number;
   /** スキル ID からグループ番号 */
   group(skillId: string): number;
+  /** スキル ID からレア度。固有の継承版だけ本数に上限があるので、探索が見る。 */
+  rarity(skillId: string): string;
 }
 
 export interface CostOptions {
@@ -45,6 +47,7 @@ export function createCostModel(
   return {
     cost,
     group,
+    rarity: (skillId) => skills.get(skillId)?.rarity ?? '',
     totalCost: (skillIds) => {
       // 同じグループの中では、最も高いもの（最も上位のもの）だけを数える。
       const best = new Map<number, number>();

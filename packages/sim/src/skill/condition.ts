@@ -101,6 +101,62 @@ function checkInRandom(
   return (state) => fixed.some((area) => contains(area, state.simulation.position));
 }
 
+/**
+ * レースが始まる前に値が決まる条件の、比較の相手。
+ *
+ * ここに載る型は、走らせなくても真偽が決まる。
+ * 逆算や組み合わせ探索は、これを使って「このコースでは発動しようがない」
+ * スキルを、1 レースも走らせずに候補から外す。
+ * 判定の一致を保つため、compileCondition もこの表を通す。
+ * 走ってみないと決まらない型には null を返す。
+ */
+export function staticConditionTarget(type: string, setting: DerivedSetting): number | null {
+  const base = setting.base;
+  const track = setting.trackDetail;
+  switch (type) {
+    case 'motivation':
+      return conditionValue[base.uma.condition];
+    case 'running_style':
+      return styleValue[setting.basicRunningStyle];
+    case 'rotation':
+      return track.turn;
+    case 'ground_type':
+      return track.surface;
+    case 'ground_condition':
+      return base.track.condition;
+    case 'distance_type':
+      return track.distanceType;
+    case 'track_id':
+      return track.raceTrackId;
+    case 'is_dirtgrade':
+      return track.isDirtGrade ? 1 : 0;
+    case 'is_basis_distance':
+      return track.isBasisDistance;
+    case 'is_abroad':
+      return base.track.location >= 10200 ? 1 : 0;
+    case 'base_speed':
+      return base.uma.speed;
+    case 'base_stamina':
+      return base.uma.stamina;
+    case 'base_power':
+      return base.uma.power;
+    case 'base_guts':
+      return base.uma.guts;
+    case 'base_wiz':
+      return base.uma.wisdom;
+    case 'course_distance':
+      return setting.courseLength;
+    case 'popularity':
+      return base.uma.popularity;
+    case 'corner_count':
+      return track.corners.length;
+    case 'is_tight_track':
+      return track.tightTrack;
+    default:
+      return null;
+  }
+}
+
 function compileCondition(
   skill: SkillData,
   condition: SkillCondition,
@@ -112,9 +168,10 @@ function compileCondition(
   const track = setting.trackDetail;
   const areaRng = rng.stream('randomArea', skill.id);
 
+  const staticTarget = staticConditionTarget(condition.type, setting);
+  if (staticTarget !== null) return preChecked(condition, staticTarget);
+
   switch (condition.type) {
-    case 'motivation':
-      return preChecked(condition, conditionValue[base.uma.condition]);
     case 'hp_per':
       return checkInRace(condition, (s) => Math.trunc((s.simulation.sp / s.setting.spMax) * 100));
     case 'activate_count_heal':
@@ -181,28 +238,10 @@ function compileCondition(
         ),
       );
 
-    case 'running_style':
-      return preChecked(condition, styleValue[setting.basicRunningStyle]);
-    case 'rotation':
-      return preChecked(condition, track.turn);
-    case 'ground_type':
-      return preChecked(condition, track.surface);
-    case 'ground_condition':
-      return preChecked(condition, base.track.condition);
-    case 'distance_type':
-      return preChecked(condition, track.distanceType);
-    case 'track_id':
-      return preChecked(condition, track.raceTrackId);
-    case 'is_dirtgrade':
-      return preChecked(condition, track.isDirtGrade ? 1 : 0);
-    case 'is_basis_distance':
-      return preChecked(condition, track.isBasisDistance);
     case 'distance_rate':
       return checkInRace(condition, (s) =>
         Math.trunc((s.simulation.position * 100.0) / setting.courseLength),
       );
-    case 'is_abroad':
-      return preChecked(condition, base.track.location >= 10200 ? 1 : 0);
 
     case 'phase_random':
       return checkInRandom(scratch.areas, condition.type + condition.value, () =>
@@ -311,18 +350,6 @@ function compileCondition(
         () => (s) => isInSpurt(s) && s.simulation.spurtParameters!.speed === s.setting.maxSpurtSpeed,
       );
 
-    case 'base_speed':
-      return preChecked(condition, base.uma.speed);
-    case 'base_stamina':
-      return preChecked(condition, base.uma.stamina);
-    case 'base_power':
-      return preChecked(condition, base.uma.power);
-    case 'base_guts':
-      return preChecked(condition, base.uma.guts);
-    case 'base_wiz':
-      return preChecked(condition, base.uma.wisdom);
-    case 'course_distance':
-      return preChecked(condition, setting.courseLength);
 
     case 'random_lot':
       return withAssert(condition, '==', null, () => {
@@ -488,21 +515,14 @@ function compileCondition(
         return rate === null ? true : condition.check(rate);
       };
 
-    case 'popularity':
-      return preChecked(condition, base.uma.popularity);
     case 'post_number':
       return checkInRace(condition, (s) => s.simulation.postNumber);
-    case 'corner_count':
-      return preChecked(condition, track.corners.length);
     case 'furlong':
       return checkInRace(condition, (s) => Math.trunc(s.simulation.startPosition / 200.0));
 
     case 'is_used_skill_id':
     case 'is_used_skill_id_with_detail_one':
       return (s) => s.simulation.coolDownMap.has(String(condition.value));
-
-    case 'is_tight_track':
-      return preChecked(condition, track.tightTrack);
 
     case 'run_at_full_speed_random':
       return checkInRaceBool(condition, (s) => {
