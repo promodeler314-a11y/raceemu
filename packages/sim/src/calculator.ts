@@ -33,7 +33,7 @@ import {
   type TriggeredSkill,
 } from './state.ts';
 import { approximateConditions } from './skill/approximate.ts';
-import { compileConditions, type RandomEntry } from './skill/condition.ts';
+import { compileConditions, newSkillScratch } from './skill/condition.ts';
 import type { SkillData } from './skill/types.ts';
 
 export interface SimulateOptions {
@@ -198,7 +198,7 @@ function invokeSkills(setting: RaceSetting, derived: DerivedSetting, rng: RngSet
   const result: InvokedSkill[] = [];
   for (const rawSkill of setting.skills) {
     const skill = rawSkill.rarity === 'unique' ? rawSkill.applyLevel(setting.uma.uniqueLevel) : rawSkill;
-    const calculatedAreas = new Map<string, RandomEntry[]>();
+    const scratch = newSkillScratch();
     const lot = rng.stream('skillLot', skill.id).nextDouble() * 100;
     if (skill.activateLot === 0 || lot < invokeRate) {
       for (const invoke of skill.invokes) {
@@ -206,8 +206,8 @@ function invokeSkills(setting: RaceSetting, derived: DerivedSetting, rng: RngSet
           new InvokedSkill(
             skill,
             invoke,
-            compileConditions(skill, invoke.preConditions, derived, rng, calculatedAreas),
-            compileConditions(skill, invoke.conditions, derived, rng, calculatedAreas),
+            compileConditions(skill, invoke.preConditions, derived, rng, scratch),
+            compileConditions(skill, invoke.conditions, derived, rng, scratch),
           ),
         );
       }

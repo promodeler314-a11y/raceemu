@@ -12,6 +12,23 @@ export interface RandomEntry {
   readonly end: number;
 }
 
+/**
+ * 1 つのスキルを組み立てるあいだだけ持ち回る場所。
+ *
+ * 同じスキルの発動条件どうしで共有するものを入れる。スキルをまたいでは
+ * 共有しない（`calculator.ts` がスキルごとに作る）。
+ */
+export interface SkillScratch {
+  /** ランダム発動区間。同じ区間を何度も計算し直さないために覚えておく。 */
+  readonly areas: Map<string, RandomEntry[]>;
+  /** `random_lot_shared` の抽選結果（0 から 99）。まだ引いていなければ null。 */
+  sharedLot: number | null;
+}
+
+export function newSkillScratch(): SkillScratch {
+  return { areas: new Map(), sharedLot: null };
+}
+
 function contains(entry: RandomEntry, position: number): boolean {
   return position >= entry.start && position <= entry.end;
 }
@@ -28,12 +45,12 @@ export function compileConditions(
   groups: readonly SkillCondition[][],
   setting: DerivedSetting,
   rng: RngSet,
-  calculatedAreas: Map<string, RandomEntry[]>,
+  scratch: SkillScratch,
 ): Predicate {
   if (groups.length === 0) return ALWAYS;
   const compiled = groups.map((group) =>
     group
-      .map((condition) => compileCondition(skill, condition, setting, rng, calculatedAreas))
+      .map((condition) => compileCondition(skill, condition, setting, rng, scratch))
       .filter((p): p is Predicate => p !== null),
   );
   return (state: RaceState) => compiled.some((group) => group.every((p) => p(state)));
@@ -89,7 +106,7 @@ function compileCondition(
   condition: SkillCondition,
   setting: DerivedSetting,
   rng: RngSet,
-  calculatedAreas: Map<string, RandomEntry[]>,
+  scratch: SkillScratch,
 ): Predicate | null {
   const base = setting.base;
   const track = setting.trackDetail;
@@ -127,39 +144,39 @@ function compileCondition(
 
     case 'distance_rate_after_random':
       return withAssert(condition, '==', null, () =>
-        checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+        checkInRandom(scratch.areas, condition.type + condition.value, () =>
           chooseRandom(setting, areaRng, setting.courseLength * condition.value * 0.01, setting.courseLength),
         ),
       );
     case 'corner_random':
       return withAssert(condition, '==', null, () =>
-        checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+        checkInRandom(scratch.areas, condition.type + condition.value, () =>
           initCornerRandom(setting, areaRng, condition.value),
         ),
       );
     case 'all_corner_random':
       return withAssert(condition, '==', 1, () =>
-        checkInRandom(calculatedAreas, condition.type, () => initAllCornerRandom(setting, areaRng)),
+        checkInRandom(scratch.areas, condition.type, () => initAllCornerRandom(setting, areaRng)),
       );
     case 'slope':
       return checkInRace(condition, (s) => s.getSlopeInt());
     case 'up_slope_random':
       return withAssert(condition, '==', 1, () =>
-        checkInRandom(calculatedAreas, condition.type, () => initSlopeRandom(setting, areaRng, true)),
+        checkInRandom(scratch.areas, condition.type, () => initSlopeRandom(setting, areaRng, true)),
       );
     case 'up_slope_random_later_half':
       return withAssert(condition, '==', 1, () =>
-        checkInRandom(calculatedAreas, condition.type, () =>
+        checkInRandom(scratch.areas, condition.type, () =>
           initSlopeRandomLaterHalf(setting, areaRng, true),
         ),
       );
     case 'down_slope_random':
       return withAssert(condition, '==', 1, () =>
-        checkInRandom(calculatedAreas, condition.type, () => initSlopeRandom(setting, areaRng, false)),
+        checkInRandom(scratch.areas, condition.type, () => initSlopeRandom(setting, areaRng, false)),
       );
     case 'down_slope_random_later_half':
       return withAssert(condition, '==', 1, () =>
-        checkInRandom(calculatedAreas, condition.type, () =>
+        checkInRandom(scratch.areas, condition.type, () =>
           initSlopeRandomLaterHalf(setting, areaRng, false),
         ),
       );
@@ -188,7 +205,7 @@ function compileCondition(
       return preChecked(condition, base.track.location >= 10200 ? 1 : 0);
 
     case 'phase_random':
-      return checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+      return checkInRandom(scratch.areas, condition.type + condition.value, () =>
         initPhaseRandom(setting, areaRng, condition.value, 0.0, 1.0),
       );
     case 'phase_firsthalf':
@@ -197,11 +214,11 @@ function compileCondition(
         return s.simulation.startPosition < (start + end) / 2 ? s.currentPhase : -1;
       });
     case 'phase_firsthalf_random':
-      return checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+      return checkInRandom(scratch.areas, condition.type + condition.value, () =>
         initPhaseRandom(setting, areaRng, condition.value, 0.0, 0.5),
       );
     case 'phase_firstquarter_random':
-      return checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+      return checkInRandom(scratch.areas, condition.type + condition.value, () =>
         initPhaseRandom(setting, areaRng, condition.value, 0.0, 0.25),
       );
     case 'phase_laterhalf':
@@ -210,37 +227,37 @@ function compileCondition(
         return s.simulation.startPosition >= (start + end) / 2 ? s.currentPhase : -1;
       });
     case 'phase_laterhalf_random':
-      return checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+      return checkInRandom(scratch.areas, condition.type + condition.value, () =>
         initPhaseRandom(setting, areaRng, condition.value, 0.5, 1.0),
       );
     case 'phase_straight_random':
-      return checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+      return checkInRandom(scratch.areas, condition.type + condition.value, () =>
         initPhaseStraightRandom(setting, areaRng, condition.value, 0.0, 1.0),
       );
     case 'phase_first_half_straight_random':
-      return checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+      return checkInRandom(scratch.areas, condition.type + condition.value, () =>
         initPhaseStraightRandom(setting, areaRng, condition.value, 0.0, 0.5),
       );
     case 'phase_latter_half_straight_random':
-      return checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+      return checkInRandom(scratch.areas, condition.type + condition.value, () =>
         initPhaseStraightRandom(setting, areaRng, condition.value, 0.5, 1.0),
       );
     case 'phase_corner_random':
-      return checkInRandom(calculatedAreas, condition.type + condition.value, () =>
+      return checkInRandom(scratch.areas, condition.type + condition.value, () =>
         initPhaseCornerRandom(setting, areaRng, condition.value),
       );
     case 'is_finalcorner_random':
       return withAssert(condition, '==', 1, () =>
-        checkInRandom(calculatedAreas, condition.type, () => initFinalCornerRandom(setting, areaRng)),
+        checkInRandom(scratch.areas, condition.type, () => initFinalCornerRandom(setting, areaRng)),
       );
     case 'is_finalstraight_random':
     case 'last_straight_random':
       return withAssert(condition, '==', 1, () =>
-        checkInRandom(calculatedAreas, condition.type, () => initFinalStraightRandom(setting, areaRng)),
+        checkInRandom(scratch.areas, condition.type, () => initFinalStraightRandom(setting, areaRng)),
       );
     case 'straight_random':
       return withAssert(condition, '==', 1, () =>
-        checkInRandom(calculatedAreas, condition.type, () => initStraightRandom(setting, areaRng)),
+        checkInRandom(scratch.areas, condition.type, () => initStraightRandom(setting, areaRng)),
       );
     case 'is_last_straight':
       return withAssert(condition, '==', 1, () => (s) => s.isInFinalStraight());
@@ -312,6 +329,29 @@ function compileCondition(
         const result = setting.fixRandom
           ? true
           : condition.value > rng.stream('randomLot', skill.id).nextInt(100);
+        return () => result;
+      });
+
+    /**
+     * 当たり外れを 1 回だけ引き、そのスキルの中で使い回す条件。
+     *
+     * `random_lot` との違いは引く回数である。あちらは条件ごとに引き直すので、
+     * 同じスキルに 2 つあれば 2 回引く。こちらは 1 回だけ引いて、どの条件も
+     * 同じ出目と比べる。
+     *
+     * いま持っているのは「勝負師」「やまっけ」「鉄火のギャンブラー」の 3 つで、
+     * どれも人気で二分された枝を持つ（人気 4 番以下なら 60%、3 番以内なら 30%
+     * など）。枝は人気で排他なので、実のところ引く回数の違いは結果に出ない。
+     * それでも 1 回にしておくのは、名前のとおりの意味だからである。
+     *
+     * 本家（`SkillChecker.kt`）はこの型に分岐を持たず、条件ごと落としている。
+     * 落とすと条件を満たした扱いになるので、この 3 つは必ず発動していた。
+     */
+    case 'random_lot_shared':
+      return withAssert(condition, '==', null, () => {
+        if (setting.fixRandom) return ALWAYS;
+        scratch.sharedLot ??= rng.stream('randomLotShared', skill.id).nextInt(100);
+        const result = condition.value > scratch.sharedLot;
         return () => result;
       });
 

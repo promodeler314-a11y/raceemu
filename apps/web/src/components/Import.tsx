@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
-import { useStore } from '../store.ts';
+import { currentTrackDetail, useStore } from '../store.ts';
 import { Panel } from './Inputs.tsx';
+import type { FitRank } from '../../../../packages/sim/src/data/constants.ts';
 
 /**
  * スキル画面の写真から所持スキルを取り込む。
@@ -223,6 +224,197 @@ export function ImportPanel() {
                     ) : (
                       `${(100 * match.score).toFixed(0)} %`
                     )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </Panel>
+  );
+}
+
+/** サーバが返す適性の並び。`apps/api/src/status-header.ts` の `APTITUDE_KEYS` と同じ。 */
+const APTITUDE_LABELS: readonly { readonly key: string; readonly label: string }[] = [
+  { key: 'turf', label: '芝' },
+  { key: 'dirt', label: 'ダート' },
+  { key: 'sprint', label: '短距離' },
+  { key: 'mile', label: 'マイル' },
+  { key: 'middle', label: '中距離' },
+  { key: 'long', label: '長距離' },
+  { key: 'nige', label: '逃げ' },
+  { key: 'sen', label: '先行' },
+  { key: 'sasi', label: '差し' },
+  { key: 'oi', label: '追込' },
+];
+
+const STATUS_LABELS = ['スピード', 'スタミナ', 'パワー', '根性', '賢さ'] as const;
+
+const STYLE_TO_APTITUDE: Record<string, string> = {
+  NIGE: 'nige',
+  SEN: 'sen',
+  SASI: 'sasi',
+  OI: 'oi',
+};
+
+/** コースの距離区分（1 から 4）から適性の欄へ。track.ts の distanceCategory と同じ並び。 */
+const DISTANCE_TO_APTITUDE = ['sprint', 'mile', 'middle', 'long'];
+
+interface StatusReading {
+  readonly status: readonly (number | null)[];
+  readonly aptitudes: Readonly<Record<string, FitRank | null>>;
+}
+
+/**
+ * 「ウマ娘詳細」画面の上半分から、ステータスと適性を取り込む。
+ *
+ * **適性は 10 個あるが、この計算モデルが使うのは 3 つだけである。** バ場と
+ * 距離はいま選んでいるコースで、脚質はいま選んでいる脚質で決まる。どれを
+ * 当てたかが分かるように、読み取った 10 個を全部出したうえで、当てる 3 つに
+ * 印を付ける。コースや脚質を変えたら取り込み直す必要がある。
+ */
+export function StatusImportPanel() {
+  const setUma = useStore((s) => s.setUma);
+  const uma = useStore((s) => s.uma);
+  const track = useStore((s) => s.track);
+  const detail = currentTrackDetail(track);
+  const [reading, setReading] = useState<StatusReading | null>(null);
+  const [state, setState] = useState<'idle' | 'running'>('idle');
+  const [message, setMessage] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const surfaceKey = detail === undefined ? null : detail.surface === 1 ? 'turf' : 'dirt';
+  const distanceKey =
+    detail === undefined ? null : (DISTANCE_TO_APTITUDE[detail.distanceType - 1] ?? null);
+  const styleKey = STYLE_TO_APTITUDE[uma.style] ?? null;
+  const used = new Set([surfaceKey, distanceKey, styleKey].filter((k): k is string => k !== null));
+
+  const send = async (file: File) => {
+    setState('running');
+    setMessage(null);
+    setReading(null);
+    try {
+      const res = await fetch('/api/ocr/status', {
+        method: 'POST',
+        headers: { 'content-type': file.type || 'image/png' },
+        body: file,
+      });
+      const contentType = res.headers.get('content-type') ?? '';
+      if (!contentType.includes('application/json')) {
+        setMessage(explainNonJson(res));
+        return;
+      }
+      let body: StatusReading & { error?: string };
+      try {
+        body = (await res.json()) as typeof body;
+      } catch {
+        setMessage(explainNonJson(res));
+        return;
+      }
+      if (res.status === 404) {
+        setMessage(NO_ENDPOINT);
+        return;
+      }
+      if (!res.ok) {
+        setMessage(body.error ?? `読み取りに失敗した（${res.status}）`);
+        return;
+      }
+      setReading(body);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setState('idle');
+    }
+  };
+
+  const apply = () => {
+    if (reading === null) return;
+    const [speed, stamina, power, guts, wisdom] = reading.status;
+    const patch: Record<string, number | FitRank> = {};
+    if (speed != null) patch['speed'] = speed;
+    if (stamina != null) patch['stamina'] = stamina;
+    if (power != null) patch['power'] = power;
+    if (guts != null) patch['guts'] = guts;
+    if (wisdom != null) patch['wisdom'] = wisdom;
+    const surface = surfaceKey === null ? null : reading.aptitudes[surfaceKey];
+    const distance = distanceKey === null ? null : reading.aptitudes[distanceKey];
+    const style = styleKey === null ? null : reading.aptitudes[styleKey];
+    if (surface != null) patch['surfaceFit'] = surface;
+    if (distance != null) patch['distanceFit'] = distance;
+    if (style != null) patch['styleFit'] = style;
+    setUma(patch as never);
+    setMessage(`${Object.keys(patch).length} 項目を設定に入れた。`);
+  };
+
+  return (
+    <Panel title="画面からステータスを取り込む">
+      <p className="text-xs text-ink3">
+        「ウマ娘詳細」画面の<strong>上半分</strong>（ステータスの数字と適性が写っている部分）を送る。
+        スキル一覧と違い、切り抜かずに画面全体のまま送ってよい。位置は画面の横幅に対する割合で決まる。
+      </p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <input
+          ref={inputRef}
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file !== undefined) void send(file);
+            e.target.value = '';
+          }}
+        />
+        <button
+          type="button"
+          className="rounded-sm bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-50"
+          onClick={() => inputRef.current?.click()}
+          disabled={state === 'running'}
+        >
+          {state === 'running' ? '読み取り中' : 'ステータスの画像を選ぶ'}
+        </button>
+        {reading !== null && (
+          <button
+            type="button"
+            className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
+            onClick={apply}
+          >
+            設定に入れる
+          </button>
+        )}
+      </div>
+      {message !== null && <p className="mt-2 text-xs text-ink2">{message}</p>}
+
+      {reading !== null && (
+        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          <table className="w-full text-xs">
+            <tbody>
+              {STATUS_LABELS.map((label, index) => (
+                <tr key={label} className="border-t border-rule2">
+                  <th scope="row" className="py-1 text-left font-normal text-ink3">
+                    {label}
+                  </th>
+                  <td className="py-1 text-right tabular-nums">
+                    {reading.status[index] ?? '読めなかった'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <table className="w-full text-xs">
+            <tbody>
+              {APTITUDE_LABELS.map(({ key, label }) => (
+                <tr key={key} className="border-t border-rule2">
+                  <th scope="row" className="py-1 text-left font-normal text-ink3">
+                    {label}
+                    {used.has(key) && (
+                      <span className="ml-1 rounded-sm border border-rule2 px-1" title="いまのコースと脚質で使う">
+                        使う
+                      </span>
+                    )}
+                  </th>
+                  <td className="py-1 text-right tabular-nums">
+                    {reading.aptitudes[key] ?? '—'}
                   </td>
                 </tr>
               ))}

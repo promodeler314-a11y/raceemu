@@ -44,6 +44,22 @@ export interface OcrOptions {
   readonly threshold?: number;
 }
 
+/**
+ * 呼び出しごとに戻す tesseract の設定。
+ *
+ * worker を使い回すので、前の依頼で絞った文字が次の依頼に残ると、読めるはずの
+ * ものが読めなくなる。毎回これを土台にして上書きする。
+ *
+ * `tessedit_pageseg_mode` は **6（一塊の文章として読む）** でなければならない。
+ * tesseract 自身の既定がこれで、5 節までのスキル名の読み取りはこの前提で
+ * 調整してある。3（自動で段組みを判定）に変えたところ、見本のスキル名の
+ * 確信度が 0.99 から 0.875 に落ち、難しい見本では後半を丸ごと落とした。
+ */
+const DEFAULT_PARAMS: Record<string, string> = {
+  tessedit_char_whitelist: '',
+  tessedit_pageseg_mode: '6',
+};
+
 const DEFAULT_STARTUP_TIMEOUT_MS = 60_000;
 const DEFAULT_RECOGNIZE_TIMEOUT_MS = 120_000;
 
@@ -133,8 +149,19 @@ export class OcrEngine {
    *
    * 失敗したら worker を畳む。中途半端な状態のまま次の依頼を流すと、
    * 二度目以降が何を返すか分からなくなる。
+   *
+   * `params` は tesseract の設定。**呼び出しごとに毎回入れ直す**（既定に
+   * 戻してから当てる）ので、前の依頼の設定が次に残ることはない。worker は
+   * 1 本を使い回し、依頼は直列に流れるため、この入れ直しで足りる。
+   *
+   * 読む文字を絞る（`tessedit_char_whitelist`）と、候補の取り違えが減る。
+   * ステータスの数字や適性の記号のように、出てくる文字が分かっている場所で
+   * 効く（`status-reader.ts`）。
    */
-  async recognize(image: Buffer): Promise<{ text: string; elapsedMs: number }> {
+  async recognize(
+    image: Buffer,
+    params: Readonly<Record<string, string>> = {},
+  ): Promise<{ text: string; elapsedMs: number }> {
     const run = this.tail.then(async () => {
       try {
         const worker = await this.ensureWorker();
@@ -147,6 +174,7 @@ export class OcrEngine {
         const prepared = await preprocessForOcr(image, { threshold: this.options.threshold }).catch(
           () => image,
         );
+        await worker.setParameters({ ...DEFAULT_PARAMS, ...params });
         const work = worker.recognize(prepared);
         const { data } = await withTimeout(
           signal === null ? work : Promise.race([work, signal.promise]),
