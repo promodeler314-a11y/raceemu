@@ -9,6 +9,7 @@ import { JobRunner, QueueFullError, type Job } from './jobs.ts';
 import { OcrEngine } from './ocr.ts';
 import { checkRequest, RequestError } from './request.ts';
 import { SkillClassifier } from './skill-classifier.ts';
+import { readStatusHeader, StatusOutOfFrameError } from './status-reader.ts';
 
 /**
  * HTTP の口。
@@ -266,6 +267,49 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         runnerUp: match.runnerUp === null ? null : { id: match.runnerUp.id, name: match.runnerUp.name },
       }));
       sendJson(res, 200, { text, matches, elapsedMs: performance.now() - started });
+      return;
+    }
+
+    if (path === '/api/ocr/status' && method === 'POST') {
+      const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim();
+      if (!IMAGE_TYPES.includes(type)) {
+        sendJson(res, 415, { error: `content-type は ${IMAGE_TYPES.join(' / ')} のいずれかにする` });
+        return;
+      }
+      if (ocr === null) {
+        // スキルの読み取りと違い、こちらは分類器を持たない。文字認識が
+        // 無ければできることが無いので、黙って空を返さずそう言う。
+        sendJson(res, 503, { error: '文字認識が無効である（RACEEMU_TESSDATA が未指定）' });
+        return;
+      }
+      let image: Buffer;
+      try {
+        image = await readBinaryBody(req, config.maxImageBytes);
+      } catch (error) {
+        sendJson(res, 413, { error: error instanceof Error ? error.message : String(error) });
+        return;
+      }
+      if (image.length === 0) {
+        sendJson(res, 400, { error: '本文が空である' });
+        return;
+      }
+      const started = performance.now();
+      let reading: Awaited<ReturnType<typeof readStatusHeader>>;
+      try {
+        reading = await readStatusHeader(image, ocr);
+      } catch (error) {
+        if (error instanceof StatusOutOfFrameError) {
+          sendJson(res, 422, { error: error.message });
+          return;
+        }
+        throw error;
+      }
+      sendJson(res, 200, {
+        status: reading.status,
+        aptitudes: reading.aptitudes,
+        content: reading.content,
+        elapsedMs: performance.now() - started,
+      });
       return;
     }
 
