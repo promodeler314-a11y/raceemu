@@ -41,7 +41,7 @@ describe('スキルの一覧', () => {
   });
 
   it('キャラを固有と進化の持ち主から集める', () => {
-    expect(index.charas.length).toBe(266);
+    expect(index.charas.length).toBe(267);
     expect(index.charas).toContain(SPE);
     expect(index.uniquesOf(SPE).map((s) => s.id)).toEqual([UNIQUE_SPE]);
     expect(index.evosOf(SPE).map((s) => s.name)).toContain('夢叶える末脚');

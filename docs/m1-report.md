@@ -73,8 +73,15 @@ rng.stream('skillLot', skill.id)    // このスキルの発動抽選
 ### 3.3 条件の網羅
 
 全 2106 件のスキル定義について条件をコンパイルし、未対応の型が出ないことを確かめた。
-残った未対応は `succession_skill_count` の 1 種類（スキル「連綿」の 1 箇所）だけで、これは本家も未対応のまま条件を落としている。
+残った未対応は `succession_skill_count`（スキル「連綿」）だけで、これは本家も未対応のまま条件を落としている。
 新しい型が増えればテストが落ちるので、実装漏れに気付ける。
+
+**7 節の自動追随が実際にこれを検出した。** 本家に「勝負師」「鉄火のギャンブラー」「やまっけ」の
+条件が `random_lot_shared` という新しい型で追加され、テストが落ちた。本家の `SkillChecker.kt`
+を確認したところ、この型は本家自身の `when` 文にも無く、未知の型として警告を出して
+条件ごと落とす扱いになっていた（`else -> { println("not supported condition"); return null }`）。
+つまり本家も対応していない型で、移植版の `default: unsupportedConditions.add(...); return null`
+と同じ扱いになる。実装を足すのではなく、`knownUnsupported` にこの型を加えて済ませた。
 
 ## 4. 速度
 
