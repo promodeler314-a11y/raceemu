@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import uPlot from 'uplot';
 import { getSlope } from '../../../../packages/sim/src/data/track.ts';
 import { currentTrackDetail, useStore } from '../store.ts';
-import { buildEvents, kindLabel, type EventKind } from '../events.ts';
+import { buildEvents, kindLabel, type EventKind, type RaceEvent } from '../events.ts';
 import { formatTime, percentile } from '../format.ts';
 import { Panel } from './Inputs.tsx';
 
@@ -34,15 +34,48 @@ function color(slot: keyof typeof SERIES): string {
   return isDark() ? SERIES[slot].dark : SERIES[slot].light;
 }
 
+/** CSS のトークンをそのまま使う。スキルの印は EventList の色分けと揃える。 */
+function tokenColor(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+}
+
 const cursorSync = uPlot.sync('race');
+
+/** 同じ位置（フレーム）で複数発動した場合はまとめる。 */
+export interface SkillMarker {
+  readonly position: number;
+  readonly labels: readonly string[];
+}
 
 interface CourseBands {
   readonly corners: readonly [number, number][];
   readonly phases: readonly number[];
+  readonly skills: readonly SkillMarker[];
 }
 
-/** コーナーを薄い帯で、フェーズ境界を破線で背景に描く。 */
-function coursePlugin(bands: CourseBands): uPlot.Plugin {
+/** カーソルに最も近いスキル発動位置。閾値外なら null。 */
+function nearestSkill(u: uPlot, skills: readonly SkillMarker[]): SkillMarker | null {
+  const left = u.cursor.left;
+  if (left === undefined || left < 0) return null;
+  let nearest: SkillMarker | null = null;
+  let nearestDist = 6;
+  for (const marker of skills) {
+    // cursor.left は CSS px、valToPos の第 3 引数を false にすると同じ単位で返る
+    // （draw フックの ctx 描画は canvas px なので、そちらは true のままにする）。
+    const distance = Math.abs(u.valToPos(marker.position, 'x', false) - left);
+    if (distance < nearestDist) {
+      nearestDist = distance;
+      nearest = marker;
+    }
+  }
+  return nearest;
+}
+
+/**
+ * コーナーを薄い帯で、フェーズ境界を破線で背景に描く。
+ * スキル発動位置は縦線と上端の三角印で示し、カーソルが近づくと onHoverSkill で名前を伝える。
+ */
+function coursePlugin(bands: CourseBands, onHoverSkill: (marker: SkillMarker | null) => void): uPlot.Plugin {
   return {
     hooks: {
       draw: (u) => {
@@ -66,7 +99,29 @@ function coursePlugin(bands: CourseBands): uPlot.Plugin {
           ctx.lineTo(x, top + height);
           ctx.stroke();
         }
+        const skillColor = tokenColor('s1');
+        ctx.setLineDash([]);
+        for (const marker of bands.skills) {
+          const x = Math.round(u.valToPos(marker.position, 'x', true)) + 0.5;
+          ctx.strokeStyle = skillColor;
+          ctx.globalAlpha = 0.4;
+          ctx.beginPath();
+          ctx.moveTo(x, top);
+          ctx.lineTo(x, top + height);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = skillColor;
+          ctx.beginPath();
+          ctx.moveTo(x - 3.5, top);
+          ctx.lineTo(x + 3.5, top);
+          ctx.lineTo(x, top + 6);
+          ctx.closePath();
+          ctx.fill();
+        }
         ctx.restore();
+      },
+      setCursor: (u) => {
+        onHoverSkill(nearestSkill(u, bands.skills));
       },
     },
   };
@@ -92,6 +147,11 @@ interface ChartProps {
 function Chart({ title, subtitle, x, series, bands, height, includeZero = true }: ChartProps) {
   const ref = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
+  const [hoverSkill, setHoverSkill] = useState<SkillMarker | null>(null);
+
+  useEffect(() => {
+    setHoverSkill(null);
+  }, [bands]);
 
   useEffect(() => {
     const element = ref.current;
@@ -128,7 +188,7 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
           points: { show: false },
         })),
       ],
-      plugins: [coursePlugin(bands)],
+      plugins: [coursePlugin(bands, setHoverSkill)],
     };
     const data: uPlot.AlignedData = [x, ...series.map((s) => s.values)];
     plot.current = new uPlot(options, data, element);
@@ -141,11 +201,20 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
     };
   }, [title, height, x, series, bands, includeZero]);
 
+  const skillHint =
+    bands.skills.length === 0
+      ? undefined
+      : '薄い縦線と三角の印はスキル発動位置。カーソルを合わせると名前を表示。';
+  const caption =
+    hoverSkill !== null
+      ? `${hoverSkill.position.toFixed(0)} m ・ ${hoverSkill.labels.join('、')}`
+      : [subtitle, skillHint].filter((s) => s !== undefined).join(' ');
+
   return (
     <div>
       <div ref={ref} className="w-full" />
-      {subtitle !== undefined && (
-        <p className="mt-1 text-xs text-ink3">{subtitle}</p>
+      {caption !== '' && (
+        <p className={`mt-1 text-xs ${hoverSkill !== null ? 'text-s1' : 'text-ink3'}`}>{caption}</p>
       )}
     </div>
   );
@@ -154,7 +223,21 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
 export function FrameCharts() {
   const detail = useStore((s) => s.detail);
   const track = useStore((s) => s.track);
+  const results = useStore((s) => s.results);
   const trackDetail = currentTrackDetail(track);
+
+  const events = useMemo(() => {
+    if (detail === null || trackDetail === undefined) return [];
+    // タイムと残り体力は結果の側から取る。シミュレーション状態は終端の値を
+    // 持たない（フレームを回し終えた時点の内部状態である）。
+    const result = results[detail.trial];
+    if (result === undefined) return [];
+    return buildEvents(detail.frames, trackDetail, {
+      raceTime: result.raceTime,
+      goalSp: result.goalSp,
+      spMax: detail.state.setting.spMax,
+    });
+  }, [detail, trackDetail, results]);
 
   const prepared = useMemo(() => {
     if (detail === null || trackDetail === undefined) return null;
@@ -174,6 +257,13 @@ export function FrameCharts() {
       sp[i] = frame.sp;
       slope[i] = getSlope(trackDetail, frame.startPosition);
     }
+    const skillPositions = new Map<number, string[]>();
+    for (const event of events) {
+      if (event.kind !== 'skill') continue;
+      const labels = skillPositions.get(event.position);
+      if (labels === undefined) skillPositions.set(event.position, [event.label]);
+      else labels.push(event.label);
+    }
     const bands: CourseBands = {
       corners: trackDetail.corners.map((c) => [c.start, c.end] as [number, number]),
       phases: [
@@ -181,9 +271,10 @@ export function FrameCharts() {
         (trackDetail.distance * 2) / 3,
         (trackDetail.distance * 5) / 6,
       ],
+      skills: Array.from(skillPositions, ([position, labels]) => ({ position, labels })),
     };
     return { x, speed, target, sp, slope, bands };
-  }, [detail, trackDetail]);
+  }, [detail, trackDetail, events]);
 
   if (prepared === null) {
     return (
@@ -224,7 +315,7 @@ export function FrameCharts() {
           bands={prepared.bands}
           series={[{ label: '勾配', values: prepared.slope, slot: 'context' }]}
         />
-        <EventList />
+        <EventList events={events} />
       </div>
     </Panel>
   );
@@ -298,24 +389,7 @@ const KIND_STYLE: Record<EventKind, string> = {
   end: 'border-ink2 text-ink',
 };
 
-function EventList() {
-  const detail = useStore((s) => s.detail);
-  const track = useStore((s) => s.track);
-  const trackDetail = currentTrackDetail(track);
-  const results = useStore((s) => s.results);
-  const events = useMemo(() => {
-    if (detail === null || trackDetail === undefined) return [];
-    // タイムと残り体力は結果の側から取る。シミュレーション状態は終端の値を
-    // 持たない（フレームを回し終えた時点の内部状態である）。
-    const result = results[detail.trial];
-    if (result === undefined) return [];
-    return buildEvents(detail.frames, trackDetail, {
-      raceTime: result.raceTime,
-      goalSp: result.goalSp,
-      spMax: detail.state.setting.spMax,
-    });
-  }, [detail, trackDetail, results]);
-
+function EventList({ events }: { events: readonly RaceEvent[] }) {
   if (events.length === 0) return null;
   return (
     <div>
