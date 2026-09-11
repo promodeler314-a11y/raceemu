@@ -1,5 +1,5 @@
 import type { SystemSetting } from '../setting.ts';
-import type { RaceSimulationResult } from '../state.ts';
+import { ADJUSTMENT_COUNT_BUCKETS, type RaceSimulationResult } from '../state.ts';
 import {
   MULTI_FIELDS,
   SKILL_STAT_FIELDS,
@@ -65,6 +65,8 @@ export interface MultiOutput {
 export interface CriticalOutput {
   readonly values: Float64Array;
   readonly races: number;
+  /** spec.byAdjustmentCount を指定したときだけ入る。試行ごとに ADJUSTMENT_COUNT_BUCKETS 個ずつ並ぶ。 */
+  readonly byCount?: Float64Array;
 }
 
 export interface RunOutput {
@@ -337,6 +339,9 @@ export class WorkerPool {
     if (total <= 0) return { values: new Float64Array(0), races: 0 };
     const seed = options.seed ?? 1;
     const values = new Float64Array(total);
+    const byCount = spec.byAdjustmentCount
+      ? new Float64Array(total * ADJUSTMENT_COUNT_BUCKETS).fill(Number.NaN)
+      : undefined;
     let races = 0;
 
     await this.dispatchAll(
@@ -357,11 +362,14 @@ export class WorkerPool {
       (response, from) => {
         if (response.kind !== 'critical') return;
         values.set(response.values, from);
+        if (byCount !== undefined && response.byCount !== undefined) {
+          byCount.set(response.byCount, from * ADJUSTMENT_COUNT_BUCKETS);
+        }
         races += response.races;
       },
     );
 
-    return { values, races };
+    return byCount === undefined ? { values, races } : { values, races, byCount };
   }
 
   async dispose(): Promise<void> {

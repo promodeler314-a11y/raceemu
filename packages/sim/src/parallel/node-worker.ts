@@ -11,7 +11,7 @@ const data = loadGameData();
 port.on('message', (request: WorkerRequest) => {
   try {
     if (request.kind === 'critical') {
-      const { values, races } = runCriticalChunk(
+      const { values, races, byCount } = runCriticalChunk(
         data,
         request.setting,
         request.system,
@@ -20,7 +20,9 @@ port.on('message', (request: WorkerRequest) => {
         request.count,
         request.critical,
       );
-      port.postMessage({ kind: 'critical', id: request.id, values, races }, [values.buffer as ArrayBuffer]);
+      const transfer: ArrayBuffer[] = [values.buffer as ArrayBuffer];
+      if (byCount !== undefined) transfer.push(byCount.buffer as ArrayBuffer);
+      port.postMessage({ kind: 'critical', id: request.id, values, races, byCount }, transfer);
       return;
     }
     if (request.kind === 'multi') {

@@ -7,9 +7,12 @@ import { defaultSystemSetting, type RaceSetting } from '../src/setting.ts';
 import {
   achievementCurve,
   criticalDistribution,
+  criticalDistributionByAdjustmentCount,
+  pickAdjustmentCount,
   requiredValue,
   resolveMethod,
 } from '../../solver/src/critical.ts';
+import { ADJUSTMENT_COUNT_BUCKETS } from '../src/state.ts';
 
 const data = loadGameData();
 const system = defaultSystemSetting();
@@ -107,6 +110,59 @@ describe('逆算', () => {
         { count: 96, seed: 5, chunkSize: 16 },
       );
       expect([...actual.values]).toEqual([...expected.values]);
+    } finally {
+      await pool.dispose();
+    }
+  });
+
+  it('位置取り調整の回数ごとの最小値は、全体の最小値以上になる', () => {
+    const dist = criticalDistributionByAdjustmentCount(
+      setting,
+      system,
+      data.trackData,
+      { status: 'stamina', goal: { kind: 'finish' }, ...range },
+      13,
+      0,
+      100,
+    );
+    const overall = criticalDistribution(
+      setting,
+      system,
+      data.trackData,
+      { status: 'stamina', goal: { kind: 'finish' }, method: 'scan', ...range },
+      13,
+      0,
+      100,
+    );
+    for (let bucket = 0; bucket < ADJUSTMENT_COUNT_BUCKETS; bucket++) {
+      const values = pickAdjustmentCount(dist.values, bucket);
+      for (let i = 0; i < values.length; i++) {
+        if (Number.isNaN(values[i])) continue;
+        expect(values[i]!).toBeGreaterThanOrEqual(overall.values[i]!);
+      }
+    }
+  });
+
+  it('Worker で求めた回数ごとの最小値も単一スレッドと一致する', async () => {
+    const options = { status: 'stamina', goal: { kind: 'finish' }, ...range } as const;
+    const expected = criticalDistributionByAdjustmentCount(setting, system, data.trackData, options, 9, 0, 48);
+    const pool = new WorkerPool(nodeWorkerFactory, 3);
+    try {
+      const actual = await pool.runCritical(
+        toSerializable(setting),
+        system,
+        {
+          status: 'stamina',
+          goalKind: 'finish',
+          from: range.from,
+          to: range.to,
+          step: range.step,
+          method: 'scan',
+          byAdjustmentCount: true,
+        },
+        { count: 48, seed: 9, chunkSize: 16 },
+      );
+      expect([...actual.byCount!]).toEqual([...expected.values]);
     } finally {
       await pool.dispose();
     }

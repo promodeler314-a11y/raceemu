@@ -111,6 +111,12 @@ export interface RaceFrame {
   triggeredDebuffs: DebuffType[];
 }
 
+/**
+ * 位置取り調整の回数を段階表示するときの区切り数。
+ * 最後の区切り（添字 ADJUSTMENT_COUNT_BUCKETS - 1）はそれ以上の回数をまとめて受け持つ。
+ */
+export const ADJUSTMENT_COUNT_BUCKETS = 6;
+
 export interface RaceSimulationResult {
   readonly raceTime: number;
   readonly raceTimeDelta: number;
