@@ -42,7 +42,7 @@ describe('スキルの一覧', () => {
 
   it('キャラを固有と進化の持ち主から集める', () => {
     // 本家のデータを取り直すたびに増える（`.github/workflows/sync-game-data.yml`）。
-    // ぴたりの数を書くと、その更新のたびにここが落ちる。
+    // ぴたりの数（いまは 267）を書くと、その更新のたびにここが落ちる。
     expect(index.charas.length).toBeGreaterThanOrEqual(266);
     expect(index.charas).toContain(SPE);
     expect(index.uniquesOf(SPE).map((s) => s.id)).toEqual([UNIQUE_SPE]);
