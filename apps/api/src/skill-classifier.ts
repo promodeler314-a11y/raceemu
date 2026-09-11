@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import * as ort from 'onnxruntime-node';
-import sharp, { type Sharp } from 'sharp';
+import sharp from 'sharp';
 
 /**
  * 「ウマ娘詳細」画面のスキル一覧を、文字認識ではなく画像分類で読む。
@@ -36,13 +36,13 @@ import sharp, { type Sharp } from 'sharp';
  *    探すと、スキル一覧の直前にあるタブの下端が見つかる（見つからなければ、
  *    スキル一覧だけを切り抜いた画像が来たとみなして画面の先頭から探す）。
  * 2. **左列のアイコンの位置で行を数える**。スキル名の左にある丸いアイコンは
- *    彩度が高く、ブランドの緑ではない。左列が来る横幅（0〜11%）の中でこの
- *    条件に合う横方向の塊を縦に探すと、行の数とそれぞれの上下端が分かる。
- *    右列のアイコンは検出に使わない。一覧は詰めて並ぶので、行数が奇数の
- *    ときに空くのは最後の行の右側だけであり、左列だけを見れば数え間違えない。
- *    金色・虹色の縁取りが隣の行まで続いていると、内側の隙間を埋める処理が
- *    複数行を1つに繋げてしまうことがあるため、行の間隔（top どうしの差）の
- *    中央値よりはっきり高い塊は複数行分とみなして等分する。
+ *    彩度が高い（色は問わない。緑のアイコンもある。後述）。左列が来る横幅
+ *    （0〜11%）の中でこの条件に合う横方向の塊を縦に探すと、行の数とそれぞれの
+ *    上下端が分かる。右列のアイコンは検出に使わない。一覧は詰めて並ぶので、
+ *    行数が奇数のときに空くのは最後の行の右側だけであり、左列だけを見れば
+ *    数え間違えない。金色・虹色の縁取りが隣の行まで続いていると、内側の隙間を
+ *    埋める処理が複数行を1つに繋げてしまうことがあるため、行の間隔（top
+ *    どうしの差）の中央値よりはっきり高い塊は複数行分とみなして等分する。
  * 3. **文字だけを切り出す**。アイコンの実際の右端はそのまま使わず、横幅に
  *    対する割合（実機の1枚で目視して合わせた固定値）で文字の帯を切り出す。
  *    アイコンの右端をそのまま使うと、モデルが学習した切り出し方（アイコンの
@@ -51,11 +51,21 @@ import sharp, { type Sharp } from 'sharp';
  *    残るので、切り出しの左端を±10px・行の中心を±6px・高さを24〜36pxの
  *    範囲で振り、いちばん確信度が高い切り出しを採用する。正しい位置なら
  *    ほぼ1.0、ずれていれば0.6以下に落ちるという差がはっきりしているため、
- *    これで実用上の精度が出る。
+ *    これで実用上の精度が出る。横・縦・高さの全組み合わせ（5×7×4=140通り）を
+ *    総当たりすると、一覧が長い（何画面分もつなげた）写真で推論が数千回に
+ *    膨れてゲートウェイのタイムアウトに掛かる。3方向はほぼ独立に決まるため、
+ *    縦→高さ→横の順に1つずつ決める（7+4+5=16通り）。
  *
- * この手順は実機の写真1枚だけで検証したものである。他の解像度・機種の
- * 写真でどこまで通用するかは確かめていない（docs/ocr-design.md 5.4 と同じ
- * 立ち位置の限界）。
+ * アイコンの色を問わない（2.）のは、当初「ブランドの緑を除く」判定にしていて、
+ * 適性系スキルなど緑色のアイコンの行を見落としていたのを直したもの。タブの
+ * 検出（1.）はその下端より下しか見ないので、ブランドの緑と紛れることは無い。
+ *
+ * この手順は実機の写真1枚で検証したものである。行数がずっと多い（32行分、
+ * 複数画面をつなげた）別の写真を試した利用者から、緑色のアイコンを見落とす
+ * ことと、行数が多いと時間がかかりすぎることの報告を受けて上記の2点を
+ * 直したが、この写真そのものはファイルとして受け取れておらず、直った
+ * ことまでは確かめていない。他の解像度・機種でどこまで通用するかも
+ * 確かめていない（docs/ocr-design.md 5.4 と同じ立ち位置の限界）。
  */
 
 export interface SkillRowPrediction {
@@ -81,12 +91,19 @@ function isGreenPixel(r: number, g: number, b: number): boolean {
   return g > r * 1.15 && g > b * 1.3 && sat > 0.35 && max / 255 > 0.4;
 }
 
-/** スキルのアイコン（橙・青・桃など、彩度は高いがブランドの緑ではない）。 */
+/**
+ * スキルのアイコンらしい、彩度の高い塊。
+ *
+ * ブランドの緑を除く判定にしていたことがあったが、アイコンの検出はタブの下端
+ * より下（`searchStart` 以降）でしか行わないため、ブランドの緑と紛れることは
+ * 無い。一方で適性系のスキルなど、アイコン自体が緑色のものを誤って除外して
+ * しまっていた（一覧が長い実機の写真で発覚）。緑かどうかは問わない。
+ */
 function isVividPixel(r: number, g: number, b: number): boolean {
   const max = Math.max(r, g, b);
   const min = Math.min(r, g, b);
   const sat = max > 0 ? (max - min) / max : 0;
-  return sat > 0.45 && max / 255 > 0.5 && !isGreenPixel(r, g, b);
+  return sat > 0.45 && max / 255 > 0.5;
 }
 
 interface Band {
@@ -286,10 +303,9 @@ export class SkillClassifier {
     const rows = buildRowGeometry(leftIcons, width);
     const session = await this.getSession();
     const predictions: SkillRowPrediction[] = [];
-    const source = sharp(image);
     for (const row of rows) {
       for (const [x0, x1] of [row.leftText, row.rightText]) {
-        const best = await this.bestAroundCenter(session, source, x0, x1, row.centerY, width, height);
+        const best = await this.bestAroundCenter(session, data, width, height, x0, x1, row.centerY);
         predictions.push(best);
       }
     }
@@ -300,52 +316,64 @@ export class SkillClassifier {
    * 検出した中心の周りを小さく振って、いちばん確信度が高い切り出しを選ぶ。
    * アイコン検出には数ピクセルの誤差が残るが、正しい位置なら確信度がほぼ
    * 1.0 に達し、ずれていれば大きく下がるという差を利用して吸収する。
+   *
+   * 横・縦・高さのすべての組み合わせ（元は5×7×4=140通り）を総当たりすると、
+   * 一覧が長い（何画面分もつなげた）写真で数千回の推論になり、ゲートウェイの
+   * タイムアウトに掛かる。確信度が最大になる位置は横・縦・高さでほぼ独立に
+   * 決まるため、縦→高さ→横の順に1つずつ決めていく（7+4+5=16通り）。
    */
   private async bestAroundCenter(
     session: ort.InferenceSession,
-    source: Sharp,
+    data: Buffer,
+    imageWidth: number,
+    imageHeight: number,
     x0: number,
     x1: number,
     centerYGuess: number,
-    imageWidth: number,
-    imageHeight: number,
   ): Promise<SkillRowPrediction> {
-    let best: SkillRowPrediction = { skillId: null, confidence: 0 };
     const width = Math.max(1, Math.round(x1 - x0));
-    // アイコンの縁からどれだけ離して文字の帯を切るかは、実機の1枚で合わせた
-    // 値だけでは他の行・解像度に厳密には合わない。確信度で選ぶ前提なので、
-    // 縦だけでなく横方向にも小さく振って吸収する。
-    for (const dx of [-10, -5, 0, 5, 10]) {
-      const left = Math.round(x0 + dx);
-      if (left < 0 || left + width > imageWidth) continue;
-      for (const cropHeight of [24, 28, 32, 36]) {
-        for (let dy = -6; dy <= 6; dy += 2) {
-          const y0 = Math.round(centerYGuess + dy - cropHeight / 2);
-          const y1 = y0 + cropHeight;
-          if (y0 < 0 || y1 > imageHeight) continue;
-          const prediction = await this.classifyCrop(session, source, left, y0, width, cropHeight);
-          if (prediction.confidence > best.confidence) best = prediction;
-        }
+    let best: SkillRowPrediction = { skillId: null, confidence: 0 };
+    let bestLeft = Math.round(x0);
+    let bestTop = Math.round(centerYGuess - 28 / 2);
+    let bestHeight = 28;
+
+    const consider = async (left: number, top: number, cropHeight: number): Promise<void> => {
+      if (left < 0 || left + width > imageWidth || top < 0 || top + cropHeight > imageHeight) return;
+      const prediction = await this.classifyCrop(session, data, imageWidth, left, top, width, cropHeight);
+      if (prediction.confidence > best.confidence) {
+        best = prediction;
+        bestLeft = left;
+        bestTop = top;
+        bestHeight = cropHeight;
       }
+    };
+
+    // 縦 → 高さ → 横の順に、それまでに見つかった最良の位置を土台にして1つずつ
+    // 決めていく。確信度が最大になる位置は3方向でほぼ独立に決まるため、これで
+    // 5×7×4=140通りの総当たりとほぼ同じ結果を 7+4+5=16 回の推論で得られる。
+    for (const dy of [-6, -4, -2, 0, 2, 4, 6]) {
+      await consider(Math.round(x0), Math.round(centerYGuess + dy - bestHeight / 2), bestHeight);
+    }
+    const fixedCenterY = bestTop + bestHeight / 2;
+    for (const cropHeight of [24, 32, 36]) {
+      await consider(bestLeft, Math.round(fixedCenterY - cropHeight / 2), cropHeight);
+    }
+    for (const dx of [-10, -5, 5, 10]) {
+      await consider(Math.round(x0 + dx), bestTop, bestHeight);
     }
     return best;
   }
 
   private async classifyCrop(
     session: ort.InferenceSession,
-    source: Sharp,
+    data: Buffer,
+    imageWidth: number,
     x: number,
     y: number,
     width: number,
     height: number,
   ): Promise<SkillRowPrediction> {
-    const resized = await source
-      .clone()
-      .extract({ left: x, top: y, width, height })
-      .resize(MODEL_INPUT_WIDTH, MODEL_INPUT_HEIGHT, { fit: 'fill' })
-      .removeAlpha()
-      .raw()
-      .toBuffer();
+    const resized = resizeBilinearRgb(data, imageWidth, x, y, width, height, MODEL_INPUT_WIDTH, MODEL_INPUT_HEIGHT);
     const tensor = new ort.Tensor('uint8', resized, [1, MODEL_INPUT_HEIGHT, MODEL_INPUT_WIDTH, 3]);
     const inputName = session.inputNames[0]!;
     const output = await session.run({ [inputName]: tensor });
@@ -353,4 +381,46 @@ export class SkillClassifier {
     const confidence = Number(output['confidence']!.data[0]);
     return { skillId: LABEL_MAP[index] ?? null, confidence };
   }
+}
+
+/**
+ * 生の RGB バッファから矩形を切り出し、バイリニア補間で縮小する。
+ * `sharp` のパイプラインを毎回作らずに済むので、較正の総当たりが速い。
+ */
+function resizeBilinearRgb(
+  data: Buffer,
+  srcWidth: number,
+  cropX: number,
+  cropY: number,
+  cropWidth: number,
+  cropHeight: number,
+  outWidth: number,
+  outHeight: number,
+): Uint8Array {
+  const out = new Uint8Array(outWidth * outHeight * 3);
+  const scaleX = cropWidth / outWidth;
+  const scaleY = cropHeight / outHeight;
+  for (let oy = 0; oy < outHeight; oy++) {
+    const sy = Math.min(cropHeight - 1, Math.max(0, (oy + 0.5) * scaleY - 0.5));
+    const y0 = Math.floor(sy);
+    const y1 = Math.min(cropHeight - 1, y0 + 1);
+    const fy = sy - y0;
+    for (let ox = 0; ox < outWidth; ox++) {
+      const sx = Math.min(cropWidth - 1, Math.max(0, (ox + 0.5) * scaleX - 0.5));
+      const x0 = Math.floor(sx);
+      const x1 = Math.min(cropWidth - 1, x0 + 1);
+      const fx = sx - x0;
+      const outOffset = (oy * outWidth + ox) * 3;
+      for (let c = 0; c < 3; c++) {
+        const p00 = data[((cropY + y0) * srcWidth + (cropX + x0)) * 3 + c]!;
+        const p10 = data[((cropY + y0) * srcWidth + (cropX + x1)) * 3 + c]!;
+        const p01 = data[((cropY + y1) * srcWidth + (cropX + x0)) * 3 + c]!;
+        const p11 = data[((cropY + y1) * srcWidth + (cropX + x1)) * 3 + c]!;
+        const top = p00 + (p10 - p00) * fx;
+        const bottom = p01 + (p11 - p01) * fx;
+        out[outOffset + c] = Math.round(top + (bottom - top) * fy);
+      }
+    }
+  }
+  return out;
 }
