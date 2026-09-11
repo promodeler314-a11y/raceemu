@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadGameData } from '../../../packages/data/src/node.ts';
 import type { Config } from '../src/config.ts';
 import { createApiServer } from '../src/http.ts';
+import { IndividualStore } from '../src/individuals.ts';
 import { JobRunner } from '../src/jobs.ts';
 
 /**
@@ -25,10 +26,10 @@ describe('静的ファイルの配信', () => {
     const config: Config = {
       port: 0, concurrency: 1, concurrencySource: 'env', maxRunning: 1, maxQueued: 1,
       maxRacesPerJob: 1000, jobTtlMs: 60_000, staticRoot: root,
-      tessdataPath: null, maxImageBytes: 1024, ocrThreshold: 128,
+      tessdataPath: null, maxImageBytes: 1024, ocrThreshold: 128, dataDir: null,
     };
     const runner = new JobRunner(config, data);
-    server = createApiServer(config, data, runner);
+    server = createApiServer(config, data, runner, new IndividualStore(null));
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     const address = server.address();
     const port = typeof address === 'object' && address !== null ? address.port : 0;

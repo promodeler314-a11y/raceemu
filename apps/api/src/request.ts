@@ -41,17 +41,17 @@ export interface ResolvedRequest {
 
 export class RequestError extends Error {}
 
-function fail(message: string): never {
+export function fail(message: string): never {
   throw new RequestError(message);
 }
 
-function finite(value: unknown, name: string, min: number, max: number): number {
+export function finite(value: unknown, name: string, min: number, max: number): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) fail(`${name} は数値で指定する`);
   if (value < min || value > max) fail(`${name} は ${min} から ${max} の範囲で指定する`);
   return value;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
+export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 

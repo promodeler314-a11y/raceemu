@@ -5,6 +5,8 @@ import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { GameData } from '../../../packages/data/src/index.ts';
 import type { Config } from './config.ts';
 import { SkillMatcher, type SkillMatch } from '../../../packages/data/src/skill-match.ts';
+import { checkNewIndividual } from './individual-request.ts';
+import { IndividualStore } from './individuals.ts';
 import { JobRunner, QueueFullError, type Job } from './jobs.ts';
 import { OcrEngine } from './ocr.ts';
 import { checkRequest, RequestError } from './request.ts';
@@ -115,7 +117,7 @@ async function serveStatic(root: string, pathname: string, res: ServerResponse):
   }
 }
 
-export function createApiServer(config: Config, data: GameData, runner: JobRunner) {
+export function createApiServer(config: Config, data: GameData, runner: JobRunner, individuals: IndividualStore) {
   // 読み取りは要求されたときに初めて立ち上げる。
   // 学習データの置き場が指定されていなければ、口ごと閉じる。
   const ocr =
@@ -266,6 +268,36 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         runnerUp: match.runnerUp === null ? null : { id: match.runnerUp.id, name: match.runnerUp.name },
       }));
       sendJson(res, 200, { text, matches, elapsedMs: performance.now() - started });
+      return;
+    }
+
+    if (path === '/api/individuals' && method === 'GET') {
+      sendJson(res, 200, { items: individuals.list() });
+      return;
+    }
+
+    if (path === '/api/individuals' && method === 'POST') {
+      let input;
+      try {
+        input = checkNewIndividual(JSON.parse(await readBody(req)), data);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        sendJson(res, 400, { error: message });
+        return;
+      }
+      sendJson(res, 201, individuals.create(input));
+      return;
+    }
+
+    const individualMatch = /^\/api\/individuals\/([0-9a-f-]{36})$/.exec(path);
+    if (individualMatch !== null && method === 'DELETE') {
+      const removed = individuals.remove(individualMatch[1]!);
+      if (!removed) {
+        sendJson(res, 404, { error: '知らない個体である' });
+        return;
+      }
+      res.writeHead(204);
+      res.end();
       return;
     }
 
