@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../data/src/node.ts';
 import { RngSet } from '../src/rng.ts';
 import { DerivedSetting, emptyPassiveBonus, type RaceSetting } from '../src/setting.ts';
-import { compileConditions, unsupportedConditions, type RandomEntry } from '../src/skill/condition.ts';
+import { compileConditions, newSkillScratch, unsupportedConditions } from '../src/skill/condition.ts';
 import { ignoreConditions, approximateTypeToState } from '../src/skill/approximate.ts';
 
 const data = loadGameData();
@@ -37,13 +37,8 @@ describe('スキル条件の網羅', () => {
   /**
    * 本家も未対応のまま条件を落としている型。移植版も同じ扱いにする。
    * 新しい型が増えたらこのテストが落ちるので、実装漏れに気付ける。
-   *
-   * `random_lot_shared` はデータを取り直したときに現れた。「勝負師」「やまっけ」
-   * 「鉄火のギャンブラー」の 3 つが持つ、当たり外れを 1 回の抽選で共有する条件で
-   * ある（`random_lot` は効果ごとに引き直す）。本家の `SkillChecker.kt` にも
-   * 分岐が無く、落としている。
    */
-  const knownUnsupported = ['random_lot_shared', 'succession_skill_count'];
+  const knownUnsupported = ['succession_skill_count'];
 
   it('未対応の条件が既知のものだけである', () => {
     unsupportedConditions.clear();
@@ -51,9 +46,9 @@ describe('スキル条件の網羅', () => {
     const rng = new RngSet(1, 0);
     for (const skill of data.skills) {
       for (const invoke of skill.invokes) {
-        const areas = new Map<string, RandomEntry[]>();
-        compileConditions(skill, invoke.preConditions, derived, rng, areas);
-        compileConditions(skill, invoke.conditions, derived, rng, areas);
+        const scratch = newSkillScratch();
+        compileConditions(skill, invoke.preConditions, derived, rng, scratch);
+        compileConditions(skill, invoke.conditions, derived, rng, scratch);
       }
     }
     expect([...unsupportedConditions].sort()).toEqual(knownUnsupported);
