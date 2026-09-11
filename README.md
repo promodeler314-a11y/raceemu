@@ -76,6 +76,7 @@ pnpm api                       # サーバ側の口（apps/api）
 - [配信](docs/deploy.md)
 - [サーバ側で探索を回す設計](docs/server-design.md)
 - [画面モック](design/README.md)と[モックと実装のズレ](docs/ui-gap.md)
+- [M10 の後の方針](docs/roadmap.md)（周辺ツールとの比較と、増築と磨きの候補）
 
 ## これまでの回
 
