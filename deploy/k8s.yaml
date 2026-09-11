@@ -20,6 +20,19 @@ kind: Namespace
 metadata:
   name: raceemu
 ---
+# 個体（ステータス+スキル構成）を SQLite で持つ場所。
+# replicas は 1 のままなので ReadWriteOnce で足りる。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: raceemu-data
+  namespace: raceemu
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,6 +46,11 @@ spec:
     metadata:
       labels: { app: raceemu }
     spec:
+      # PVC はマウント時に root 所有になるのが既定で、コンテナは非 root
+      # （Dockerfile の USER node、node:22-slim では uid/gid 1000）で走る。
+      # fsGroup を合わせないと /data に書けない。
+      securityContext:
+        fsGroup: 1000
       containers:
         - name: raceemu
           image: ghcr.io/promodeler314-a11y/raceemu:main
@@ -53,6 +71,11 @@ spec:
               value: "8"
             - name: RACEEMU_MAX_RACES
               value: "2000000"
+            - name: RACEEMU_DATA_DIR
+              value: /data
+          volumeMounts:
+            - name: data
+              mountPath: /data
           resources:
             requests:
               cpu: "2"
@@ -70,6 +93,9 @@ spec:
             # 探索がコアを埋めている間も応答が要るので、間隔は緩めにする。
             periodSeconds: 30
             timeoutSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim: { claimName: raceemu-data }
 ---
 apiVersion: v1
 kind: Service

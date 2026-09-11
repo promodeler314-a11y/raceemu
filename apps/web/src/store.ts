@@ -30,6 +30,7 @@ import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState } from './share.ts';
+import type { Individual } from './individualsApi.ts';
 import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
 import { resolveSkillIds, type Preset } from './presets.ts';
 import { gameData, skillChoices, skillIndex, NO_CHARA } from './skills.ts';
@@ -274,6 +275,8 @@ interface AppState {
   restoreSnapshot: (id: number) => void;
   setOpponent: (id: number, patch: Partial<UmaStatus>) => void;
   toggleOpponentSkill: (id: number, skillId: string) => void;
+  /** 保存済みの個体をそのまま割り当てる。ステータスとスキルを丸ごと差し替える。 */
+  setOpponentFromIndividual: (id: number, individual: Individual) => void;
   resetOpponents: () => void;
   setMultiTrials: (trials: number) => void;
   runMulti: () => Promise<void>;
@@ -402,6 +405,12 @@ export const useStore = create<AppState>((set, get) => ({
                 : [...o.skillIds, skillId],
             }
           : o,
+      ),
+    })),
+  setOpponentFromIndividual: (id, individual) =>
+    set((s) => ({
+      opponents: s.opponents.map((o) =>
+        o.id === id ? { ...o, uma: individual.uma, skillIds: individual.skillIds } : o,
       ),
     })),
   resetOpponents: () => set({ opponents: defaultOpponents(get().track.gateCount) }),

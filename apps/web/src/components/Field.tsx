@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Style } from '../../../../packages/sim/src/data/constants.ts';
+import { listIndividuals, type Individual } from '../individualsApi.ts';
 import { defaultOpponents, gameData, skillChoices, useStore } from '../store.ts';
 import { Panel } from './Inputs.tsx';
 
@@ -8,13 +9,24 @@ const STYLES: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
 const STYLE_LABEL: Record<string, string> = { NIGE: '逃げ', SEN: '先行', SASI: '差し', OI: '追込' };
 const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
 
-/** 相手 1 頭ぶんの行。ステータスは横に並べ、スキルは開いたときだけ出す。 */
-function OpponentRow({ id, index }: { id: number; index: number }) {
+interface OpponentRowProps {
+  readonly id: number;
+  readonly index: number;
+  /** null は未取得。取得済みなら（空でも）配列になる。 */
+  readonly savedIndividuals: readonly Individual[] | null;
+  readonly savedMessage: string | null;
+  readonly onRequestSaved: () => void;
+}
+
+/** 相手 1 頭ぶんの行。ステータスは横に並べ、スキルと個体選びは開いたときだけ出す。 */
+function OpponentRow({ id, index, savedIndividuals, savedMessage, onRequestSaved }: OpponentRowProps) {
   const opponent = useStore((s) => s.opponents.find((o) => o.id === id));
   const setOpponent = useStore((s) => s.setOpponent);
   const toggleSkill = useStore((s) => s.toggleOpponentSkill);
+  const setFromIndividual = useStore((s) => s.setOpponentFromIndividual);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const matched = useMemo(() => {
     if (query.trim() === '') return [];
@@ -56,7 +68,7 @@ function OpponentRow({ id, index }: { id: number; index: number }) {
         <td className="pr-1 text-right">{stat('power')}</td>
         <td className="pr-1 text-right">{stat('guts')}</td>
         <td className="pr-1 text-right">{stat('wisdom')}</td>
-        <td className="pl-2">
+        <td className="flex flex-wrap gap-1 pl-2">
           <button
             type="button"
             className="whitespace-nowrap rounded-sm border border-rule2 px-1.5 py-0.5 text-xs"
@@ -64,8 +76,48 @@ function OpponentRow({ id, index }: { id: number; index: number }) {
           >
             スキル {opponent.skillIds.length}
           </button>
+          <button
+            type="button"
+            className="whitespace-nowrap rounded-sm border border-rule2 px-1.5 py-0.5 text-xs"
+            onClick={() => {
+              setPickerOpen(!pickerOpen);
+              if (!pickerOpen) onRequestSaved();
+            }}
+          >
+            個体から選ぶ
+          </button>
         </td>
       </tr>
+      {pickerOpen && (
+        <tr className="border-t border-rule2 bg-paper">
+          <td colSpan={8} className="p-2">
+            {savedIndividuals === null && <p className="text-xs text-ink3">読み込み中…</p>}
+            {savedMessage !== null && <p className="text-xs text-ink3">{savedMessage}</p>}
+            {savedIndividuals !== null && savedIndividuals.length > 0 && (
+              <ul className="max-h-40 overflow-y-auto rounded-sm border border-rule2 text-xs">
+                {savedIndividuals.map((individual) => (
+                  <li key={individual.id}>
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-surface2"
+                      onClick={() => {
+                        setFromIndividual(id, individual);
+                        setPickerOpen(false);
+                      }}
+                    >
+                      <span className="truncate">{individual.label || '(名称未設定)'}</span>
+                      <span className="whitespace-nowrap text-ink3">
+                        {STYLE_LABEL[individual.uma.style] ?? individual.uma.style} ・ スキル{' '}
+                        {individual.skillIds.length}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </td>
+        </tr>
+      )}
       {open && (
         <tr className="border-t border-rule2 bg-paper">
           <td colSpan={8} className="p-2">
@@ -128,6 +180,23 @@ export function FieldPanel() {
   const busy = useStore((s) => s.running || s.optimizeRunning);
   const result = useStore((s) => s.multiResult);
 
+  // 保存済み個体は行ごとではなく面全体で 1 回だけ取りに行く。9 行が
+  // それぞれ叩くと、開くたびに毎回同じ一覧を 9 回取りに行くことになる。
+  const [savedIndividuals, setSavedIndividuals] = useState<readonly Individual[] | null>(null);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  const loadSavedIndividuals = () => {
+    if (savedIndividuals !== null) return;
+    setSavedMessage(null);
+    listIndividuals()
+      .then((items) => {
+        setSavedIndividuals(items);
+        if (items.length === 0) setSavedMessage('保存された個体がまだ無い。');
+      })
+      .catch((error: unknown) => {
+        setSavedMessage(error instanceof Error ? error.message : String(error));
+      });
+  };
+
   // 出走頭数を変えたら相手の数を合わせ直す
   useEffect(() => {
     if (opponents.length !== gateCount - 1) reset();
@@ -161,7 +230,14 @@ export function FieldPanel() {
             </thead>
             <tbody>
               {opponents.map((opponent, index) => (
-                <OpponentRow key={opponent.id} id={opponent.id} index={index} />
+                <OpponentRow
+                  key={opponent.id}
+                  id={opponent.id}
+                  index={index}
+                  savedIndividuals={savedIndividuals}
+                  savedMessage={savedMessage}
+                  onRequestSaved={loadSavedIndividuals}
+                />
               ))}
             </tbody>
           </table>

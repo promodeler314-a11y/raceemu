@@ -135,6 +135,9 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 | `GET /api/search/{id}` | 状態・進捗・レース数・結果 |
 | `DELETE /api/search/{id}` | 中断する |
 | `GET /api/health` | 並列数とその決め方、混み具合 |
+| `GET /api/individuals` | 保存した個体（ステータス+スキル構成）の一覧 |
+| `POST /api/individuals` | 個体を 1 件保存する |
+| `DELETE /api/individuals/{id}` | 個体を 1 件消す |
 
 要求は次の形である。
 `base` は候補を 1 つも取らない土台で、Worker に送るのと同じ `SerializableRaceSetting` をそのまま使う。
@@ -158,6 +161,16 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 応答の `result` は `OptimizeResult` がそのまま JSON になったものである。
 型付き配列は `Evaluation` の内側にあり、外へは出ない。
 
+個体（`/api/individuals`）は**ステータスとスキル構成だけを持ち、レース結果は持たない**。
+レース条件（コース・馬場・出走頭数）はその都度変わるので、勝率の相手にするときも
+統計を取るときも、都度ブラウザ側の Worker で再シミュレートする前提である。
+サーバ側はステータス範囲とスキル ID の存在を検査して SQLite に置くだけで、
+シミュレーションには触れない。
+
+```json
+{ "label": "強い先行", "uma": { "charaName": "", "speed": 1200, ... }, "skillIds": ["201112"] }
+```
+
 ### 7.1 環境変数
 
 | | 既定 | |
@@ -169,6 +182,7 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 | `RACEEMU_MAX_RACES` | 2,000,000 | 1 ジョブのレース数。超えたら打ち切る |
 | `RACEEMU_JOB_TTL_MS` | 30 分 | 終わったジョブを保持する時間 |
 | `RACEEMU_STATIC_ROOT` | なし | 静的ファイルの置き場。指定すると同一オリジンで配る |
+| `RACEEMU_DATA_DIR` | なし（`:memory:`） | 個体を保存する SQLite の置き場。指定しないとプロセス終了で消える |
 
 ### 7.2 上限の守り方
 
