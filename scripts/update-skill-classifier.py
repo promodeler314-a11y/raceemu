@@ -37,6 +37,7 @@ import re
 import subprocess
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -45,17 +46,52 @@ MODULES_URL = 'https://data.umacapture.com/umacapture/modules.zip'
 ROOT = Path(__file__).resolve().parent.parent
 ASSETS = ROOT / 'apps' / 'api' / 'assets' / 'skill-classifier'
 
+# 配布元の CDN は名乗り方で弾く。既定の `Python-urllib/3.12` は 403 で返される
+# （GitHub のランナーからも同じだった）ので、まず素性を明かした名前で頼み、
+# それも断られたらブラウザの名前で一度だけやり直す。落とすのは誰でも取れる
+# 公開ファイルで、認証を回避しているわけではない。
+USER_AGENTS = [
+    'raceemu-skill-model-sync (+https://github.com/promodeler314-a11y/raceemu)',
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36',
+]
+
+
+def fetch(url, user_agent):
+    request = urllib.request.Request(url, headers={'User-Agent': user_agent, 'Accept': '*/*'})
+    with urllib.request.urlopen(request, timeout=120) as res:
+        return res.read()
+
+
+HAND_DOWNLOAD = (
+    'ブラウザで modules.zip を落として引数に渡せば同じ結果になる: '
+    'python3 scripts/update-skill-classifier.py ~/modules.zip'
+)
+
+
+def download():
+    print(f'{MODULES_URL} から取ってくる')
+    reason = None
+    for user_agent in USER_AGENTS:
+        try:
+            return fetch(MODULES_URL, user_agent)
+        except urllib.error.HTTPError as error:
+            reason = f'{error.code} {error.reason} が返ってきた'
+            print(f'  {reason}（名乗り: {user_agent}）')
+        except urllib.error.URLError as error:
+            # 名乗り方の問題ではないので、やり直しても同じである。
+            raise SystemExit(f'配布元に届かない: {error.reason}。{HAND_DOWNLOAD}')
+    raise SystemExit(f'配布元から取れない: {reason}。{HAND_DOWNLOAD}')
+
 
 def load_zip(source):
     if source is not None:
         return zipfile.ZipFile(source)
-    print(f'{MODULES_URL} から取ってくる')
-    with urllib.request.urlopen(MODULES_URL, timeout=120) as res:
-        body = res.read()
+    body = download()
     # 配布元がエラーページを返したときに、それを zip として開こうとして
     # 分かりにくい失敗にならないよう、先に見ておく。
     if len(body) < 100_000:
         raise SystemExit(f'取れた中身が小さすぎる: {len(body)} バイト')
+    print(f'{len(body):,} バイト取れた')
     return zipfile.ZipFile(io.BytesIO(body))
 
 

@@ -33,6 +33,9 @@ jobs:
 
       - id: sync
         run: |
+          # tee の終了状態が job の成否になってしまう。pipefail が無いと、
+          # 取得に失敗しても「差分なし」として緑で終わる。
+          set -o pipefail
           python3 packages/data/scripts/sync-game-data.py | tee /tmp/sync-summary.txt
 
       - id: diff
