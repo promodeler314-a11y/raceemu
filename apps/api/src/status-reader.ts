@@ -17,25 +17,26 @@ import {
  * 「ウマ娘詳細」画面から、ステータス 5 つと適性 10 個を読む。
  *
  * 切り出しは `status-header.ts`（umacapture の割合をそのまま使う）。
- * 読み取りは既にある tesseract（`ocr.ts`）に、1 か所ずつ渡す。
+ * 読み取りは、数字が tesseract（`ocr.ts`）、適性が色（`rankFromColor`）である。
  *
  * **スキル一覧と違って文字認識で足りる。** スキル名が壊れたのは、丸いアイコンと
  * 装飾つきの背景が隣の文字を巻き込むためだった（docs/ocr-design.md 5 節）。
  * ステータスの数字と適性の文字は、無地の板の上に 1 つずつ離れて置かれている。
  * 切り出しが合ってさえいれば、周りに巻き込むものが無い。
  *
- * 適性は読む文字を S から G までの 8 文字に絞る。`B` と `8`、`S` と `5` の
- * ような取り違えが起きなくなる。ステータスの数字では絞らない。絞ると `jpn` の
- * 学習データが返す丸囲み数字が候補から外れ、何も返らなくなるためである
- * （`normalizeDigits`）。
+ * ステータスの数字では読む文字を絞らない。絞ると `jpn` の学習データが返す
+ * 丸囲み数字が候補から外れ、何も返らなくなるためである（`normalizeDigits`）。
  *
- * ## 確かめていないこと
+ * 適性は文字認識では読めなかった。飾りの強い立体的な字で、二値化すると輪郭
+ * だけが残る。実機の 1 枚では 10 個のうち 7 個までしか当たらず、取り違えも
+ * 混ざった。**色で決めるほうがはるかに確かである**（`RANK_HUES`）。
  *
- * **実機の写真で検証していない。** 合成した見本でしか通していない。
- * 適性の文字は装飾が強く（S は虹色、A は赤系）、二値化で潰れる可能性がある。
- * 本来は umacapture が配る適性の分類モデル（`aptitude/prediction.onnx`）を
- * 使うのが筋だが、このリポジトリを触っている環境からは配布元に届かない。
- * docs/ocr-design.md の 7 節を参照。
+ * ## 確かめたこと
+ *
+ * 608×2340 の実機の写真で、ステータス 5 つと適性 10 個の**すべてを正しく
+ * 読んだ**。切り出しの割合は umacapture の値のままで、目印の検出も較正も
+ * 要らなかった。写真はゲームの著作物なのでリポジトリには置いていない。
+ * 確かめたのは 1 枚だけである。docs/ocr-design.md の 7 節を参照。
  */
 
 export interface StatusReading {
@@ -49,8 +50,13 @@ export interface StatusReading {
 
 const RANKS: readonly FitRank[] = ['S', 'A', 'B', 'C', 'D', 'E', 'F', 'G'];
 
-/** ステータスの上限。これを超える読み取りは切り出しのずれとみなして捨てる。 */
-const MAX_STATUS = 2000;
+/**
+ * ステータスの上限。これを超える読み取りは切り出しのずれとみなして捨てる。
+ *
+ * 2000 にしていたら、実機の写真のスピード 2165 を捨てていた。因子と覚醒で
+ * 2000 は普通に超える。画面の入力欄と同じ 2500 に合わせてある。
+ */
+const MAX_STATUS = 2500;
 
 /** この数だけ読めなければ、そもそもこの画面ではないとみなす。 */
 const MIN_STATUS_READ = 3;
@@ -112,6 +118,83 @@ function toNumber(text: string): number | null {
   return value;
 }
 
+/**
+ * 実機で測った、適性の記号の色。色相は 0 から 360。
+ *
+ * 記号は立体的に飾られた字で、文字認識には向かない。二値化すると輪郭だけが
+ * 残って中が抜ける。実機の 1 枚では 10 個のうち 5 個しか当たらなかった。
+ *
+ * **色のほうがはるかにはっきりしている。** 同じ階級の記号は色相がぴたりと
+ * 揃い（A は 3 つとも 24、S は 2 つとも 41）、階級どうしは十分に離れている。
+ * G は灰色で、彩度の高い画素が 1 つも無い（他は 29 個から 162 個ある）ので、
+ * それだけで見分けが付く。
+ *
+ * **確かめたのは実機 1 枚に写っていた 5 階級だけである。** C・D・E は写って
+ * いなかったので色を書いていない。色が確かめ済みのどれにも近くなければ、
+ * 文字認識の答えに任せる。知らない色を近いほうへ丸めると、静かに間違える。
+ */
+const RANK_HUES: Partial<Record<FitRank, number>> = { S: 41, A: 24, B: 342, F: 245 };
+
+/** 色相がこれだけ離れていたら別の色とみなす。確かめた 5 階級は 17 度以上離れている。 */
+const HUE_TOLERANCE = 15;
+
+/** これを下回る彩度は「色が付いていない」とみなす。 */
+const VIVID_SATURATION = 0.45;
+
+/** 彩度の高い画素がこの割合を下回れば、灰色の G とみなす。 */
+const GRAY_RATIO = 0.02;
+
+/**
+ * 切り出した領域の色から階級を決める。分からなければ null。
+ *
+ * 色相は円周上の量なので、平均は sin と cos を平均してから角度に戻す。
+ * 342 のような 0 をまたぐ値を素直に平均すると、真ん中あたりの別の色になる。
+ */
+function rankFromColor(
+  pixels: Uint8Array | Uint8ClampedArray,
+  width: number,
+  channels: number,
+  rect: PixelRect,
+): FitRank | null {
+  let sumSin = 0;
+  let sumCos = 0;
+  let vivid = 0;
+  let total = 0;
+  for (let y = rect.top; y < rect.top + rect.height; y++) {
+    for (let x = rect.left; x < rect.left + rect.width; x++) {
+      const at = (y * width + x) * channels;
+      const r = pixels[at]! / 255;
+      const g = pixels[at + 1]! / 255;
+      const b = pixels[at + 2]! / 255;
+      total++;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+      const saturation = max > 0 ? delta / max : 0;
+      if (saturation < VIVID_SATURATION || max < 0.35 || delta === 0) continue;
+      let hue: number;
+      if (max === r) hue = 60 * (((g - b) / delta) % 6);
+      else if (max === g) hue = 60 * ((b - r) / delta + 2);
+      else hue = 60 * ((r - g) / delta + 4);
+      if (hue < 0) hue += 360;
+      const radians = (hue * Math.PI) / 180;
+      sumSin += Math.sin(radians);
+      sumCos += Math.cos(radians);
+      vivid++;
+    }
+  }
+  if (total === 0) return null;
+  if (vivid / total < GRAY_RATIO) return 'G';
+  let hue = (Math.atan2(sumSin / vivid, sumCos / vivid) * 180) / Math.PI;
+  if (hue < 0) hue += 360;
+  for (const [rank, center] of Object.entries(RANK_HUES)) {
+    // 円周上の差。342 と 5 のように 0 をまたぐ組でも正しく近いと分かる。
+    const diff = Math.abs(((hue - center + 540) % 360) - 180);
+    if (diff <= HUE_TOLERANCE) return rank as FitRank;
+  }
+  return null;
+}
+
 function toRank(text: string): FitRank | null {
   for (const char of text.toUpperCase()) {
     const rank = RANKS.find((r) => r === char);
@@ -165,12 +248,15 @@ export async function readStatusHeader(
 
   const aptitudes: Record<string, FitRank | null> = {};
   for (const [index, key] of APTITUDE_KEYS.entries()) {
-    const { text } = await ocr.recognize(await cropTo(image, aptitudeRects[index]!), {
+    const rect = aptitudeRects[index]!;
+    const { text } = await ocr.recognize(await cropTo(image, rect), {
       tessedit_char_whitelist: 'SABCDEFG',
-      // 1 文字だけが写っている。
-      tessedit_pageseg_mode: '10',
+      // 1 語として読ませる。1 文字として読ませる 10 より当たった（7 対 5）。
+      tessedit_pageseg_mode: '8',
     });
-    aptitudes[key] = toRank(text);
+    // 色を先に見る。実機の 1 枚では、文字認識が黙った 3 つと間違えた 1 つを
+    // 色が拾って 10 個すべて当たった（`RANK_HUES`）。
+    aptitudes[key] = rankFromColor(data, info.width, info.channels, rect) ?? toRank(text);
   }
 
   // 縦さえ足りていれば矩形は画像の中に収まってしまうので、位置の検査だけでは

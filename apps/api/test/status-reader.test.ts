@@ -12,8 +12,8 @@ import { readStatusHeader, StatusOutOfFrameError } from '../src/status-reader.ts
  * 画像を断ることである。実機での精度は docs/ocr-design.md の 7 節に残してある。
  */
 /** `scripts/render-status-header.mjs` が描いた値。あちらを変えたらここも変える。 */
-const SAMPLE_STATUS = [1247, 986, 1103, 642, 878];
-const SAMPLE_APTITUDES = ['A', 'G', 'F', 'B', 'A', 'C', 'A', 'B', 'D', 'E'];
+const SAMPLE_STATUS = [2165, 1240, 1326, 1653, 1464];
+const SAMPLE_APTITUDES = ['A', 'G', 'A', 'S', 'B', 'G', 'F', 'A', 'A', 'S'];
 
 const TESSDATA = process.env['RACEEMU_TESSDATA'] ?? '.tessdata';
 const available = existsSync(`${TESSDATA}/jpn.traineddata`);
@@ -42,5 +42,37 @@ describe.skipIf(!available)('ステータスの読み取り', () => {
     // 数字として読めた枠の数で断っている。
     const image = readFileSync('apps/api/test/fixtures/skill-list.png');
     await expect(readStatusHeader(image, engine!)).rejects.toBeInstanceOf(StatusOutOfFrameError);
+  });
+});
+
+/**
+ * 実機の「ウマ娘詳細」画面での検査。
+ *
+ * 画面はゲームの著作物なので、リポジトリには置かない（umacapture 側の
+ * `labels.json` を置かないのと同じ理由）。持っている人だけが
+ * `RACEEMU_REAL_SCREENSHOT` に道を指して走らせる。
+ *
+ *   RACEEMU_REAL_SCREENSHOT=~/skill.png pnpm test
+ *
+ * 期待値は docs/ocr-design.md の 7 節にも書いてある。
+ */
+const REAL = process.env['RACEEMU_REAL_SCREENSHOT'];
+
+describe.skipIf(!available || REAL === undefined || !existsSync(REAL))('実機の画面', () => {
+  it('ステータスと適性をすべて当てる', async () => {
+    const reading = await readStatusHeader(readFileSync(REAL!), engine!);
+    expect(reading.status).toEqual([2165, 1240, 1326, 1653, 1464]);
+    expect(reading.aptitudes).toEqual({
+      turf: 'A',
+      dirt: 'G',
+      sprint: 'A',
+      mile: 'S',
+      middle: 'B',
+      long: 'G',
+      nige: 'F',
+      sen: 'A',
+      sasi: 'A',
+      oi: 'S',
+    });
   });
 });

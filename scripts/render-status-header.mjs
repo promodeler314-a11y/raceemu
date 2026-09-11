@@ -13,8 +13,25 @@
 import { chromium } from 'playwright';
 import { existsSync } from 'node:fs';
 
-export const SAMPLE_STATUS = [1247, 986, 1103, 642, 878];
-export const SAMPLE_APTITUDES = ['A', 'G', 'F', 'B', 'A', 'C', 'A', 'B', 'D', 'E'];
+export const SAMPLE_STATUS = [2165, 1240, 1326, 1653, 1464];
+
+/**
+ * 実機の 1 枚に写っていたのと同じ並び。
+ *
+ * 階級ごとの色も実機で測った色相に合わせる（`apps/api/src/status-reader.ts` の
+ * `RANK_HUES`）。色で階級を決める道筋を、見本でも通せるようにするためである。
+ * C・D・E は実機の写真に写っておらず色が分からないので、見本にも入れない。
+ */
+export const SAMPLE_APTITUDES = ['A', 'G', 'A', 'S', 'B', 'G', 'F', 'A', 'A', 'S'];
+
+/** 実機で測った色相。G だけは彩度が無い（灰色）。 */
+const RANK_COLORS = {
+  S: 'hsl(41, 85%, 45%)',
+  A: 'hsl(24, 85%, 45%)',
+  B: 'hsl(342, 75%, 50%)',
+  F: 'hsl(245, 60%, 55%)',
+  G: '#8a8a8a',
+};
 
 // 実機に近い縦横比（9:16 より縦長のスマートフォン）にしておく。
 const WIDTH = 1080;
@@ -49,16 +66,16 @@ const box = ([l, t, r, b]) => ({
   height: (b - t) * WIDTH,
 });
 
-const cell = (rect, text, size) => {
+const cell = (rect, text, size, color = '#3c3226') => {
   const { left, top, width, height } = box(rect);
   return `<div style="position:absolute;left:${left}px;top:${top}px;width:${width}px;height:${height}px;
-    display:flex;align-items:center;justify-content:center;color:#3c3226;font-size:${size}px;
+    display:flex;align-items:center;justify-content:center;color:${color};font-size:${size}px;
     font-family:'IPAGothic','Noto Sans JP',sans-serif;font-weight:700">${text}</div>`;
 };
 
 const html = `<html><body style="margin:0;background:#f6f1e6;width:${WIDTH}px;height:${HEIGHT}px;position:relative">
 ${STATUS.map((rect, i) => cell(rect, SAMPLE_STATUS[i], 34)).join('')}
-${APTITUDE.map((rect, i) => cell(rect, SAMPLE_APTITUDES[i], 30)).join('')}
+${APTITUDE.map((rect, i) => cell(rect, SAMPLE_APTITUDES[i], 30, RANK_COLORS[SAMPLE_APTITUDES[i]])).join('')}
 </body></html>`;
 
 const bundled = '/opt/pw-browsers/chromium';
