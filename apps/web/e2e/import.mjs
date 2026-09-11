@@ -100,6 +100,47 @@ try {
     if (!held.some((h) => h.startsWith(name))) fail(`${name} が所持スキルに入っていない`);
   }
 
+  // ステータスと適性の取り込み。見本は合成したもの（scripts/render-status-header.mjs）で、
+  // 8 階級すべての色を入れてある。実機の写真はゲームの著作物なので置いていない。
+  {
+    const statusSection = 'section.rounded-sm:has(h2:text("画面からステータスを取り込む"))';
+    await page.setInputFiles(
+      `${statusSection} input[type=file]`,
+      'apps/api/test/fixtures/status-header.png',
+    );
+    await page.waitForSelector(`${statusSection} table`, { timeout: 120000 });
+    const read = await page.$$eval(`${statusSection} table tr`, (trs) =>
+      trs.map((tr) => [...tr.querySelectorAll('th,td')].map((c) => c.textContent?.trim()).join('=')),
+    );
+    console.log('--- 読み取ったステータスと適性:', read.join(' '));
+
+    await page.click(`${statusSection} button:has-text("設定に入れる")`);
+    await page.waitForTimeout(300);
+
+    // 見本の値。逆算の面にも同じ名前の入力があるので、最初の 1 つを取る。
+    const expectedStats = [
+      ['スピード', '2165'], ['スタミナ', '1240'], ['パワー', '1326'],
+      ['根性', '1653'], ['賢さ', '1464'],
+    ];
+    const stats = [];
+    for (const [label, expected] of expectedStats) {
+      const value = await page.locator(`label:has-text("${label}") input[type=number]`).first().inputValue();
+      stats.push(`${label}=${value}`);
+      if (value !== expected) fail(`${label} が ${value}（${expected} のはず）`);
+    }
+    console.log('--- 入った数値:', stats.join(' / '));
+
+    // 既定のコースは東京 芝2400m（芝・中距離）、脚質は先行。見本では順に S・D・G。
+    const fits = {};
+    for (const label of ['距離適性', 'バ場適性', '脚質適性']) {
+      fits[label] = await page.locator(`label:has-text("${label}") select`).inputValue();
+    }
+    console.log('--- 入った適性:', Object.entries(fits).map(([k, v]) => `${k}=${v}`).join(' '));
+    if (fits['バ場適性'] !== 'S') fail(`バ場適性が ${fits['バ場適性']}（S のはず）`);
+    if (fits['距離適性'] !== 'D') fail(`距離適性が ${fits['距離適性']}（D のはず）`);
+    if (fits['脚質適性'] !== 'G') fail(`脚質適性が ${fits['脚質適性']}（G のはず）`);
+  }
+
   await page.locator(section).screenshot({ path: 'docs/images/m10-import.png' });
   console.log('エラー:', errors.length === 0 ? 'なし' : errors);
   if (errors.length > 0) fail('コンソールにエラーが出た');
