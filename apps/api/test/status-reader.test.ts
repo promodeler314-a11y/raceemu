@@ -13,7 +13,7 @@ import { readStatusHeader, StatusOutOfFrameError } from '../src/status-reader.ts
  */
 /** `scripts/render-status-header.mjs` が描いた値。あちらを変えたらここも変える。 */
 const SAMPLE_STATUS = [2165, 1240, 1326, 1653, 1464];
-const SAMPLE_APTITUDES = ['A', 'G', 'A', 'S', 'B', 'G', 'F', 'A', 'A', 'S'];
+const SAMPLE_APTITUDES = ['S', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'A', 'S'];
 
 const TESSDATA = process.env['RACEEMU_TESSDATA'] ?? '.tessdata';
 const available = existsSync(`${TESSDATA}/jpn.traineddata`);
@@ -49,30 +49,64 @@ describe.skipIf(!available)('ステータスの読み取り', () => {
  * 実機の「ウマ娘詳細」画面での検査。
  *
  * 画面はゲームの著作物なので、リポジトリには置かない（umacapture 側の
- * `labels.json` を置かないのと同じ理由）。持っている人だけが
- * `RACEEMU_REAL_SCREENSHOT` に道を指して走らせる。
+ * `labels.json` を置かないのと同じ理由）。持っている人だけが、写真を置いた
+ * 場所を指して走らせる。
  *
- *   RACEEMU_REAL_SCREENSHOT=~/skill.png pnpm test
+ *   RACEEMU_REAL_SCREENSHOT_DIR=~/shots pnpm test
  *
- * 期待値は docs/ocr-design.md の 7 節にも書いてある。
+ * その場所に `case-1.png` から `case-3.png` の名前で置く。どれがどれかは
+ * 下の期待値のとおりで、docs/ocr-design.md の 7 節にも書いてある。
+ * 無い番号は飛ばすので、1 枚だけ持っている人も走らせられる。
  */
-const REAL = process.env['RACEEMU_REAL_SCREENSHOT'];
+const SHOT_DIR = process.env['RACEEMU_REAL_SCREENSHOT_DIR'];
 
-describe.skipIf(!available || REAL === undefined || !existsSync(REAL))('実機の画面', () => {
-  it('ステータスと適性をすべて当てる', async () => {
-    const reading = await readStatusHeader(readFileSync(REAL!), engine!);
-    expect(reading.status).toEqual([2165, 1240, 1326, 1653, 1464]);
-    expect(reading.aptitudes).toEqual({
-      turf: 'A',
-      dirt: 'G',
-      sprint: 'A',
-      mile: 'S',
-      middle: 'B',
-      long: 'G',
-      nige: 'F',
-      sen: 'A',
-      sasi: 'A',
-      oi: 'S',
+interface RealCase {
+  readonly file: string;
+  readonly size: string;
+  readonly status: readonly number[];
+  readonly aptitudes: Record<string, string>;
+}
+
+const REAL_CASES: readonly RealCase[] = [
+  {
+    file: 'case-1.png',
+    size: '608×2340',
+    status: [2165, 1240, 1326, 1653, 1464],
+    aptitudes: {
+      turf: 'A', dirt: 'G',
+      sprint: 'A', mile: 'S', middle: 'B', long: 'G',
+      nige: 'F', sen: 'A', sasi: 'A', oi: 'S',
+    },
+  },
+  {
+    file: 'case-2.png',
+    size: '810×2789',
+    status: [2106, 884, 1702, 1264, 1602],
+    aptitudes: {
+      turf: 'S', dirt: 'F',
+      sprint: 'A', mile: 'D', middle: 'F', long: 'G',
+      nige: 'D', sen: 'S', sasi: 'D', oi: 'G',
+    },
+  },
+  {
+    file: 'case-3.png',
+    size: '810×2454',
+    status: [1361, 1195, 694, 1467, 1826],
+    aptitudes: {
+      turf: 'A', dirt: 'E',
+      sprint: 'G', mile: 'A', middle: 'A', long: 'A',
+      nige: 'C', sen: 'A', sasi: 'E', oi: 'G',
+    },
+  },
+];
+
+describe.skipIf(!available || SHOT_DIR === undefined)('実機の画面', () => {
+  for (const real of REAL_CASES) {
+    const path = `${SHOT_DIR}/${real.file}`;
+    it.skipIf(!existsSync(path))(`${real.size} のステータスと適性をすべて当てる`, async () => {
+      const reading = await readStatusHeader(readFileSync(path), engine!);
+      expect(reading.status).toEqual(real.status);
+      expect(reading.aptitudes).toEqual(real.aptitudes);
     });
-  });
+  }
 });
