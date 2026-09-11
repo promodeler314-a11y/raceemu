@@ -1,7 +1,9 @@
 # 配信
 
-`apps/web` を GitHub Pages に置く。
-`https://promodeler314-a11y.github.io/raceemu/` である。
+`apps/web` が出す静的ファイルと `apps/api` を、自前の k3s に置く（4 節）。
+`apps/api` は静的ファイルも同じオリジンから配るので、これ一つでアプリとして完結する。
+
+GitHub Pages への配信は廃止した（5 節）。
 
 ## 1. 静的ファイルだけで足りる
 
@@ -9,10 +11,10 @@
 
 | ファイル | 大きさ |
 | --- | ---: |
-| `index.html` | 1.26 kB |
-| `assets/index-*.css` | 19.6 kB（gzip 5.0 kB） |
-| `assets/index-*.js` | 1.55 MB（gzip 250 kB） |
-| `assets/browser-worker-*.js` | 1.17 MB |
+| `index.html` | 1.83 kB（gzip 1.09 kB） |
+| `assets/index-*.css` | 20.1 kB（gzip 5.09 kB） |
+| `assets/index-*.js` | 1.59 MB（gzip 258 kB） |
+| `assets/browser-worker-*.js` | 1.18 MB |
 
 面倒になりがちな条件が四つとも外れている。
 
@@ -27,11 +29,10 @@
 したがってホストの乗り換えは安い。
 成果物は配信先に依存していない。
 
-## 2. 検査を通してから配る
+## 2. 取り込む前に検査する
 
-[ワークフロー](../.github/workflows/pages.yml)は `typecheck`、`test`、`build`、`e2e` の順に走らせ、通ったものだけを配る。
-
-検査は pull request でも走らせ、デプロイだけを `main` に限る。
+[ワークフロー](../.github/workflows/ci.yml)は `typecheck`、`test`、`build`、`e2e` の順に走らせる。
+`main` と pull request の両方で走り、配信とは切り離してある。
 
 `e2e` を外さないのは、これがビルドした成果物を実際に配信してブラウザで叩く唯一の段だからである。
 バンドルの上限、フッタのソースリンク、名前のないボタンの数、幅 390 での横あふれは、ここでしか見ていない。
@@ -44,24 +45,18 @@
 [設定](../vitest.config.ts)で 120 秒にしてある。
 `smoke.mjs` は、開発コンテナに置いてある Chromium があればそれを使い、無ければ Playwright に探させる。
 
-## 3. 最初の一回だけ手で要る操作
+## 3. 見ておくこと
 
-リポジトリの Settings → Pages で、Source を **GitHub Actions** にする。
-既定の「Deploy from a branch」のままだとワークフローの `deploy` が失敗する。
-
-## 4. 見ておくこと
-
-- **モバイルでの Worker 数。** 既定は `hardwareConcurrency - 1`（`packages/sim/src/parallel/browser.ts`）なので、8 コアの端末では 7 本立ち上がり、それぞれ 1.17 MB を読む。上限を切るかは実機で測ってから決める。
+- **モバイルでの Worker 数。** 既定は `hardwareConcurrency - 1`（`packages/sim/src/parallel/browser.ts`）なので、8 コアの端末では 7 本立ち上がり、それぞれ 1.18 MB を読む。上限を切るかは実機で測ってから決める。
 - **ES module 形式の Worker。** `vite.config.ts` で `worker.format` を `es` にしている。Firefox は 114 から対応した。
-- **反映までの間。** GitHub Pages の CDN は `index.html` を数分ほど持つ。資産のファイル名にはハッシュが付くので古い資産を掴むことはないが、更新が見えるまでに間がある。
+- **入れ替えの反映。** タグが `main` のまま中身が変わるので、`kubectl apply` では新しいイメージに変わらない（4.2 節）。
 
-## 5. 自前の k3s に置く
+## 4. 自前の k3s に置く
 
-GitHub Pages と自前の k3s は、どちらか一方を選ぶものではない。
-Pages は誰でも開ける置き場であり、k3s は[探索をサーバ側で回す](server-design.md)ための置き場である。
-`apps/api` は静的ファイルも同じオリジンから配るので、k3s に置いたものだけでもアプリとして完結する。
+[探索・画面の読み取り・個体の保存](server-design.md)をサーバ側で回すための置き場である。
+静的ファイルも `apps/api` が同じオリジンから配る。
 
-### 5.1 イメージ
+### 4.1 イメージ
 
 [ワークフロー](../.github/workflows/image.yml)が `main` への取り込みごとに `ghcr.io/promodeler314-a11y/raceemu` を更新する。
 タグは `main` と `sha-<短縮>` の 2 つで、常用は `main`、動いている版を固定したいときは `sha` を指す。
@@ -89,7 +84,7 @@ $ curl -s -H "Authorization: Bearer $(cat /tmp/t)" https://ghcr.io/v2/promodeler
 そのときはワークフローの `build-push-action` に `platforms: linux/amd64,linux/arm64` を足す。
 組む時間は倍以上になる（QEMU を挟むため）ので、要ると分かってから足す。
 
-### 5.2 置く
+### 4.2 置く
 
 ```
 kubectl apply -f deploy/k8s.yaml
@@ -99,7 +94,7 @@ curl -s localhost:8080/api/health
 ```
 
 マニフェストは `raceemu` という名前空間を作ってその中に置く。
-名前空間を指定しないと、`kubectl apply` を実行した人の現在のコンテキストの名前空間にそのまま入ってしまい、次の 5.3 節で使う Service の DNS 名が人によって変わってしまう。
+名前空間を指定しないと、`kubectl apply` を実行した人の現在のコンテキストの名前空間にそのまま入ってしまい、次の 4.3 節で使う Service の DNS 名が人によって変わってしまう。
 
 `/api/health` が返す `concurrencySource` が `cgroup` であれば、[設計](server-design.md)の 4.1 節の前提どおりに並列数を読めている。
 `availableParallelism` と出ていたらクォータを読めておらず、ノードのコア数で走っている。
@@ -112,7 +107,7 @@ curl -s localhost:8080/api/health
 kubectl rollout restart deploy/raceemu -n raceemu
 ```
 
-### 5.3 外に出す
+### 4.3 外に出す
 
 Service（`raceemu.raceemu.svc.cluster.local:80`）を cloudflared の宛先にする。
 Ingress は要らない。
@@ -124,3 +119,16 @@ Type を別に選ぶ欄がある。
 **認証は持たせていない。**
 [設計](server-design.md)の 5 節のとおり、Cloudflare Access を前に置く前提である。
 探索は 1 本で 25 万レース規模になるので、誰でも投げられる状態で外に出すと、そのまま計算資源を配ることになる。
+
+## 5. GitHub Pages への配信をやめた
+
+`https://promodeler314-a11y.github.io/raceemu/` に配っていたが、廃止した。
+配信のワークフロー（`pages.yml`）は検査だけを残して `ci.yml` に改めてある。
+
+置き場が一つ減っただけで、ビルドした成果物の性質は変わらない（1 節）。
+どこかの静的配信に置けば計算はブラウザで回る。
+ただし画面の読み取り（`/api/ocr/*`）と個体の保存（`/api/individuals`）は `apps/api` が要るので、静的配信だけの版では使えない。
+
+**静的配信だけの版を想定した扱いは残してある。**
+アプリは `/api` を叩いてみて、応答が JSON かどうかで口の有無を判断する（[読み取り](ocr-design.md)の 1 節）。
+`pnpm e2e` の静的サーバも POST に 405 と HTML を返す形のままで、口が無いことを画面で伝えているかをここで見ている。

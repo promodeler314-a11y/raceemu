@@ -1,8 +1,9 @@
-# ビルドして GitHub Pages に配る。
+# 取り込む前に検査する。
 #
-# 検査は pull request でも走らせる。デプロイだけを main に限る。
+# main と pull request の両方で走らせる。配信は切り離してある
+# （GitHub Pages への配信は廃止した。docs/deploy.md の 5 節）。
 # 壊れたものが出ていく事故は、e2e が成果物を実際に配信して叩くところで止まる。
-name: pages
+name: ci
 
 on:
   push:
@@ -39,25 +40,3 @@ jobs:
       # ランナーにブラウザ本体は入っていないので、ここで入れる。
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: apps/web/dist
-
-  deploy:
-    needs: check
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    # 配信は 1 本ずつ。追い越して古いものが残るのを防ぐ。
-    concurrency:
-      group: pages
-      cancel-in-progress: false
-    steps:
-      - id: deploy
-        uses: actions/deploy-pages@v4

@@ -4,7 +4,7 @@
 # 気付かないまま古いデータで動き続けるので、週次で取り直して差分があれば
 # PR にする。中身は packages/data/scripts/sync-game-data.py 参照。
 #
-# ここでは差分を PR にするところまでで、typecheck/test/build は pages.yml に
+# ここでは差分を PR にするところまでで、typecheck/test/build は ci.yml に
 # 任せる。ただし GITHUB_TOKEN で作った PR は pull_request のワークフローを
 # 起こさない（GitHub の仕様）。この repository secret（このリポジトリだけに
 # 絞った Contents: Read and write / Pull requests: Read and write の
