@@ -2,3 +2,4 @@ node_modules/
 dist/
 *.tsbuildinfo
 .tessdata/
+__pycache__/

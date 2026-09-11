@@ -55,6 +55,7 @@ pnpm api                       # 探索をサーバ側で回す口（apps/api）
 `packages/sim` が計算モデル、`packages/data` がコースデータとスキルデータ、`packages/solver` が逆算と探索、`apps/web` が UI、`apps/api` が探索をサーバ側で回す口である。
 `deploy/` に Dockerfile と Kubernetes のマニフェストを、`design/` に画面モックを置いてある。
 計算モデルは [mee1080/umasim](https://github.com/mee1080/umasim) からの移植であり、本リポジトリも AGPL v3 とする。
+スキル・コースデータ（`packages/data/assets/`）は週次の[ワークフロー](.github/workflows/sync-game-data.yml)が本家を追いかけ、新しいウマ娘やスキルが増えていれば下書き PR を出す（[詳細](docs/m1-report.md#7-データを本家に追随させる)）。
 
 ## 設計と解析
 
