@@ -1,0 +1,80 @@
+# 本家（mee1080/umasim）のスキル・コースデータを追いかける。
+#
+# 新しいウマ娘・スキルは本家のデータ更新だけで公開される。放っておくと
+# 気付かないまま古いデータで動き続けるので、週次で取り直して差分があれば
+# PR にする。中身は packages/data/scripts/sync-game-data.py 参照。
+#
+# ここでは差分を PR にするところまでで、typecheck/test/build は pages.yml に
+# 任せる。ただし GITHUB_TOKEN で作った PR は pull_request のワークフローを
+# 起こさない（GitHub の仕様）ので、CI はマージする側が閉じて開き直すなどして
+# 手動で走らせる必要がある。PR 本文にその旨を書いている。
+name: sync-game-data
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: sync
+        run: |
+          python3 packages/data/scripts/sync-game-data.py | tee /tmp/sync-summary.txt
+
+      - id: diff
+        run: |
+          if git diff --quiet -- packages/data/assets; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BRANCH=chore/sync-game-data
+
+          {
+            echo "data: 本家のスキル・コースデータを取り直す"
+            echo
+            cat /tmp/sync-summary.txt
+          } > /tmp/commit-message.txt
+
+          {
+            echo "本家（mee1080/umasim）のスキル・コースデータを取り直した。"
+            echo
+            echo '```'
+            cat /tmp/sync-summary.txt
+            echo '```'
+            echo
+            echo "packages/data/scripts/sync-game-data.py が自動で作った。毎回 main の最新から作り直すので、このブランチへの手動コミットは次回の実行で消える。"
+            echo
+            echo "**この PR の CI は自動では走らない。** GITHUB_TOKEN で作った PR は pull_request のワークフローを起こさない仕組みになっている。マージする前に、閉じて開き直すか空コミットを積むかして手動で走らせること。新しい条件・効果の型が増えていれば「スキル条件の網羅」の検査がそこで落ちる。"
+          } > /tmp/pr-body.md
+
+          # main から毎回作り直す。積み重ねると差分が読みにくくなるうえ、
+          # 前回のスキル追加と今回のスキル追加が混ざって見分けが付かなくなる。
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$BRANCH"
+          git add packages/data/assets
+          git commit -F /tmp/commit-message.txt
+          git push --force origin "$BRANCH"
+
+          existing=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')
+          if [ -z "$existing" ]; then
+            gh pr create --draft --base main --head "$BRANCH" \
+              --title "data: 本家のスキル・コースデータを取り直す" \
+              --body-file /tmp/pr-body.md
+          else
+            gh pr edit "$existing" --body-file /tmp/pr-body.md
+          fi
