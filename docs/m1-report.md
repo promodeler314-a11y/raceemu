@@ -136,11 +136,29 @@ main から作り直すので積み上がらない）。新しい条件・効果
 コード側の対応が要ることに気付ける。
 
 **ただし GITHUB_TOKEN が作った PR は、GitHub の仕様で pull_request のワークフロー
-（`pages.yml` の typecheck/test/build）を自動では起こさない。** マージする前に、
-PR を閉じて開き直すか空コミットを積むかして CI を手動で走らせる必要がある
-（PR 本文にも書いてある）。これを解消するには、リポジトリの管理者権限を持つ
-Personal Access Token を secrets に登録して `github.token` の代わりに使う手が
-あるが、シークレットの追加は権限の管理者側の判断が要るので、この場では踏み込んでいない。
+（`pages.yml` の typecheck/test/build）を自動では起こさない。** `SYNC_PAT` という
+名前で個人アクセストークンを repository secret に登録すると、ワークフローは
+GITHUB_TOKEN の代わりにそちらを使い、CI も普段どおり自動で走るようになる
+（未設定なら今までどおり GITHUB_TOKEN に落ち、CI は手動で走らせる必要がある。
+PR 本文がどちらの状態かを都度書く）。
+
+登録手順（管理者権限を持つ側の手作業。トークンの発行はこちらからはできない）：
+
+1. https://github.com/settings/personal-access-tokens/new を開く（発行するのは
+   `promodeler314-a11y` アカウント自身）。
+2. Resource owner を `promodeler314-a11y`、Repository access を
+   「Only select repositories」→ `raceemu` のみに絞る。
+3. Repository permissions で **Contents: Read and write**、
+   **Pull requests: Read and write** を選ぶ（Metadata は自動で付く）。他は不要。
+4. 有効期限を決めて（無期限は避ける）発行し、表示されたトークンをコピーする
+   （この画面を閉じると二度と見えない）。
+5. https://github.com/promodeler314-a11y/raceemu/settings/secrets/actions を開き、
+   「New repository secret」→ Name に `SYNC_PAT`、Value に発行したトークンを
+   貼って追加する。
+
+有効期限が切れたら 1〜5 を繰り返して値を更新する。トークンそのものは
+このリポジトリのどこにも残らない（secrets はワークフローの実行時にしか展開されず、
+ログにも値は出ない）。
 
 あわせて、抽出時に単一行へ詰めていた 2 ファイルを、この節を書くときに
 2 スペース区切りの整形済み JSON へ直した。中身は変えていない

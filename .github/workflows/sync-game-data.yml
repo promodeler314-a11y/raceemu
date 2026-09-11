@@ -6,8 +6,12 @@
 #
 # ここでは差分を PR にするところまでで、typecheck/test/build は pages.yml に
 # 任せる。ただし GITHUB_TOKEN で作った PR は pull_request のワークフローを
-# 起こさない（GitHub の仕様）ので、CI はマージする側が閉じて開き直すなどして
-# 手動で走らせる必要がある。PR 本文にその旨を書いている。
+# 起こさない（GitHub の仕様）。この repository secret（このリポジトリだけに
+# 絞った Contents: Read and write / Pull requests: Read and write の
+# 個人アクセストークン）を SYNC_PAT という名前で登録すると、そちらを使って
+# 通常どおり CI が走るようになる。設定していなければ GITHUB_TOKEN に
+# 落ちて今までどおり（CI は手動で走らせる必要がある）動く。
+# 手順は docs/m1-report.md 7 節を参照。
 name: sync-game-data
 
 on:
@@ -24,6 +28,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNC_PAT || github.token }}
 
       - id: sync
         run: |
@@ -39,7 +45,8 @@ jobs:
 
       - if: steps.diff.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SYNC_PAT || github.token }}
+          HAS_PAT: ${{ secrets.SYNC_PAT != '' }}
         run: |
           BRANCH=chore/sync-game-data
 
@@ -48,6 +55,12 @@ jobs:
             echo
             cat /tmp/sync-summary.txt
           } > /tmp/commit-message.txt
+
+          if [ "$HAS_PAT" = "true" ]; then
+            CI_NOTE="SYNC_PAT を設定してあるので、この PR の CI（typecheck/test/build）は普段どおり自動で走る。"
+          else
+            CI_NOTE="**この PR の CI は自動では走らない。** GITHUB_TOKEN で作った PR は pull_request のワークフローを起こさない仕組みになっている。マージする前に、閉じて開き直すか空コミットを積むかして手動で走らせること。SYNC_PAT という repository secret を追加すると自動で走るようになる（docs/m1-report.md 7 節）。"
+          fi
 
           {
             echo "本家（mee1080/umasim）のスキル・コースデータを取り直した。"
@@ -58,7 +71,7 @@ jobs:
             echo
             echo "packages/data/scripts/sync-game-data.py が自動で作った。毎回 main の最新から作り直すので、このブランチへの手動コミットは次回の実行で消える。"
             echo
-            echo "**この PR の CI は自動では走らない。** GITHUB_TOKEN で作った PR は pull_request のワークフローを起こさない仕組みになっている。マージする前に、閉じて開き直すか空コミットを積むかして手動で走らせること。新しい条件・効果の型が増えていれば「スキル条件の網羅」の検査がそこで落ちる。"
+            echo "$CI_NOTE 新しい条件・効果の型が増えていれば「スキル条件の網羅」の検査が落ちる。"
           } > /tmp/pr-body.md
 
           # main から毎回作り直す。積み重ねると差分が読みにくくなるうえ、
