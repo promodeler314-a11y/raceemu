@@ -143,7 +143,7 @@ main から作り直すので積み上がらない）。新しい条件・効果
 コード側の対応が要ることに気付ける。
 
 **ただし GITHUB_TOKEN が作った PR は、GitHub の仕様で pull_request のワークフロー
-（`pages.yml` の typecheck/test/build）を自動では起こさない。** `SYNC_PAT` という
+（`ci.yml` の typecheck/test/build）を自動では起こさない。** `SYNC_PAT` という
 名前で個人アクセストークンを repository secret に登録すると、ワークフローは
 GITHUB_TOKEN の代わりにそちらを使い、CI も普段どおり自動で走るようになる
 （未設定なら今までどおり GITHUB_TOKEN に落ち、CI は手動で走らせる必要がある。

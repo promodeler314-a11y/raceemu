@@ -16,7 +16,7 @@ const fail = (message) => {
 };
 
 const server = createServer(async (req, res) => {
-  // GitHub Pages と同じ振る舞いにする。POST は受け付けず、本文は HTML で返す。
+  // 静的配信だけの環境と同じ振る舞いにする。POST は受け付けず、本文は HTML で返す。
   // 「JSON が返る前提」で書いた画面があると、ここで初めて露見する。
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     req.resume();

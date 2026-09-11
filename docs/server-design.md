@@ -138,6 +138,13 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 | `GET /api/individuals` | 保存した個体（ステータス+スキル構成）の一覧 |
 | `POST /api/individuals` | 個体を 1 件保存する |
 | `DELETE /api/individuals/{id}` | 個体を 1 件消す |
+| `POST /api/ocr/skills` | ウマ娘詳細画面の写真から所持スキルを読む |
+| `POST /api/ocr/status` | 同じ写真の上半分からステータスと適性を読む |
+
+探索だけの口として始めたが、ブラウザに置けないものがここに集まっている。
+読み取り（`/api/ocr/*`）は[設計](ocr-design.md)のとおり、学習データ 35 MB と
+分類のモデルを抱えるためにサーバ側へ出したものである。
+`/api` が無い版ではどちらも使えないので、画面はその旨を伝えて倒れる（同 1 節）。
 
 要求は次の形である。
 `base` は候補を 1 つも取らない土台で、Worker に送るのと同じ `SerializableRaceSetting` をそのまま使う。
@@ -183,6 +190,9 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 | `RACEEMU_JOB_TTL_MS` | 30 分 | 終わったジョブを保持する時間 |
 | `RACEEMU_STATIC_ROOT` | なし | 静的ファイルの置き場。指定すると同一オリジンで配る |
 | `RACEEMU_DATA_DIR` | なし（`:memory:`） | 個体を保存する SQLite の置き場。指定しないとプロセス終了で消える |
+| `RACEEMU_TESSDATA` | なし | 文字認識の学習データの置き場。無ければ文字認識には落ちない（分類だけで読む） |
+| `RACEEMU_OCR_THRESHOLD` | 170 | 二値化の閾値（[読み取り](ocr-design.md)の 5.2 節） |
+| `RACEEMU_MAX_IMAGE_BYTES` | 8 MB | 送れる画像の上限 |
 
 ### 7.2 上限の守り方
 

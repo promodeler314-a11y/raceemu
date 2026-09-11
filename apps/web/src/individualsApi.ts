@@ -3,7 +3,7 @@ import type { UmaStatus } from '../../../packages/sim/src/setting.ts';
 /**
  * サーバに保存する個体（ステータス+スキル構成）。
  *
- * `/api/individuals`（apps/api）を叩く。GitHub Pages に置いた版にはサーバが
+ * `/api/individuals`（apps/api）を叩く。静的ファイルだけを置いた版にはサーバが
  * 無いので、その場合は口が無いことを伝える。読み取り（Import.tsx）と同じ
  * 考え方で、事前に `/api/health` を確かめたりはせず、実際に叩いてみて
  * 応答が JSON かどうかで判断する。
@@ -24,7 +24,7 @@ export interface NewIndividual {
 }
 
 const NO_ENDPOINT =
-  '個体を保存する口が無い。GitHub Pages に置いた版はサーバを持たないので、この機能は自前で立てた版でだけ使える。';
+  '個体を保存する口が無い。静的ファイルだけを置いた版はサーバを持たないので、この機能はサーバを立てた版でだけ使える。';
 
 function explainNonJson(res: Response): string {
   if (res.redirected) {
