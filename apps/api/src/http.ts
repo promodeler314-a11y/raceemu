@@ -10,7 +10,7 @@ import { IndividualStore } from './individuals.ts';
 import { JobRunner, QueueFullError, type Job } from './jobs.ts';
 import { OcrEngine } from './ocr.ts';
 import { checkRequest, RequestError } from './request.ts';
-import { SkillClassifier } from './skill-classifier.ts';
+import { classifierCoverage, SkillClassifier } from './skill-classifier.ts';
 import { readStatusHeader, StatusOutOfFrameError } from './status-reader.ts';
 
 /**
@@ -151,6 +151,10 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         maxRacesPerJob: config.maxRacesPerJob,
         // 読み取りが使える版かどうかを、画面を触らずに確かめられるようにする
         ocr: ocr !== null,
+        // スキル分類モデルの古さを見るための数。`skills` に対して `classifier.named`
+        // がずっと少なければ、モデルが取り残されている（skill-classifier.ts）。
+        skills: data.skills.length,
+        classifier: classifierCoverage(),
         ...runner.stats(),
       });
       return;

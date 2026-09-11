@@ -167,6 +167,23 @@ describe('読み取りの口', () => {
     });
   });
 
+  // モデルは学習した時点のスキルしか分類できない。データだけが週次で新しく
+  // なるとモデルが取り残され、新しいスキルを「いちばん近い既知のスキル」として
+  // 高い確信度で返すようになる。古さを外から見られるようにしてある
+  // （docs/ocr-design.md 6.6 節）。
+  it('/api/health に分類モデルの収録数を出す', async () => {
+    await withServer({}, async (base) => {
+      const health = (await (await fetch(`${base}/api/health`)).json()) as {
+        skills: number;
+        classifier: { classes: number; named: number };
+      };
+      expect(health.skills).toBeGreaterThan(1000);
+      expect(health.classifier.classes).toBeGreaterThan(1000);
+      // 対応付いた数が分類の数を超えることはない。
+      expect(health.classifier.named).toBeLessThanOrEqual(health.classifier.classes);
+    });
+  });
+
   // 「ウマ娘詳細」画面のスキル一覧は分類器（skill-classifier.ts）が先に試し、
   // 学習データ（tessdata）が無くても効く。文字認識に落ちるのは、分類器がその
   // 形の画面ではないと判断したときだけである。

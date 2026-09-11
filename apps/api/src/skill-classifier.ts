@@ -259,6 +259,25 @@ function buildRowGeometry(leftIcons: readonly Band[], width: number): SkillRowGe
   }));
 }
 
+/**
+ * モデルが名前を知っているスキルの数。
+ *
+ * モデルは学習した時点のスキルしか分類できない。データのほうは週次で
+ * 追随している（`.github/workflows/sync-game-data.yml`）ので、放っておくと
+ * モデルだけが古くなる。そのとき新しいスキルは「選べない」のではなく、
+ * **見た目のいちばん近い既知のスキルとして、高い確信度で返る**。読み取りが
+ * 静かに間違うので、外から見えるようにしておく。
+ *
+ * `/api/health` が返す。手元のデータのスキル数と大きく離れていたら、
+ * `scripts/update-skill-classifier.py` で取り直す頃合いである。
+ */
+export function classifierCoverage(): { classes: number; named: number } {
+  return {
+    classes: LABEL_MAP.length,
+    named: LABEL_MAP.filter((id) => id !== null).length,
+  };
+}
+
 export class SkillClassifier {
   private session: Promise<ort.InferenceSession> | null = null;
 

@@ -18,4 +18,8 @@
 umacapture 側の `labels.json`（Cygames の著作物を含む）はコピーしていない。
 作り方は `scripts/build-skill-classifier-labels.ts` を参照。
 
+取り直すときは `scripts/update-skill-classifier.py` を使う。モデルと対応表を
+必ず一緒に書き出す。分類番号の並びはモデルごとに違うので、片方だけ新しいと
+全部のスキルが 1 つずれた答えになる。
+
 読み取り方の設計は `docs/ocr-design.md` の 6 節を参照。

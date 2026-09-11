@@ -1,0 +1,102 @@
+# umacapture が配るスキル分類モデルを追いかける。
+#
+# モデルは学習した時点のスキルしか分類できない。ゲームに新しいスキルが増えても
+# 古いモデルのままだと、そのスキルを選べないどころか、見た目のいちばん近い
+# 既知のスキルを高い確信度で返す。読み取りが静かに間違う。
+#
+# データのほうは sync-game-data.yml が週次で追随しているので、放っておくと
+# モデルだけが取り残される。中身は scripts/update-skill-classifier.py 参照。
+#
+# 差分を PR にするところまでで、typecheck/test/build は pages.yml に任せる。
+# GITHUB_TOKEN で作った PR は pull_request のワークフローを起こさないので、
+# SYNC_PAT があればそちらを使う（sync-game-data.yml と同じ）。
+name: sync-skill-model
+
+on:
+  schedule:
+    - cron: '41 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNC_PAT || github.token }}
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # 対応表を作り直すのに packages/data と tsx が要る。
+      - run: pnpm install --frozen-lockfile
+
+      - id: sync
+        run: |
+          python3 scripts/update-skill-classifier.py | tee /tmp/model-summary.txt
+
+      - id: diff
+        run: |
+          if git diff --quiet -- apps/api/assets/skill-classifier; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT || github.token }}
+          HAS_PAT: ${{ secrets.SYNC_PAT != '' }}
+        run: |
+          BRANCH=chore/sync-skill-model
+
+          {
+            echo "asset: スキル分類モデルを取り直す"
+            echo
+            cat /tmp/model-summary.txt
+          } > /tmp/commit-message.txt
+
+          if [ "$HAS_PAT" = "true" ]; then
+            CI_NOTE="SYNC_PAT を設定してあるので、この PR の CI は普段どおり自動で走る。"
+          else
+            CI_NOTE="**この PR の CI は自動では走らない。** GITHUB_TOKEN で作った PR は pull_request のワークフローを起こさない。マージする前に手動で走らせること。"
+          fi
+
+          {
+            echo "umacapture が配るスキル分類モデルを取り直した。"
+            echo
+            echo '```'
+            cat /tmp/model-summary.txt
+            echo '```'
+            echo
+            echo "**モデルと対応表は必ず一緒に入れ替わる。** 分類番号の並びはモデルごとに違うので、片方だけ新しいと全部のスキルが 1 つずれた答えになる。この PR はその 2 つだけを含む。"
+            echo
+            echo "読み取りの精度そのものは自動では測れない。実機の写真を持っている人が、docs/ocr-design.md の 7 節の手順で確かめるとよい。"
+            echo
+            echo "scripts/update-skill-classifier.py が自動で作った。毎回 main の最新から作り直すので、このブランチへの手動コミットは次回の実行で消える。"
+            echo
+            echo "$CI_NOTE"
+          } > /tmp/pr-body.md
+
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$BRANCH"
+          git add apps/api/assets/skill-classifier
+          git commit -F /tmp/commit-message.txt
+          git push --force origin "$BRANCH"
+
+          existing=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')
+          if [ -z "$existing" ]; then
+            gh pr create --draft --base main --head "$BRANCH" \
+              --title "asset: スキル分類モデルを取り直す" \
+              --body-file /tmp/pr-body.md
+          else
+            gh pr edit "$existing" --body-file /tmp/pr-body.md
+          fi
