@@ -4,6 +4,7 @@ import { loadGameData } from '../../../packages/data/src/node.ts';
 import { SkillMatcher } from '../../../packages/data/src/skill-match.ts';
 import type { Config } from '../src/config.ts';
 import { createApiServer } from '../src/http.ts';
+import { IndividualStore } from '../src/individuals.ts';
 import { JobRunner } from '../src/jobs.ts';
 import { OcrEngine } from '../src/ocr.ts';
 
@@ -135,7 +136,7 @@ describe('読み取りの口', () => {
   const config: Config = {
     port: 0, concurrency: 1, concurrencySource: 'env', maxRunning: 1, maxQueued: 1,
     maxRacesPerJob: 1000, jobTtlMs: 60_000, staticRoot: null,
-    tessdataPath: null, maxImageBytes: 1024, ocrThreshold: 128,
+    tessdataPath: null, maxImageBytes: 1024, ocrThreshold: 128, dataDir: null,
   };
 
   async function withServer(
@@ -144,7 +145,7 @@ describe('読み取りの口', () => {
   ): Promise<void> {
     const merged = { ...config, ...overrides };
     const runner = new JobRunner(merged, data);
-    const server = createApiServer(merged, data, runner);
+    const server = createApiServer(merged, data, runner, new IndividualStore(null));
     await new Promise<void>((done) => server.listen(0, '127.0.0.1', done));
     const address = server.address();
     const port = typeof address === 'object' && address !== null ? address.port : 0;

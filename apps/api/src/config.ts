@@ -84,6 +84,12 @@ export interface Config {
    * 本物の画面では確かめていない。合わなければコードを変えずに調整できる。
    */
   readonly ocrThreshold: number;
+  /**
+   * 個体（ステータス+スキル構成）を保存する SQLite の置き場。
+   * null なら `:memory:`（プロセスと運命をともにする）。自前の k3s に
+   * 永続ボリュームを積んだときだけ指定する想定。
+   */
+  readonly dataDir: string | null;
 }
 
 function num(name: string, fallback: number): number {
@@ -127,5 +133,6 @@ export function loadConfig(): Config {
     tessdataPath: process.env['RACEEMU_TESSDATA'] ?? null,
     maxImageBytes: num('RACEEMU_MAX_IMAGE_BYTES', 8 * 1024 * 1024),
     ocrThreshold: num('RACEEMU_OCR_THRESHOLD', 170),
+    dataDir: process.env['RACEEMU_DATA_DIR'] ?? null,
   };
 }

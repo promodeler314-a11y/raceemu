@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { saveIndividual } from '../individualsApi.ts';
 import { currentTrackDetail, gameData, useStore, type Tab } from '../store.ts';
 import { ShareButton } from './Compare.tsx';
 
@@ -85,6 +87,48 @@ function SaveSnapshotButton() {
   );
 }
 
+/**
+ * いまのステータスとスキル構成を、サーバに個体として保存する。
+ *
+ * スナップショットと違い結果は持たない。勝率の相手や、あとで統計を取るときの
+ * 材料として、サーバ側に溜めておく。GitHub Pages に置いた版にはサーバが
+ * 無いので、その場合はその旨をここに出す。
+ */
+function SaveIndividualButton() {
+  const uma = useStore((s) => s.uma);
+  const skillIds = useStore((s) => s.skillIds);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const save = async () => {
+    setSaving(true);
+    setMessage(null);
+    try {
+      const label = `${STYLE_LABELS[uma.style] ?? uma.style} ${uma.speed}/${uma.stamina}/${uma.power}/${uma.guts}/${uma.wisdom}`;
+      await saveIndividual({ label, uma, skillIds });
+      setMessage('個体として保存した。');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : String(error));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        className="h-[30px] rounded-sm border border-rule2 px-3 text-xs font-semibold text-ink2 disabled:opacity-40"
+        onClick={() => void save()}
+        disabled={saving}
+      >
+        {saving ? '保存中…' : '個体として保存'}
+      </button>
+      {message !== null && <span className="text-[11px] text-ink3">{message}</span>}
+    </div>
+  );
+}
+
 /** モックは 1440px しか描いていない。狭い幅では折り返して縦に伸ばす。 */
 export function Header() {
   const tab = useStore((s) => s.tab);
@@ -119,6 +163,7 @@ export function Header() {
       <div className="flex flex-wrap items-center gap-2 md:flex-none md:flex-nowrap">
         <ThemeToggle />
         <ShareButton />
+        <SaveIndividualButton />
         <SaveSnapshotButton />
       </div>
     </header>

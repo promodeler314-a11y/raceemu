@@ -58,6 +58,7 @@ function config(overrides: Partial<Config> = {}): Config {
     tessdataPath: null,
     maxImageBytes: 8 * 1024 * 1024,
     ocrThreshold: 128,
+    dataDir: null,
     ...overrides,
   };
 }
