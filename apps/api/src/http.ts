@@ -4,10 +4,11 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import type { GameData } from '../../../packages/data/src/index.ts';
 import type { Config } from './config.ts';
-import { SkillMatcher } from '../../../packages/data/src/skill-match.ts';
+import { SkillMatcher, type SkillMatch } from '../../../packages/data/src/skill-match.ts';
 import { JobRunner, QueueFullError, type Job } from './jobs.ts';
 import { OcrEngine } from './ocr.ts';
 import { checkRequest, RequestError } from './request.ts';
+import { SkillClassifier } from './skill-classifier.ts';
 
 /**
  * HTTP の口。
@@ -20,6 +21,13 @@ import { checkRequest, RequestError } from './request.ts';
  */
 
 const MAX_BODY_BYTES = 1_000_000;
+
+/**
+ * 分類器（skill-classifier.ts）の確信度の下限。
+ * 実機の1枚では、正しい行はほぼ1.0、空の行（一覧の末尾で片方の列だけ空く場合）
+ * は0.5以下だった。間を大きく取ってある。
+ */
+const CLASSIFIER_MIN_CONFIDENCE = 0.5;
 
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
@@ -115,6 +123,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       ? null
       : new OcrEngine({ tessdataPath: config.tessdataPath, threshold: config.ocrThreshold });
   const matcher = new SkillMatcher(data.skills);
+  const skillClassifier = new SkillClassifier();
 
   return createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -185,12 +194,6 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
     }
 
     if (path === '/api/ocr/skills' && method === 'POST') {
-      if (ocr === null) {
-        sendJson(res, 501, {
-          error: '画面の読み取りは有効になっていない。RACEEMU_TESSDATA に学習データの置き場を指定する。',
-        });
-        return;
-      }
       const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim();
       if (!IMAGE_TYPES.includes(type)) {
         sendJson(res, 415, { error: `content-type は ${IMAGE_TYPES.join(' / ')} のいずれかにする` });
@@ -207,18 +210,62 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         sendJson(res, 400, { error: '本文が空である' });
         return;
       }
-      const { text, elapsedMs } = await ocr.recognize(image);
-      const matches = matcher.matchAll(text).map((found) => ({
-        id: found.skill.id,
-        name: found.skill.name,
-        rarity: found.skill.rarity,
-        sp: found.skill.sp,
-        text: found.text,
-        score: found.score,
-        margin: found.margin,
-        runnerUp: found.runnerUp === null ? null : { id: found.runnerUp.id, name: found.runnerUp.name },
+      const started = performance.now();
+      // 「ウマ娘詳細」画面のスキル一覧は、まず画像分類（skill-classifier.ts）で試す。
+      // 文字認識と違い、丸いアイコンや装飾つきの背景に壊されない。分類器が行を
+      // 1つも見つけられなければ（その形の画面ではない）、文字認識に任せる。
+      // 画像として読めない場合も同様に任せ、文字認識側の「理由の付いた失敗」に
+      // 揃える（分類器自身の生の例外をそのまま外に出さない）。
+      let classified: Awaited<ReturnType<typeof skillClassifier.recognize>> = [];
+      let classifyError: unknown = null;
+      try {
+        classified = await skillClassifier.recognize(image);
+      } catch (error) {
+        classifyError = error;
+      }
+      let text: string;
+      let found: SkillMatch[];
+      if (classified.length > 0) {
+        text = '';
+        const bySkillId = new Map<string, SkillMatch>();
+        for (const prediction of classified) {
+          if (prediction.skillId === null || prediction.confidence < CLASSIFIER_MIN_CONFIDENCE) continue;
+          const skill = data.skillsById.get(prediction.skillId);
+          if (skill === undefined) continue;
+          const kept = bySkillId.get(prediction.skillId);
+          if (kept === undefined || prediction.confidence > kept.score) {
+            bySkillId.set(prediction.skillId, {
+              skill,
+              text: skill.name,
+              score: prediction.confidence,
+              margin: 1,
+              runnerUp: null,
+            });
+          }
+        }
+        found = [...bySkillId.values()].sort((a, b) => b.score - a.score);
+      } else if (ocr !== null) {
+        const recognized = await ocr.recognize(image);
+        text = recognized.text;
+        found = matcher.matchAll(text);
+      } else if (classifyError !== null) {
+        const reason = classifyError instanceof Error ? classifyError.message : String(classifyError);
+        throw new Error(`読み取りに失敗した: ${reason}`);
+      } else {
+        text = '';
+        found = [];
+      }
+      const matches = found.map((match) => ({
+        id: match.skill.id,
+        name: match.skill.name,
+        rarity: match.skill.rarity,
+        sp: match.skill.sp,
+        text: match.text,
+        score: match.score,
+        margin: match.margin,
+        runnerUp: match.runnerUp === null ? null : { id: match.runnerUp.id, name: match.runnerUp.name },
       }));
-      sendJson(res, 200, { text, matches, elapsedMs });
+      sendJson(res, 200, { text, matches, elapsedMs: performance.now() - started });
       return;
     }
 

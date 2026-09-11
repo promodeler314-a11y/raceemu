@@ -166,14 +166,19 @@ describe('読み取りの口', () => {
     });
   });
 
-  it('学習データの置き場が無ければ 501 を返す', async () => {
-    await withServer({}, async (base) => {
+  // 「ウマ娘詳細」画面のスキル一覧は分類器（skill-classifier.ts）が先に試し、
+  // 学習データ（tessdata）が無くても効く。文字認識に落ちるのは、分類器がその
+  // 形の画面ではないと判断したときだけである。
+  it('分類器の形に合わない画像は、学習データが無ければ空の一覧を返す', async () => {
+    await withServer({ maxImageBytes: 8 * 1024 * 1024 }, async (base) => {
       const res = await fetch(`${base}/api/ocr/skills`, {
         method: 'POST',
         headers: { 'content-type': 'image/png' },
-        body: new Uint8Array([1, 2, 3]),
+        body: readFileSync('apps/api/test/fixtures/skill-list.png'),
       });
-      expect(res.status).toBe(501);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { matches: unknown[] };
+      expect(body.matches).toEqual([]);
     });
   });
 

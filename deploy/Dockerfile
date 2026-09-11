@@ -9,6 +9,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY packages/ packages/
 COPY apps/ apps/
 COPY scripts/ scripts/
+# onnxruntime-node（スキル一覧の分類）は Linux 版だけ既定で CUDA 用の追加バイナリを
+# NuGet から取りに行く。CPU でしか動かさないので要らない。
+ENV ONNXRUNTIME_NODE_INSTALL=skip
 RUN pnpm install --frozen-lockfile
 RUN pnpm build
 # 画面の読み取りに使う学習データ。35 MB あるのでリポジトリには置かず、ここで取る。
@@ -25,8 +28,11 @@ ENV NODE_ENV=production
 # 落としたい場合は tsx を dependencies に移すか、Worker を含めて
 # あらかじめコンパイルする必要がある。
 # 読み取りに使う tesseract.js は実行時に要るので dependencies にある。
-# sharp（読み取り前の二値化）はネイティブの二値を積む。build と runtime が
-# 同じ node:22-slim（glibc）なので、build 側で入れたものをそのまま使える。
+# sharp（読み取り前の二値化）と onnxruntime-node（スキル一覧の分類）は
+# ネイティブの二値を積む。build と runtime が同じ node:22-slim（glibc）
+# なので、build 側で入れたものをそのまま使える。
+# スキル分類のモデル（apps/api/assets/skill-classifier/model.onnx）は
+# 2.6 MB なのでリポジトリに置いてあり、tessdata と違って取ってくる手順は無い。
 COPY --from=build /app /app
 ENV RACEEMU_STATIC_ROOT=/app/apps/web/dist
 ENV RACEEMU_TESSDATA=/app/tessdata

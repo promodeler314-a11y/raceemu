@@ -16,7 +16,8 @@
     "api": "tsx apps/api/src/main.ts",
     "multi": "tsx packages/sim/src/multi/cli.ts",
     "fetch-tessdata": "node scripts/fetch-tessdata.mjs",
-    "e2e:import": "node apps/web/e2e/import.mjs"
+    "e2e:import": "node apps/web/e2e/import.mjs",
+    "build-skill-classifier-labels": "tsx scripts/build-skill-classifier-labels.ts"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -32,6 +33,7 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
+    "onnxruntime-node": "^1.29.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "sharp": "^0.35.4",
