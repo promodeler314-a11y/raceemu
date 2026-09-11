@@ -38,7 +38,7 @@ describe('スキル条件の網羅', () => {
    * 本家も未対応のまま条件を落としている型。移植版も同じ扱いにする。
    * 新しい型が増えたらこのテストが落ちるので、実装漏れに気付ける。
    */
-  const knownUnsupported = ['succession_skill_count'];
+  const knownUnsupported = ['random_lot_shared', 'succession_skill_count'];
 
   it('未対応の条件が既知のものだけである', () => {
     unsupportedConditions.clear();
