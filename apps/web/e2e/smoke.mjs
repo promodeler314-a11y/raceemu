@@ -390,7 +390,8 @@ if (/JSON|Unexpected token/i.test(importNote)) fail(`生の例外が画面に出
 // 共有: URL に載せて開き直し、設定が戻ることを確かめる
 await page.click('button:has-text("設定を URL に")');
 const shared = page.url();
-if (!shared.includes('#s=')) fail('共有 URL が作られていない');
+if (!shared.includes('s=')) fail('共有 URL が作られていない');
+if (!shared.includes('tab=')) fail(`共有 URL に面が載っていない: ${shared}`);
 const fresh = await browser.newPage();
 await fresh.goto(shared, { waitUntil: 'load' });
 const restored = await fresh.inputValue('input[type=number][max="2500"] >> nth=0');
@@ -404,6 +405,42 @@ console.log('--- 共有 URL から復元したデバフ個数:', restoredDebuff,
 if (restoredDebuff !== '2') fail(`デバフの個数が復元されていない: ${restoredDebuff}`);
 if (restoredAdjust === 0) fail('スキル発動率の設定が復元されていない');
 await fresh.close();
+
+// 面を URL に載せる: タブが履歴を持ち、面を直接共有できる
+await goTab('設定');
+const hashOf = () => page.evaluate(() => location.hash);
+await goTab('探索');
+const solveHash = await hashOf();
+console.log('--- 探索の面に移ったあとのハッシュ:', solveHash.slice(0, 40));
+if (!solveHash.includes('tab=solve')) fail(`面がハッシュに載っていない: ${solveHash}`);
+await goTab('比較');
+if (!(await hashOf()).includes('tab=compare')) fail('面を移してもハッシュが変わらない');
+// 戻ると面も戻る。
+await page.goBack();
+await page.waitForTimeout(250);
+const backHash = await hashOf();
+const backTab = await page.evaluate(
+  () => document.querySelector('nav button[aria-current="page"]')?.textContent?.trim() ?? '',
+);
+console.log('--- 戻ったあとのハッシュと面:', backHash.slice(0, 20), '/', backTab);
+if (!backHash.includes('tab=solve')) fail(`戻ってもハッシュが戻らない: ${backHash}`);
+if (!backTab.includes('探索')) fail(`戻っても面が戻らない: ${backTab}`);
+// 進むと元に戻る。
+await page.goForward();
+await page.waitForTimeout(250);
+if (!(await hashOf()).includes('tab=compare')) fail('進んでも面が戻らない');
+
+// 面だけを書いたリンクを直接開けること。
+const direct = await browser.newPage();
+await direct.goto('http://localhost:4173/#tab=solve', { waitUntil: 'load' });
+await direct.waitForTimeout(400);
+const directTab = await direct.evaluate(
+  () => document.querySelector('nav button[aria-current="page"]')?.textContent?.trim() ?? '',
+);
+console.log('--- #tab=solve で開いた面:', directTab);
+if (!directTab.includes('探索')) fail(`面を指すリンクで開けない: ${directTab}`);
+await direct.close();
+await goTab('設定');
 
 // 壊れた共有 URL: 黙って既定値で開かず、読み取れなかったことを伝える
 const broken = await browser.newPage();

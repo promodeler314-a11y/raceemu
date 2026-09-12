@@ -35,7 +35,7 @@ import {
 } from '../../../packages/solver/src/candidates.ts';
 import type { DeckData } from '../../../packages/data/src/deck.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
-import { decodeShareState, encodeShareState } from './share.ts';
+import { decodeShareState, encodeShareState, hashWithTab, readTabFromHash } from './share.ts';
 import type { Individual } from './individualsApi.ts';
 import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
 import { resolveSkillIds, type Preset } from './presets.ts';
@@ -180,7 +180,13 @@ export const DEFAULT_PLAN: PlanSetting = {
 };
 
 /** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
-export type Tab = 'settings' | 'summary' | 'compare' | 'detail' | 'solve' | 'field';
+export const TABS = ['settings', 'summary', 'compare', 'detail', 'solve', 'field'] as const;
+export type Tab = (typeof TABS)[number];
+
+/** ハッシュに書いてあった面の名前を検証する。知らない名前なら null。 */
+function toTab(value: string | null): Tab | null {
+  return value !== null && (TABS as readonly string[]).includes(value) ? (value as Tab) : null;
+}
 
 /** 相手 1 頭ぶんの設定 */
 export interface Opponent {
@@ -379,6 +385,8 @@ interface AppState {
   cancel: () => void;
   tab: Tab;
   setTab: (tab: Tab) => void;
+  /** ハッシュが変わったとき（戻る・進む）に面を合わせる。 */
+  syncTabFromHash: () => void;
   theme: Theme;
   setTheme: (theme: Theme) => void;
   showTrial: (trial: number) => void;
@@ -1019,10 +1027,14 @@ export const useStore = create<AppState>((set, get) => ({
       useField: state.useField,
       field: state.field,
     });
-    return `${location.origin}${location.pathname}#s=${encoded}`;
+    // 面も載せる。「この設定の探索の面を見て」をリンク 1 本で渡せるようにする。
+    return `${location.origin}${location.pathname}${hashWithTab(`#s=${encoded}`, state.tab)}`;
   },
 
   bootstrap: async () => {
+    // 面はハッシュから同期で読む。描き始めてから移ると画面が跳ねる。
+    const tab = toTab(readTabFromHash(location.hash));
+    if (tab !== null) set({ tab });
     // 共有 URL はハッシュから同期で読めるので先に当てる。
     // IndexedDB を待つと、リンクを開いた人に既定値が一瞬見えてしまう。
     // 保存してある設定より共有 URL のほうが強い、という順序でもある。
@@ -1055,6 +1067,11 @@ export const useStore = create<AppState>((set, get) => ({
       });
     }
     hydrated = true;
+  },
+
+  syncTabFromHash: () => {
+    const tab = toTab(readTabFromHash(location.hash));
+    if (tab !== null && tab !== get().tab) set({ tab });
   },
 
   applyShared: () => {
@@ -1370,4 +1387,20 @@ useStore.subscribe((state, previous) => {
     saveSettings(settingsOf(state));
   }
   if (state.snapshots !== previous.snapshots) saveSnapshots(state.snapshots);
+});
+
+/**
+ * 面が変わったらハッシュに書く。
+ *
+ * 実行すると自動で結果の面に移るので、タブを押した経路だけを拾っても足りない。
+ * 状態の変化を見れば、どこから移っても履歴に残る。
+ *
+ * ハッシュが既にその面を指しているときは何もしない。戻る・進むで面を合わせた
+ * 直後にここが走っても、履歴を増やさないためである。
+ */
+useStore.subscribe((state, previous) => {
+  if (state.tab === previous.tab) return;
+  if (typeof location === 'undefined' || typeof history === 'undefined') return;
+  if (readTabFromHash(location.hash) === state.tab) return;
+  history.pushState(null, '', hashWithTab(location.hash, state.tab));
 });

@@ -27,6 +27,17 @@ export default function App() {
     void bootstrap();
   }, [bootstrap]);
 
+  // 戻る・進むで面を合わせる。pushState は hashchange を出さないので popstate も見る。
+  useEffect(() => {
+    const sync = () => useStore.getState().syncTabFromHash();
+    window.addEventListener('popstate', sync);
+    window.addEventListener('hashchange', sync);
+    return () => {
+      window.removeEventListener('popstate', sync);
+      window.removeEventListener('hashchange', sync);
+    };
+  }, []);
+
   // 実行と中断だけは手を止めずに叩けるようにする。
   // 入力欄に文字を打っている最中でも困らない組み合わせを選んである。
   useEffect(() => {

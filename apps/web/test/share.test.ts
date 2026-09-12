@@ -4,6 +4,8 @@ import {
   defaultShareField,
   defaultShareOptions,
   encodeShareState,
+  hashWithTab,
+  readTabFromHash,
   type ShareState,
 } from '../src/share.ts';
 
@@ -70,5 +72,38 @@ describe('共有 URL', () => {
     const decoded = decodeShareState(old);
     expect(decoded).not.toBeNull();
     expect(decoded?.field).toEqual(defaultShareField());
+  });
+});
+
+describe('ハッシュに載せる面', () => {
+  it('書いて読み直せる', () => {
+    expect(readTabFromHash(hashWithTab('', 'solve'))).toBe('solve');
+  });
+
+  it('書いていなければ null', () => {
+    expect(readTabFromHash('')).toBeNull();
+    expect(readTabFromHash('#s=abc')).toBeNull();
+  });
+
+  it('設定と同居できる', () => {
+    const hash = hashWithTab('#s=abc', 'field');
+    expect(readTabFromHash(hash)).toBe('field');
+    // 設定の読み取りは元から `&` 区切りを受けるので、既に配ったリンクが壊れない。
+    expect(/[#&]s=([^&]+)/.exec(hash)?.[1]).toBe('abc');
+  });
+
+  it('面だけを差し替え、ほかの鍵は残す', () => {
+    const hash = hashWithTab(hashWithTab('#s=abc', 'solve'), 'compare');
+    expect(readTabFromHash(hash)).toBe('compare');
+    expect(/[#&]s=([^&]+)/.exec(hash)?.[1]).toBe('abc');
+    expect(hash.split('&').filter((part) => part.includes('tab='))).toHaveLength(1);
+  });
+
+  it('面を先に置く。設定は長いので後ろだと人の目に入らない。', () => {
+    expect(hashWithTab('#s=abc', 'detail').startsWith('#tab=detail')).toBe(true);
+  });
+
+  it('先頭の # が無いハッシュも受ける', () => {
+    expect(readTabFromHash(hashWithTab('s=abc', 'summary'))).toBe('summary');
   });
 });

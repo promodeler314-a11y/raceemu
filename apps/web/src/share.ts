@@ -222,3 +222,36 @@ export function decodeShareState(encoded: string): ShareState | null {
     return null;
   }
 }
+
+/**
+ * ハッシュに同居させる「いま開いている面」。
+ *
+ * タブが経路を持たないと、ブラウザバックで面が戻らず、探索の面を直接共有できない。
+ * 設定は既に `#s=` を使っているので、`&` で連ねて `#tab=solve&s=...` の形にする。
+ * 読み取り側（`[#&]s=`）は元から `&` 区切りを受けるので、既に配ったリンクは壊れない。
+ *
+ * 面の名前はそのまま書く。番号にすると、面を足したり並べ替えたりしたときに
+ * 古いリンクが別の面を指す。読めない名前は無視して既定の面で開く。
+ */
+const TAB_KEY = 'tab';
+
+/** ハッシュから面の名前を取る。書いていなければ null。 */
+export function readTabFromHash(hash: string): string | null {
+  const match = new RegExp(`[#&]${TAB_KEY}=([^&]+)`).exec(hash);
+  if (match === null) return null;
+  const value = decodeURIComponent(match[1]!);
+  return value === '' ? null : value;
+}
+
+/**
+ * ハッシュの面だけを差し替える。ほかの鍵（`s=`）は順序ごと残す。
+ *
+ * 面は先に置く。共有リンクの `s=` は長いので、後ろに付けると人の目に入らない。
+ */
+export function hashWithTab(hash: string, tab: string): string {
+  const rest = hash
+    .replace(/^#/, '')
+    .split('&')
+    .filter((part) => part !== '' && !part.startsWith(`${TAB_KEY}=`));
+  return `#${[`${TAB_KEY}=${encodeURIComponent(tab)}`, ...rest].join('&')}`;
+}
