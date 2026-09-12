@@ -19,5 +19,13 @@ export default defineConfig({
   test: {
     testTimeout: 120_000,
     hookTimeout: 120_000,
+    /**
+     * 既定の除外に加えて `.claude` を外す。
+     *
+     * 作業を切り出すとき `.claude/worktrees/` の下に同じリポジトリの写しができる。
+     * 除外しないと、そちらのテストまで一緒に走る。件数が倍になるだけでなく、
+     * 別の作業中のコードを検査して落ちる。
+     */
+    exclude: ['**/node_modules/**', '**/dist/**', '.claude/**'],
   },
 });
