@@ -124,6 +124,14 @@ export function staticConditionTarget(type: string, setting: DerivedSetting): nu
       return track.surface;
     case 'ground_condition':
       return base.track.condition;
+    // 季節と天候と時刻は、指定があるときだけ判定する。
+    // 省かれていれば null を返し、本家と同じく無視される側へ落ちる。
+    case 'season':
+      return base.track.season ?? null;
+    case 'weather':
+      return base.track.weather ?? null;
+    case 'time':
+      return base.track.time ?? null;
     case 'distance_type':
       return track.distanceType;
     case 'track_id':

@@ -93,7 +93,16 @@ export function encodeShareState(state: ShareState): string {
   const { uma, track } = state;
   const fields = [
     VERSION,
-    [track.location, track.course, track.condition, track.gateCount].join(','),
+    // 季節と天候と時刻は後から足した。0 は指定なしで、古いリンクにはこの 3 つが無い。
+    [
+      track.location,
+      track.course,
+      track.condition,
+      track.gateCount,
+      track.season ?? 0,
+      track.weather ?? 0,
+      track.time ?? 0,
+    ].join(','),
     [
       uma.speed,
       uma.stamina,
@@ -148,6 +157,9 @@ export function decodeShareState(encoded: string): ShareState | null {
         course: track[1]!,
         condition: track[2]!,
         gateCount: track[3]!,
+        season: track[4] ? track[4] : undefined,
+        weather: track[5] ? track[5] : undefined,
+        time: track[6] ? track[6] : undefined,
       },
       uma: {
         charaName: '',

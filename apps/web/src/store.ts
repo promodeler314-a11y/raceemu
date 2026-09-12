@@ -124,6 +124,8 @@ export interface PlanSetting {
   readonly cardIds: readonly number[];
   readonly openWhites: boolean;
   readonly openInheritedUniques: boolean;
+  /** 無視している条件しか持たないスキルを候補に入れるか */
+  readonly includeIgnoredOnly: boolean;
 }
 
 export const DEFAULT_PLAN: PlanSetting = {
@@ -133,6 +135,7 @@ export const DEFAULT_PLAN: PlanSetting = {
   cardIds: [],
   openWhites: true,
   openInheritedUniques: true,
+  includeIgnoredOnly: false,
 };
 
 /** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
@@ -395,6 +398,7 @@ export function planCandidatesOf(state: AppState): PlanCandidates | null {
     {
       openWhites: state.plan.openWhites,
       openInheritedUniques: state.plan.openInheritedUniques,
+      includeIgnoredOnly: state.plan.includeIgnoredOnly,
     },
   );
 }
@@ -421,7 +425,9 @@ export const useStore = create<AppState>((set, get) => ({
     gateNumber: 0,
     uniqueLevel: 6,
   },
-  track: { location: 10006, course: 10606, condition: 1, gateCount: 9 },
+  // 季節と天候と時刻の既定は指定あり。指定なしにすると本家と同じ扱いになり、
+  // 春夏秋冬のスキルが同時に発動して、探索がそれを片端から拾う。
+  track: { location: 10006, course: 10606, condition: 1, gateCount: 9, season: 1, weather: 1, time: 1 },
   skillIds: [],
   count: 2000,
   seed: 1,
