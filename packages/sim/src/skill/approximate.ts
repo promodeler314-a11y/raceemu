@@ -235,7 +235,16 @@ export const approximateTypeToState: Readonly<Record<string, string>> = {
   overtake_target_no_order_up_time: 'overtake_target_no_order_up_time',
 };
 
-/** 判定から外す条件と、その理由 */
+/**
+ * 判定から外す条件と、その理由。
+ *
+ * **順位と距離差の族は、フィールドを渡せば実際に判定する。** ここに載っているのは
+ * フィールドが無いとき（本家と同じ単騎モデル）の振る舞いである。既定ではフィールドが
+ * 入るので、実際に無視されるのは内外（レーン）と他のウマ娘のスキルや作戦を見るものだけになる。
+ *
+ * この表の鍵は、走らせずに候補を落とす判定（`packages/solver/src/screen.ts`）と
+ * 条件型の網羅検査も見ている。値の文だけを直しても、そちらの扱いは変わらない。
+ */
 export const ignoreConditions: Readonly<Record<string, string>> = {
   grade: 'GI条件は無視',
   time: 'ナイター条件は無視',
@@ -243,31 +252,31 @@ export const ignoreConditions: Readonly<Record<string, string>> = {
   weather: '天候条件は無視',
   is_dirtgrade: '交流重賞条件はレース場のみ判定',
   fan_count: 'ファン数条件は無視',
-  order: '順位条件は無視',
-  order_rate: '順位条件は無視',
-  order_rate_in10_continue: '順位条件は無視',
-  order_rate_in20_continue: '順位条件は無視',
-  order_rate_in30_continue: '順位条件は無視',
-  order_rate_in40_continue: '順位条件は無視',
-  order_rate_in50_continue: '順位条件は無視',
-  order_rate_in60_continue: '順位条件は無視',
-  order_rate_in70_continue: '順位条件は無視',
-  order_rate_in80_continue: '順位条件は無視',
-  order_rate_in90_continue: '順位条件は無視',
-  order_rate_out10_continue: '順位条件は無視',
-  order_rate_out20_continue: '順位条件は無視',
-  order_rate_out30_continue: '順位条件は無視',
-  order_rate_out40_continue: '順位条件は無視',
-  order_rate_out50_continue: '順位条件は無視',
-  order_rate_out60_continue: '順位条件は無視',
-  order_rate_out70_continue: '順位条件は無視',
-  order_rate_out80_continue: '順位条件は無視',
-  order_rate_out90_continue: '順位条件は無視',
-  distance_diff_rate: '相対位置条件は無視',
-  bashin_diff_infront: '他のウマ娘との距離条件は無視',
-  bashin_diff_behind: '他のウマ娘との距離条件は無視',
-  distance_diff_top: '他のウマ娘との距離条件は無視',
-  distance_diff_top_float: '他のウマ娘との距離条件は無視',
+  order: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in10_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in20_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in30_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in40_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in50_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in60_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in70_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in80_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_in90_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out10_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out20_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out30_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out40_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out50_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out60_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out70_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out80_continue: '順位条件。フィールドが無ければ満たしている前提',
+  order_rate_out90_continue: '順位条件。フィールドが無ければ満たしている前提',
+  distance_diff_rate: '相対位置。フィールドが無ければ満たしている前提',
+  bashin_diff_infront: '他のウマ娘との距離。フィールドが無ければ満たしている前提',
+  bashin_diff_behind: '他のウマ娘との距離。フィールドが無ければ満たしている前提',
+  distance_diff_top: '他のウマ娘との距離。フィールドが無ければ満たしている前提',
+  distance_diff_top_float: '他のウマ娘との距離。フィールドが無ければ満たしている前提',
   same_skill_horse_count: '他のウマ娘のスキル条件は無視',
   is_exist_skill_id: '他のウマ娘のスキル条件は無視',
   is_behind_in: '内外条件は無視',
