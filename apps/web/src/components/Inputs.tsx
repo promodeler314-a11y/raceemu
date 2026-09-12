@@ -5,11 +5,13 @@ import {
   costModelFor,
   currentTrackDetail,
   debuffTypes,
+  estimateRun,
   gameData,
   modifiedStatus,
   skillChoices,
   useStore,
 } from '../store.ts';
+import { formatDuration } from '../format.ts';
 import { NO_CHARA, skillIndex } from '../skills.ts';
 import type { SkillData } from '../../../../packages/sim/src/skill/types.ts';
 import type {
@@ -705,6 +707,12 @@ export function RunPanel() {
   const gateCount = useStore((s) => s.track.gateCount);
   const elapsedMs = useStore((s) => s.elapsedMs);
   const summary = useStore((s) => s.summary);
+  // 押す前に、どれくらい待つのかを出す。20 万試行は条件次第で数分かかる。
+  //
+  // セレクタの中で組み立ててはいけない。毎回新しいオブジェクトが返り、
+  // zustand が参照の違いを変化と見て描画が止まらなくなる（React error #185）。
+  const pace = useStore((s) => s.pace);
+  const estimate = useMemo(() => estimateRun({ pace, useField, count }), [pace, useField, count]);
   const inputCls = 'num rounded-sm border border-rule2 bg-surface px-2 py-1 text-right text-xs text-ink';
   return (
     <div className="flex flex-none flex-wrap items-center gap-3 border-b border-rule bg-surface px-5 py-2.5">
@@ -738,7 +746,7 @@ export function RunPanel() {
       >
         {running ? '実行中' : '実行'}
       </button>
-      {running && (
+      {running ? (
         <>
           <button
             type="button"
@@ -752,6 +760,18 @@ export function RunPanel() {
             {progress} / {count}
           </span>
         </>
+      ) : (
+        <span
+          className="text-xs text-ink3"
+          data-testid="run-estimate"
+          title={
+            estimate.measured
+              ? '直前の実測から出している'
+              : '作り付けの目安。1 回走らせると実測に置き換わる'
+          }
+        >
+          {estimate.measured ? '見込み' : '目安'} 約 {formatDuration(estimate.ms)}
+        </span>
       )}
       <label className="flex items-center gap-1.5 text-xs text-ink2">
         <input type="checkbox" checked={useField} onChange={(e) => setUseField(e.target.checked)} />

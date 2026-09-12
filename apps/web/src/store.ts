@@ -39,6 +39,7 @@ import type { Individual } from './individualsApi.ts';
 import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
 import { resolveSkillIds, type Preset } from './presets.ts';
 import { gameData, skillChoices, skillIndex, NO_CHARA } from './skills.ts';
+import { buildTransferIndex, formatTransfer, type ParsedTransfer } from './transfer.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
 export { gameData, skillChoices };
@@ -273,6 +274,11 @@ interface AppState {
   inverseResult: InverseResult | null;
   /** 順位条件を実際に判定するか。false なら本家と同じく満たしている前提。 */
   useField: boolean;
+  /**
+   * 1 試行あたりの所要時間の実測。条件ごとに持つ（`paceKey` が鍵を作る）。
+   * 単位はミリ秒で、並列で走らせた実時間をそのまま試行数で割ったものである。
+   */
+  pace: Record<string, number>;
   options: RunOptions;
   /** デバフの種類ごとの個数。0 の項目は持たない。 */
   debuffCounts: Record<string, number>;
@@ -306,6 +312,8 @@ interface AppState {
   setCharaName: (charaName: string) => void;
   /** プリセットを丸ごと当てる。ウマ娘・コース・スキルを一度に差し替える。 */
   applyPreset: (preset: Preset) => void;
+  /** 本家の設定文字列を読み込む。ステータス、適性、キャラ、スキルを丸ごと置き換える。 */
+  applyTransfer: (parsed: ParsedTransfer) => void;
   setCount: (count: number) => void;
   setUseField: (useField: boolean) => void;
   setSeed: (seed: number) => void;
@@ -445,7 +453,16 @@ export const useStore = create<AppState>((set, get) => ({
   inverseCount: 500,
   inverseByAdjustmentCount: false,
   inverseResult: null,
-  useField: false,
+  /**
+   * 順位条件を実際に判定するか。
+   *
+   * 既定で入れる。切ると本家と同じ「順位条件は満たしている前提」になり、
+   * 後方寄りの条件が常に成立する甘い評価になる。探索もこの設定に従うので、
+   * 切ったままだと探索が過大評価を突く（docs/solver-design.md 4 節）。
+   * M6 のレポート 7 節が既定にすべきと書いていたもので、実装が追いついた。
+   */
+  useField: true,
+  pace: {},
   options: defaultRunOptions(),
   debuffCounts: {},
   hintLevels: {},
@@ -480,6 +497,20 @@ export const useStore = create<AppState>((set, get) => ({
       uma: { charaName: NO_CHARA, ...preset.uma },
       track: preset.track,
       skillIds: resolveSkillIds(preset.skillNames),
+    }),
+  applyTransfer: (parsed) =>
+    set((s) => {
+      const uma = { ...s.uma, ...parsed.status, ...parsed.fits };
+      // 同じグループのものを 2 つ持たない規則は、1 つずつ足して任せる。
+      let skillIds: string[] = [];
+      for (const id of parsed.skillIds) skillIds = skillIndex.toggle(skillIds, id);
+      // キャラ名が書いていなければ未選択にする。持ち込んだ文字列のほうを正とする
+      // ので、前のキャラの固有だけが残る状態を作らない。
+      const charaName = parsed.charaName ?? NO_CHARA;
+      return {
+        uma: { ...uma, charaName },
+        skillIds: skillIndex.applyChara(skillIds, charaName),
+      };
     }),
   setCount: (count) => set({ count }),
   setUseField: (useField) => set({ useField }),
@@ -554,13 +585,18 @@ export const useStore = create<AppState>((set, get) => ({
           frames: 0,
         });
       }
+      const multiElapsedMs = performance.now() - started;
       set({
         multiResult: {
           summaries: tally.summarizeAll(),
           trials,
-          elapsedMs: performance.now() - started,
+          elapsedMs: multiElapsedMs,
           cancelled: cancelled === true,
         },
+        pace:
+          trials === 0
+            ? state.pace
+            : { ...state.pace, [multiPaceKey(state.track.gateCount)]: multiElapsedMs / trials },
         tab: 'field',
       });
     } catch (error) {
@@ -640,6 +676,8 @@ export const useStore = create<AppState>((set, get) => ({
         summary: summarize(results, elapsedMs),
         results,
         elapsedMs,
+        // 次に押す前の見積もりに使う。中断しても終わったぶんで割れば同じ速さが出る。
+        pace: { ...state.pace, [paceKey(state.useField)]: elapsedMs / results.length },
         skillSummaries: toSkillSummaries(serializable.skillIds, skillStats, results.length),
         notice:
           cancelled === true
@@ -957,6 +995,87 @@ function fieldSpec(state: AppState) {
     seed: 9001,
     samples: 64,
   };
+}
+
+/** 本家の設定文字列を読み書きするための引き当て表。 */
+export const transferIndex = buildTransferIndex(gameData, skillIndex);
+
+/** いまの設定を本家に渡す 1 行にする。 */
+export function transferTextOf(state: { uma: UmaStatus; skillIds: readonly string[] }): string {
+  return formatTransfer(state.uma, state.skillIds, transferIndex);
+}
+
+/**
+ * 所要時間の見積もり。
+ *
+ * 試行回数は単騎で 20 万、全頭同時で 5 万まで指定できる。押す前に何も出ないと、
+ * 数十分かかる設定を作ってから初めて気付くことになる（docs/roadmap.md 4.2 節）。
+ *
+ * 見積もりは条件ごとの 1 試行あたりの実時間に回数を掛けるだけである。
+ * 実測があればそれを使う。無いあいだは下の値を目安として出す。
+ *
+ * 目安の値は手元（Windows、24 スレッド、Worker 23 本）で測ったものである。
+ *
+ * | 条件 | 単一スレッド | 23 並列 |
+ * | --- | ---: | ---: |
+ * | 単騎・順位条件なし | 1.38 ms | 0.52 ms |
+ * | 単騎・順位条件あり | 2.22 ms | 1.37 ms |
+ * | 9 頭同時 | 21.3 ms | 5.63 ms |
+ *
+ * 並列数で割って出すことはしない。順位条件を入れると Worker ごとにフィールドの
+ * 束（64 本）を組み直すため、本数を増やしても割り算ぶんには速くならない。
+ * 機種差もあるので、1 回走らせて実測に置き換わるまでは外れうる。
+ */
+const FALLBACK_MS_PER_TRIAL = {
+  solo: 0.52,
+  field: 1.37,
+  /** 全頭同時は頭数にほぼ比例する。9 頭 5.63 ms を 1 頭あたりに割ったもの。 */
+  multiPerHorse: 5.63 / 9,
+} as const;
+
+/** 実測を覚えるときの鍵。所要時間が変わる条件だけを混ぜる。 */
+export function paceKey(useField: boolean): string {
+  return useField ? 'single:field' : 'single:solo';
+}
+
+export function multiPaceKey(gateCount: number): string {
+  return `multi:${gateCount}`;
+}
+
+export interface Estimate {
+  readonly ms: number;
+  /** 直前の実測に基づくか。false なら作り付けの目安である。 */
+  readonly measured: boolean;
+}
+
+function estimateWith(pace: Readonly<Record<string, number>>, key: string, fallback: number, count: number): Estimate {
+  const measured = pace[key];
+  if (measured !== undefined) return { ms: measured * count, measured: true };
+  return { ms: fallback * count, measured: false };
+}
+
+/** 単騎の実行にかかる時間。 */
+export function estimateRun(state: { pace: Record<string, number>; useField: boolean; count: number }): Estimate {
+  return estimateWith(
+    state.pace,
+    paceKey(state.useField),
+    state.useField ? FALLBACK_MS_PER_TRIAL.field : FALLBACK_MS_PER_TRIAL.solo,
+    state.count,
+  );
+}
+
+/** 全頭同時の実行にかかる時間。 */
+export function estimateMulti(state: {
+  pace: Record<string, number>;
+  track: TrackRef;
+  multiTrials: number;
+}): Estimate {
+  return estimateWith(
+    state.pace,
+    multiPaceKey(state.track.gateCount),
+    FALLBACK_MS_PER_TRIAL.multiPerHorse * state.track.gateCount,
+    state.multiTrials,
+  );
 }
 
 function buildSetting(state: AppState): RaceSetting {
