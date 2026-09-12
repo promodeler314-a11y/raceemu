@@ -59,6 +59,19 @@ export interface TrackRef {
   readonly condition: number;
   /** 出走頭数。チャンピオンズミーティングは 9、リーグオブヒーローズは 12 */
   readonly gateCount: number;
+  /**
+   * 季節。1=春 2=夏 3=秋 4=冬。
+   *
+   * 本家はこの条件を「満たしている前提」で落としている。省くと本家と同じ扱いになり、
+   * 春夏秋冬のスキルが同時に発動する。指定すると実際に判定する。
+   * 育成計画から探索すると候補が数百になり、無視した条件を片端から拾ってしまうため、
+   * 画面からは必ず指定する。docs/solver-design.md 8 節を参照。
+   */
+  readonly season?: number;
+  /** 天候。1=晴 2=曇 3=雨 4=雪。省くと季節と同じく本家の扱いになる。 */
+  readonly weather?: number;
+  /** 時刻。4=ナイター。省くと季節と同じく本家の扱いになる。 */
+  readonly time?: number;
 }
 
 export interface SystemSetting {

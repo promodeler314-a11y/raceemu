@@ -238,6 +238,48 @@ export function CourseInput() {
             <option value={12}>12 頭（リーグオブヒーローズ）</option>
           </select>
         </Field>
+        {/*
+          季節と天候と時刻は、本家が「満たしている前提」で落としている条件である。
+          指定なしにすると本家と同じ扱いになり、春夏秋冬のスキルが同時に発動する。
+        */}
+        <Field label="季節">
+          <select
+            className={fieldCls}
+            value={track.season ?? 0}
+            onChange={(e) => setTrack({ season: Number(e.target.value) || undefined })}
+          >
+            <option value={0}>指定なし（本家と同じ）</option>
+            <option value={1}>春</option>
+            <option value={2}>夏</option>
+            <option value={3}>秋</option>
+            <option value={4}>冬</option>
+          </select>
+        </Field>
+        <Field label="天候">
+          <select
+            className={fieldCls}
+            value={track.weather ?? 0}
+            onChange={(e) => setTrack({ weather: Number(e.target.value) || undefined })}
+          >
+            <option value={0}>指定なし（本家と同じ）</option>
+            <option value={1}>晴</option>
+            <option value={2}>曇</option>
+            <option value={3}>雨</option>
+            <option value={4}>雪</option>
+          </select>
+        </Field>
+        <Field label="時刻">
+          {/* スキルデータが区別しているのはナイターだけである。 */}
+          <select
+            className={fieldCls}
+            value={track.time ?? 0}
+            onChange={(e) => setTrack({ time: Number(e.target.value) || undefined })}
+          >
+            <option value={0}>指定なし（本家と同じ）</option>
+            <option value={1}>昼</option>
+            <option value={4}>ナイター</option>
+          </select>
+        </Field>
       </div>
       {detail !== undefined && (
         <>

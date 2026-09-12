@@ -124,6 +124,8 @@ export interface PlanSetting {
   readonly cardIds: readonly number[];
   readonly openWhites: boolean;
   readonly openInheritedUniques: boolean;
+  /** 無視している条件しか持たないスキルを候補に入れるか */
+  readonly includeIgnoredOnly: boolean;
 }
 
 export const DEFAULT_PLAN: PlanSetting = {
@@ -133,6 +135,7 @@ export const DEFAULT_PLAN: PlanSetting = {
   cardIds: [],
   openWhites: true,
   openInheritedUniques: true,
+  includeIgnoredOnly: false,
 };
 
 /** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
@@ -395,6 +398,7 @@ export function planCandidatesOf(state: AppState): PlanCandidates | null {
     {
       openWhites: state.plan.openWhites,
       openInheritedUniques: state.plan.openInheritedUniques,
+      includeIgnoredOnly: state.plan.includeIgnoredOnly,
     },
   );
 }
@@ -421,7 +425,9 @@ export const useStore = create<AppState>((set, get) => ({
     gateNumber: 0,
     uniqueLevel: 6,
   },
-  track: { location: 10006, course: 10606, condition: 1, gateCount: 9 },
+  // 季節と天候と時刻の既定は指定あり。指定なしにすると本家と同じ扱いになり、
+  // 春夏秋冬のスキルが同時に発動して、探索がそれを片端から拾う。
+  track: { location: 10006, course: 10606, condition: 1, gateCount: 9, season: 1, weather: 1, time: 1 },
   skillIds: [],
   count: 2000,
   seed: 1,
@@ -1027,9 +1033,9 @@ export function transferTextOf(state: { uma: UmaStatus; skillIds: readonly strin
  *
  * | 条件 | 固定 | 1 試行 |
  * | --- | ---: | ---: |
- * | 単騎・順位条件なし | 1.2 秒 | 0.28 ms |
- * | 単騎・順位条件あり | 2.4 秒 | 0.61 ms |
- * | 9 頭同時 | 1.0 秒 | 3.59 ms |
+ * | 単騎・順位条件なし | 1.9 秒 | 0.24 ms |
+ * | 単騎・順位条件あり | 2.7 秒 | 0.64 ms |
+ * | 9 頭同時 | 0.6 秒 | 4.43 ms |
  *
  * 機種差が 1.5 倍ほどあるので、走らせて実測に置き換わるまでは外れうる。
  */
@@ -1041,10 +1047,10 @@ interface Pace {
 }
 
 const FALLBACK_PACE = {
-  solo: { fixedMs: 1200, perTrialMs: 0.28 },
-  field: { fixedMs: 2400, perTrialMs: 0.61 },
-  /** 全頭同時は 1 試行のぶんが頭数にほぼ比例する。9 頭 3.59 ms を割ったもの。 */
-  multi: { fixedMs: 1000, perTrialMsPerHorse: 3.59 / 9 },
+  solo: { fixedMs: 1900, perTrialMs: 0.24 },
+  field: { fixedMs: 2700, perTrialMs: 0.64 },
+  /** 全頭同時は 1 試行のぶんが頭数にほぼ比例する。9 頭 4.43 ms を割ったもの。 */
+  multi: { fixedMs: 600, perTrialMsPerHorse: 4.43 / 9 },
 } as const;
 
 /** 実測の 1 点。回数と、そのときかかった実時間。 */

@@ -244,3 +244,69 @@ describe('位置取り調整の参考行', () => {
     }
   }, 180000);
 });
+
+describe('限界貢献度', () => {
+  /**
+   * 単体評価は「何も持っていない構成へ 1 つ足す」で測るので、既に持っている
+   * ものと食い合うスキルを過大に評価する。
+   *
+   * 東京 芝1800m は終盤開始が 1200m、最終直線が 1275m で、その差は 75m しかない。
+   * 終盤の頭で出る加速を既に持っていると、最終直線で出る加速は目標速度に
+   * 追いつくまでの余地を食い合う。並べ替えと足切りを単体の値でやると、
+   * 食い合う側が枠を取り続ける。docs/solver-design.md 3.4 節を参照。
+   */
+  const tokyo1800 = { location: 10006, course: 10603, condition: 1, gateCount: 9 } as const;
+
+  /** 同じ名前で固有と継承版があるので、買えるほうを採る。 */
+  const buyable = (name: string) => {
+    const found = data.skillsByName.get(name)?.find((s) => s.sp > 0);
+    if (found === undefined) throw new Error(`買えるスキルが見つからない: ${name}`);
+    return found;
+  };
+
+  it('先に加速を持っていると、最終直線の加速スキルの値が下がる', async () => {
+    const early = buyable('アングリング×スキーミング');
+    const late = ['真っ向勝負', 'ハイボルテージ', '心弾んで', '足任せ'].map(buyable);
+    const pool = new WorkerPool(nodeWorkerFactory);
+    try {
+      const result = await optimizeSkills(
+        {
+          pool,
+          system,
+          base: toSerializable({ ...setting, track: tokyo1800 }),
+          cost: createCostModel(data.skillsById),
+          seed: 20260912,
+          field: null,
+        },
+        {
+          // 予算は 200 pt。まず 1 つだけ取れる。
+          candidates: [early, ...late].map((s) => s.id),
+          budget: 200,
+          stages: [600],
+          maxRounds: 1,
+          measurePositionCompetition: false,
+        },
+      );
+
+      // 効率がいちばん高いものが初期解に入る
+      expect(result.best).toEqual([early.id]);
+
+      const single = new Map(result.singles.map((s) => [s.skillId, s.diff.mean]));
+      const marginal = new Map(result.marginals.map((s) => [s.skillId, s.diff.mean]));
+
+      // 採ったものは限界貢献度を測らない（足しても構成が変わらない）
+      expect(marginal.has(early.id)).toBe(false);
+
+      for (const skill of late) {
+        const alone = single.get(skill.id)!;
+        const after = marginal.get(skill.id)!;
+        expect(alone).toBeGreaterThan(0);
+        // 食い合うので必ず下がる。実測では 6 割ほどまで落ちる。
+        expect(after).toBeLessThan(alone * 0.85);
+        expect(after).toBeGreaterThan(0);
+      }
+    } finally {
+      await pool.dispose();
+    }
+  });
+});

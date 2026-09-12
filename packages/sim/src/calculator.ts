@@ -36,25 +36,6 @@ import { approximateConditions } from './skill/approximate.ts';
 import { compileConditions, newSkillScratch } from './skill/condition.ts';
 import type { SkillData } from './skill/types.ts';
 
-/**
- * フィールドがあるなら、自分の位置取りを先頭に対する判定に切り替える。
- *
- * `APPROXIMATE` は「前に誰かいる」ことを確率で置く近似であり、相手の位置を
- * 持っているときに使う理由が無い。束の先頭に対して位置取りさせると、順位の
- * 分布が全頭同時（勝率の面）とほぼ同じ形になる（docs/order-field.md 4.2 節）。
- *
- * 利用者が `NONE` や `SPEED_UP` を選んでいるときは触らない。意図のある指定で
- * あり、黙って別の動きにするほうが分かりにくい。
- */
-function withFieldPositionKeep(
-  setting: RaceSetting,
-  field: FieldView | null,
-  pacedByField: boolean,
-): RaceSetting {
-  if (!pacedByField || field === null || setting.positionKeepMode !== 'APPROXIMATE') return setting;
-  return { ...setting, positionKeepMode: 'VIRTUAL' };
-}
-
 export interface SimulateOptions {
   readonly seed: number;
   readonly trial: number;
@@ -64,13 +45,6 @@ export interface SimulateOptions {
    * 渡さなければ本家と同じく、順位条件は満たしている前提になる。
    */
   readonly field?: FieldBundle | null;
-  /**
-   * フィールドがあるときに、自分も先頭に対して位置取りするか。既定は true。
-   *
-   * false にすると、相手の位置を持ったまま自分の位置取りだけ近似のままになる。
-   * docs/order-field.md 3 節の作り方 A を再現するためにあり、実行経路では使わない。
-   */
-  readonly pacedByField?: boolean;
 }
 
 export interface SimulateOutput {
@@ -90,23 +64,10 @@ export class RaceCalculator {
    */
   createState(
     setting: RaceSetting,
-    options: {
-      seed: number;
-      trial: number;
-      recordFrames?: boolean;
-      field?: FieldView | null;
-      pacedByField?: boolean;
-    },
+    options: { seed: number; trial: number; recordFrames?: boolean; field?: FieldView | null },
   ): RaceState {
     const rng = new RngSet(options.seed, options.trial);
-    return this.initializeState(
-      setting,
-      rng,
-      options.recordFrames ?? false,
-      false,
-      options.field ?? null,
-      options.pacedByField ?? true,
-    );
+    return this.initializeState(setting, rng, options.recordFrames ?? false, false, options.field ?? null);
   }
 
   simulate(setting: RaceSetting, options: SimulateOptions): SimulateOutput {
@@ -115,14 +76,7 @@ export class RaceCalculator {
     // 束の中から試行番号で 1 本選ぶ。同じ試行番号なら同じフィールドになるので、
     // 共通乱数によるペア比較がフィールドを含めて成立する。
     const field = bundle === null ? null : new RecordedField(bundle, options.trial);
-    const state = this.initializeState(
-      setting,
-      rng,
-      options.recordFrames ?? false,
-      false,
-      field,
-      options.pacedByField ?? true,
-    );
+    const state = this.initializeState(setting, rng, options.recordFrames ?? false, false, field);
     const result = progressRace(state);
     return { result, state };
   }
@@ -133,9 +87,14 @@ export class RaceCalculator {
     recordFrames: boolean,
     isVirtualLeader: boolean,
     field: FieldView | null = null,
-    pacedByField = true,
   ): RaceState {
-    setting = withFieldPositionKeep(setting, field, pacedByField);
+    // フィールドがあるときは、自分も束の先頭に対して位置取りする。
+    // 相手は先頭に対して詰めたり離れたりしているので、自分だけ固定区間で
+    // ペースダウンすると隊列から外れ、ゴールで最後方に沈む。
+    // docs/order-field.md 2.3 節と 4.2 節を参照。
+    if (field !== null && setting.positionKeepMode !== 'VIRTUAL') {
+      setting = { ...setting, positionKeepMode: 'VIRTUAL' };
+    }
     const emptyDerived = new DerivedSetting(setting, emptyPassiveBonus(), this.trackData);
     const invokedSkills = invokeSkills(setting, emptyDerived, rng);
 
@@ -170,8 +129,14 @@ export class RaceCalculator {
     simulation.passiveTriggered = passiveBonus.skills.length;
     for (const skill of passiveBonus.skills) simulation.coolDownMap.set(skill.invoke.coolDownId, 0);
 
+    // フィールドがあるときの先頭馬は束から取る。自前の仮想先頭馬は作らない。
     let virtualLeader: RaceState | null = null;
-    if (!isVirtualLeader && setting.positionKeepMode === 'VIRTUAL' && setting.virtualLeader !== undefined) {
+    if (
+      field === null &&
+      !isVirtualLeader &&
+      setting.positionKeepMode === 'VIRTUAL' &&
+      setting.virtualLeader !== undefined
+    ) {
       const leaderSetting: RaceSetting = {
         ...setting,
         uma: setting.virtualLeader,
@@ -182,10 +147,8 @@ export class RaceCalculator {
     }
 
     const state = new RaceState(derived, simulation, this.system, rng, virtualLeader, recordFrames, field);
-
-    // フィールドがあるなら、位置取りは実在の先頭に対して行う。
-    // 自分で作った先頭馬（virtualLeader）があるときは、そちらが優先される。
-    if (field !== null && pacedByField) {
+    // 位置取りの判定が読む先頭馬。全頭同時の駆動は自分で差し替えるので、ここでは上書きしない。
+    if (field !== null) {
       state.paceMakerSource = () => field.paceMaker(state.simulation.frameElapsed);
     }
 
@@ -388,6 +351,8 @@ function progressRace(state: RaceState): RaceSimulationResult {
 function updateOrderRateContinue(state: RaceState): void {
   const order = state.order;
   if (order === null) return;
+  // 出走前は全頭が同着なので、帯を外れたことにしない（docs/order-field.md 4.4 節）。
+  if (state.beforeStart) return;
   const specialState = state.simulation.specialState;
   const gateCount = state.setting.base.track.gateCount;
   for (const type of ORDER_RATE_CONTINUE_TYPES) {
@@ -946,10 +911,10 @@ function applyPositionKeep(state: RaceState): void {
     case 'VIRTUAL': {
       const paceMaker = state.paceMaker;
       if (paceMaker === null) return;
-      const behind = paceMaker.startPosition - simulation.startPosition;
+      const behind = paceMaker.simulation.startPosition - simulation.startPosition;
       const myStyle = setting.basicRunningStyle;
       const paceMakerIsSelf = behind <= 0 && (styleRank(myStyle) <= 2 || state.currentPhase >= 1);
-      const paceMakerStyle = paceMaker.style;
+      const paceMakerStyle = paceMaker.setting.basicRunningStyle;
       const reset = (frames: number) => {
         simulation.positionKeepState = 'NONE';
         simulation.positionKeepNextFrame = simulation.frameElapsed + framePerSecond * frames;

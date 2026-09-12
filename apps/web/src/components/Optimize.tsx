@@ -20,6 +20,7 @@ export function OptimizePanel() {
   const log = useStore((s) => s.optimizeLog);
   const result = useStore((s) => s.optimizeResult);
   const useField = useStore((s) => s.useField);
+  const setUseField = useStore((s) => s.setUseField);
   const hintLevels = useStore((s) => s.hintLevels);
 
   const plan = useStore((s) => s.plan);
@@ -31,6 +32,9 @@ export function OptimizePanel() {
   const poolCost = costModel.totalCost(skillIds);
   const routeOf = (id: string) =>
     planCandidates?.entries.find((entry) => entry.skillId === id)?.route ?? null;
+  // 初期解に入ったものは限界貢献度を測らない。足しても構成が変わらないためである。
+  const marginalOf = (id: string) =>
+    result?.marginals.find((entry) => entry.skillId === id) ?? null;
 
   return (
     <Panel title="組み合わせ探索">
@@ -89,9 +93,23 @@ export function OptimizePanel() {
           )}
         </div>
       </div>
+      {/*
+        順位条件の切り替えは設定の面にもあるが、探索の結果を最も大きく動かすのがこれである。
+        知らせるだけで切り替えを別の面に置いておくと、warning を読んでも直せない。
+      */}
+      <label className="mt-2 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={useField}
+          onChange={(e) => setUseField(e.target.checked)}
+          disabled={running || busy}
+        />
+        順位条件を判定する
+      </label>
       {!useField && (
         <p className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink">
           順位条件を判定していない。脚質と噛み合わない条件のスキルが過大に評価される。
+          固有の継承版は 8 割 5 分が順位条件を持つので、判定しないと継承版だけがまとめて得をする。
         </p>
       )}
 
@@ -181,13 +199,16 @@ export function OptimizePanel() {
           <div className="overflow-x-auto">
             <h3 className="text-xs font-semibold">単体で足したときの効き</h3>
             <p className="text-xs text-ink3">
-              並べ替えの手がかりに使う粗い見積もりである。効きが 0 のものは、この設定では発動していない。
+              単体は何も持っていない構成へ 1 つ足したとき、限界は初期解へ 1 つ足したときの短縮量である。
+              既に持っているものと食い合うスキルは限界のほうが小さくなる。並べ替えと足切りは限界で行う。
+              効きが 0 のものは、この設定では発動していない。
             </p>
             <table className="mt-1 w-full text-xs">
               <thead className="text-ink3">
                 <tr>
                   <th className="py-1 text-left">スキル</th>
-                  <th className="text-right">短縮（秒）</th>
+                  <th className="text-right">単体（秒）</th>
+                  <th className="text-right">限界（秒）</th>
                   <th className="text-right">pt</th>
                   <th className="text-right">ミリ秒/pt</th>
                   {planCandidates !== null && <th className="pl-3 text-left">経路</th>}
@@ -211,6 +232,7 @@ export function OptimizePanel() {
                     </td>
                     <td className="text-right tabular-nums">—</td>
                     <td className="text-right tabular-nums">—</td>
+                    <td className="text-right tabular-nums">—</td>
                     {planCandidates !== null && <td className="pl-3 text-ink3">—</td>}
                   </tr>
                 )}
@@ -221,6 +243,13 @@ export function OptimizePanel() {
                   >
                     <td className="py-1">{name(single.skillId)}</td>
                     <td className="text-right tabular-nums">{single.diff.mean.toFixed(4)}</td>
+                    <td className="text-right tabular-nums">
+                      {marginalOf(single.skillId) === null ? (
+                        <span className="text-ink3">採用</span>
+                      ) : (
+                        marginalOf(single.skillId)!.diff.mean.toFixed(4)
+                      )}
+                    </td>
                     <td className="text-right tabular-nums">{single.cost}</td>
                     <td className="text-right tabular-nums">
                       {(1000 * single.efficiency).toFixed(3)}

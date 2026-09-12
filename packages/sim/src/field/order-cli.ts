@@ -59,9 +59,8 @@ const settingOf = (
   debuffCounts: {}, positionKeepMode: mode, positionKeepRate: 100,
 });
 
-/** 相手を 1 頭ずつ独立に走らせて束を作る。作り方 A である（いまの buildFieldBundle は C）。 */
+/** 相手を 1 頭ずつ独立に走らせて束を作る。field.ts の buildFieldBundle と同じ形で、相手ごとの設定を受ける。 */
 function buildAlone(settings: readonly RaceSetting[], seed: number): FieldBundle {
-  const styles = settings.map((setting) => setting.uma.style);
   const samples: FieldSample[] = [];
   for (let s = 0; s < SAMPLES; s++) {
     const runs = settings.map((setting, index) =>
@@ -76,7 +75,7 @@ function buildAlone(settings: readonly RaceSetting[], seed: number): FieldBundle
         positions[f * opponents + i] = list[f]?.startPosition ?? courseLength;
       }
     }
-    samples.push({ opponents, frames, positions, styles });
+    samples.push({ opponents, frames, positions, styles: settings.map((s2) => s2.uma.style) });
   }
   return { samples, opponents: settings.length, courseLength };
 }
@@ -88,7 +87,6 @@ function buildTogether(settingsOf: (sample: number) => readonly RaceSetting[], s
   for (let s = 0; s < SAMPLES; s++) {
     const settings = settingsOf(s);
     opponents = settings.length;
-    const styles = settings.map((setting) => setting.uma.style);
     const entries: MultiEntry[] = settings.map((setting) => ({ setting: { ...setting, positionKeepMode: 'VIRTUAL' } }));
     const rows: number[][] = [];
     runMultiRace(calculator, entries, {
@@ -100,7 +98,7 @@ function buildTogether(settingsOf: (sample: number) => readonly RaceSetting[], s
     const frames = rows.length;
     const positions = new Float64Array(frames * opponents);
     for (let f = 0; f < frames; f++) for (let i = 0; i < opponents; i++) positions[f * opponents + i] = rows[f]![i]!;
-    samples.push({ opponents, frames, positions, styles });
+    samples.push({ opponents, frames, positions, styles: settings.map((s2) => s2.uma.style) });
   }
   return { samples, opponents, courseLength };
 }
@@ -127,8 +125,7 @@ function runAlone(self: UmaStatus, bundle: FieldBundle, selfSkills: readonly Ski
   const traces: Trace[] = [];
   for (let t = 0; t < trials; t++) {
     const { state } = calculator.simulate(settingOf(self, selfSkills), {
-      // 相手の位置は読むが、自分の位置取りは近似のまま。これが作り方 A である。
-      seed: SEED, trial: t, recordFrames: true, field: bundle, pacedByField: false,
+      seed: SEED, trial: t, recordFrames: true, field: bundle,
     });
     traces.push(traceOf(state.simulation.frames, bundle.samples[t % bundle.samples.length]!));
   }
@@ -139,16 +136,31 @@ function runAlone(self: UmaStatus, bundle: FieldBundle, selfSkills: readonly Ski
 function runPaced(
   self: UmaStatus,
   bundle: FieldBundle,
+  stylesOf: (sample: number) => readonly Style[],
   selfSkills: readonly SkillData[],
 ): Trace[] {
   const traces: Trace[] = [];
   for (let t = 0; t < trials; t++) {
     const index = t % bundle.samples.length;
     const sample = bundle.samples[index]!;
-    // 先頭の取り出しは RecordedField が持つので、ここで組む必要は無い。
+    const sty = stylesOf(index);
     const state = calculator.createState(settingOf(self, selfSkills, 'VIRTUAL'), {
       seed: SEED, trial: t, recordFrames: true, field: new RecordedField(bundle, t),
     });
+    // 位置取りの判定が読むのは先頭の startPosition と脚質だけなので、その 2 つを持つ器を先頭馬として渡す
+    const leader = { simulation: { startPosition: 0 }, setting: { basicRunningStyle: 'NIGE' as Style } };
+    state.paceMakerSource = () => {
+      const f = Math.min(state.simulation.frameElapsed, sample.frames - 1);
+      let best = Number.NEGATIVE_INFINITY;
+      let at = 0;
+      for (let i = 0; i < sample.opponents; i++) {
+        const p = sample.positions[f * sample.opponents + i]!;
+        if (p > best) { best = p; at = i; }
+      }
+      leader.simulation.startPosition = best;
+      leader.setting.basicRunningStyle = sty[at]!;
+      return leader as unknown as RaceState;
+    };
     for (let guard = 0; guard < 6000; guard++) {
       if (updateFrame(state) || state.simulation.position >= courseLength) break;
     }
@@ -299,7 +311,7 @@ for (const [level, stats] of Object.entries(levels)) {
     }
     if (enabled('together')) {
       const bundle = buildTogether(() => sameLevel, SEED);
-      report(`【C 一緒に走らせる】B の相手を一緒に走らせ、自分も先頭に対して位置取りする / ${head}`, runPaced(self, bundle, selfSkills));
+      report(`【C 一緒に走らせる】B の相手を一緒に走らせ、自分も先頭に対して位置取りする / ${head}`, runPaced(self, bundle, () => lineup, selfSkills));
     }
     if (enabled('mismatch')) {
       // 相手は一緒に走らせた束、自分は従来どおり固定区間でペースダウンするだけ。位置取りの規則が食い違うとどうなるか。
@@ -311,9 +323,11 @@ for (const [level, stats] of Object.entries(levels)) {
       const compositions: readonly (readonly number[])[] = [
         [2, 3, 3, 0], [1, 3, 3, 1], [2, 2, 3, 1], [3, 3, 2, 0], [1, 4, 2, 1], [2, 3, 2, 1], [2, 2, 2, 2], [1, 2, 3, 2],
       ];
+      const stylesPer: Style[][] = [];
       const settingsOf = (sample: number): RaceSetting[] => {
         const comp = compositions[sample % compositions.length]!;
         const settings: RaceSetting[] = [];
+        const sty: Style[] = [];
         let idx = 0;
         styles.forEach((st, k) => {
           for (let i = 0; i < comp[k]!; i++, idx++) {
@@ -325,12 +339,14 @@ for (const [level, stats] of Object.entries(levels)) {
             const start = Math.abs(jitter(key, 8, 100)) % pool.length;
             const skills = Array.from({ length: n }, (_, j) => pool[(start + j) % pool.length]!);
             settings.push(settingOf({ ...uma, condition }, skills, 'VIRTUAL'));
+            sty.push(st);
           }
         });
+        stylesPer[sample] = sty;
         return settings;
       };
       const bundle = buildTogether(settingsOf, SEED);
-      report(`【D 引き直し】束ごとに構成・強さ・やる気・スキルを引き直して一緒に走らせ、自分も位置取りする / ${head}`, runPaced(self, bundle, selfSkills));
+      report(`【D 引き直し】束ごとに構成・強さ・やる気・スキルを引き直して一緒に走らせ、自分も位置取りする / ${head}`, runPaced(self, bundle, (i) => stylesPer[i]!, selfSkills));
     }
     if (enabled('live')) {
       const opponents = sameLevel.map((s) => ({ ...s, positionKeepMode: 'VIRTUAL' as const }));

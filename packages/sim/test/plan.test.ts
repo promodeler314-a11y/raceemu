@@ -14,7 +14,7 @@ import {
 } from '../src/setting.ts';
 import { buildPlanCandidates } from '../../solver/src/candidates.ts';
 import { createCostModel } from '../../solver/src/cost.ts';
-import { canTrigger, screenSkills } from '../../solver/src/screen.ts';
+import { canTrigger, dependsOnlyOnIgnored, screenSkills } from '../../solver/src/screen.ts';
 import { optimizeSkills, type OptimizeContext } from '../../solver/src/optimize.ts';
 
 const data = loadGameData();
@@ -83,6 +83,52 @@ describe('静的な絞り込み', () => {
   });
 });
 
+describe('季節と天候と時刻', () => {
+  /**
+   * 本家はこの 3 つを「満たしている前提」で落としている。
+   * 候補が 20 個のうちは表に出なかったが、育成計画から数百個に広げると、
+   * 春夏秋冬のスキルが全部同時に発動して並ぶ。
+   * 指定があるときだけ判定し、省いたときは本家と同じ扱いを残す。
+   */
+  const withTrack = (extra: Partial<RaceSetting['track']>): DerivedSetting =>
+    new DerivedSetting(
+      { ...setting, track: { ...setting.track, ...extra } },
+      emptyPassiveBonus(),
+      data.trackData,
+    );
+  const buyable = (name: string) => {
+    const found = data.skillsByName.get(name)?.find((s) => s.sp > 0);
+    if (found === undefined) throw new Error(`買えるスキルが見つからない: ${name}`);
+    return found;
+  };
+  const seasons = ['春ウマ娘○', '夏ウマ娘○', '秋ウマ娘○', '冬ウマ娘○'].map(buyable);
+
+  it('指定が無ければ本家と同じく、春夏秋冬が同時に発動しうる', () => {
+    const derived = withTrack({});
+    for (const skill of seasons) expect(canTrigger(skill, derived)).toBe(true);
+  });
+
+  it('季節を指定すると、その季節のものだけが残る', () => {
+    const derived = withTrack({ season: 2 });
+    expect(seasons.filter((s) => canTrigger(s, derived)).map((s) => s.name)).toEqual(['夏ウマ娘○']);
+  });
+
+  it('天候と時刻も同じように効く', () => {
+    const derived = withTrack({ weather: 3, time: 1 });
+    expect(canTrigger(buyable('雨の日○'), derived)).toBe(true);
+    expect(canTrigger(buyable('晴れの日○'), derived)).toBe(false);
+    expect(canTrigger(buyable('ナイター○'), derived)).toBe(false);
+    expect(canTrigger(buyable('ナイター○'), withTrack({ time: 4 }))).toBe(true);
+  });
+
+  it('指定すると候補が減る', () => {
+    const pool = data.skills.filter((s) => s.sp > 0);
+    const loose = screenSkills(pool, withTrack({})).length;
+    const tight = screenSkills(pool, withTrack({ season: 1, weather: 1, time: 1 })).length;
+    expect(tight).toBeLessThan(loose);
+  });
+});
+
 describe('入手経路からの候補', () => {
   const chara = deck.charas.find((c) => c.name.includes('スペシャルウィーク'))!;
 
@@ -136,6 +182,51 @@ describe('入手経路からの候補', () => {
     // 割引は費用モデルにそのまま渡せる。
     const model = createCostModel(data.skillsById, { hintLevels: withCard.hintLevels });
     expect(model.cost(target.id)).toBe(after.cost);
+  });
+});
+
+describe('判定できない条件しか持たないスキル', () => {
+  /**
+   * 順位や他のウマ娘の顔ぶれに依る条件は「満たしている前提」で落とされるので、
+   * それしか条件を持たないスキルは必ず発動する扱いになる。
+   * おひとり様（同じ作戦がいない）と対抗意識（同じ作戦が多い）が同時に積まれる。
+   */
+  const buyable = (name: string) => {
+    const found = data.skillsByName.get(name)?.find((s) => s.sp > 0);
+    if (found === undefined) throw new Error(`買えるスキルが見つからない: ${name}`);
+    return found;
+  };
+
+  it('同時には成り立たない組を見分ける', () => {
+    expect(dependsOnlyOnIgnored(buyable('おひとり様○'), derived)).toBe(true);
+    expect(dependsOnlyOnIgnored(buyable('対抗意識○'), derived)).toBe(true);
+    expect(dependsOnlyOnIgnored(buyable('一匹狼'), derived)).toBe(true);
+    // 位置や区間の条件を持つものは外さない
+    expect(dependsOnlyOnIgnored(buyable('中距離直線○'), derived)).toBe(false);
+    expect(dependsOnlyOnIgnored(buyable('末脚'), derived)).toBe(false);
+  });
+
+  it('季節を指定すれば、季節のスキルは外れない', () => {
+    const withSeason = new DerivedSetting(
+      { ...setting, track: { ...setting.track, season: 1 } },
+      emptyPassiveBonus(),
+      data.trackData,
+    );
+    expect(dependsOnlyOnIgnored(buyable('春ウマ娘○'), derived)).toBe(true);
+    expect(dependsOnlyOnIgnored(buyable('春ウマ娘○'), withSeason)).toBe(false);
+  });
+
+  it('既定では候補から外れ、指定すれば入る', () => {
+    const off = buildPlanCandidates(data.skills, data.skillsByName, deck, derived, {});
+    const on = buildPlanCandidates(data.skills, data.skillsByName, deck, derived, {}, {
+      includeIgnoredOnly: true,
+    });
+    const solo = buyable('おひとり様○').id;
+    expect(off.skillIds).not.toContain(solo);
+    expect(on.skillIds).toContain(solo);
+    expect(off.droppedByIgnored).toContain(solo);
+    expect(on.droppedByIgnored).toEqual([]);
+    expect(off.skillIds.length).toBeLessThan(on.skillIds.length);
   });
 });
 
