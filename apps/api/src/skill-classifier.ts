@@ -68,11 +68,28 @@ import sharp from 'sharp';
  * 確かめていない（docs/ocr-design.md 5.4 と同じ立ち位置の限界）。
  */
 
+/** 元の画像の中での、文字だけの帯の位置。 */
+export interface RowCrop {
+  readonly left: number;
+  readonly top: number;
+  readonly width: number;
+  readonly height: number;
+}
+
 export interface SkillRowPrediction {
   /** モデルの一致先。うちのデータに無い名前（対戦相手の debuff など）なら null。 */
   readonly skillId: string | null;
   /** 0 から 1。低ければそもそもスキルの行ではない（一覧の末尾など）。 */
   readonly confidence: number;
+  /**
+   * 確信度がいちばん高かった切り出しの位置。
+   *
+   * モデルが名前を知らないスキルは、いちばん近い既知のスキルとして高い確信度で
+   * 返ってくる（`classifierCoverage` の説明を参照）。確信度では見分けられない
+   * ので、呼び出し側がこの帯を文字認識にかけて裏を取れるようにしてある
+   * （`skill-verify.ts`）。
+   */
+  readonly crop: RowCrop;
 }
 
 const ASSET_DIR = new URL('../assets/skill-classifier/', import.meta.url);
@@ -278,6 +295,11 @@ export function classifierCoverage(): { classes: number; named: number } {
   };
 }
 
+/** モデルが返しうるスキル ID。`skill-verify.ts` が裏取りの対象を決めるのに使う。 */
+export function classifierSkillIds(): readonly string[] {
+  return LABEL_MAP.filter((id): id is string => id !== null);
+}
+
 export class SkillClassifier {
   private session: Promise<ort.InferenceSession> | null = null;
 
@@ -351,16 +373,20 @@ export class SkillClassifier {
     centerYGuess: number,
   ): Promise<SkillRowPrediction> {
     const width = Math.max(1, Math.round(x1 - x0));
-    let best: SkillRowPrediction = { skillId: null, confidence: 0 };
     let bestLeft = Math.round(x0);
     let bestTop = Math.round(centerYGuess - 28 / 2);
     let bestHeight = 28;
+    let best: SkillRowPrediction = {
+      skillId: null,
+      confidence: 0,
+      crop: { left: bestLeft, top: bestTop, width, height: bestHeight },
+    };
 
     const consider = async (left: number, top: number, cropHeight: number): Promise<void> => {
       if (left < 0 || left + width > imageWidth || top < 0 || top + cropHeight > imageHeight) return;
-      const prediction = await this.classifyCrop(session, data, imageWidth, left, top, width, cropHeight);
-      if (prediction.confidence > best.confidence) {
-        best = prediction;
+      const guess = await this.classifyCrop(session, data, imageWidth, left, top, width, cropHeight);
+      if (guess.confidence > best.confidence) {
+        best = { ...guess, crop: { left, top, width, height: cropHeight } };
         bestLeft = left;
         bestTop = top;
         bestHeight = cropHeight;
@@ -391,7 +417,7 @@ export class SkillClassifier {
     y: number,
     width: number,
     height: number,
-  ): Promise<SkillRowPrediction> {
+  ): Promise<{ skillId: string | null; confidence: number }> {
     const resized = resizeBilinearRgb(data, imageWidth, x, y, width, height, MODEL_INPUT_WIDTH, MODEL_INPUT_HEIGHT);
     const tensor = new ort.Tensor('uint8', resized, [1, MODEL_INPUT_HEIGHT, MODEL_INPUT_WIDTH, 3]);
     const inputName = session.inputNames[0]!;

@@ -10,7 +10,8 @@ import { IndividualStore } from './individuals.ts';
 import { JobRunner, QueueFullError, type Job } from './jobs.ts';
 import { OcrEngine } from './ocr.ts';
 import { checkRequest, RequestError } from './request.ts';
-import { classifierCoverage, SkillClassifier } from './skill-classifier.ts';
+import { classifierCoverage, classifierSkillIds, SkillClassifier } from './skill-classifier.ts';
+import { skillsUnknownToClassifier, SkillVerifier } from './skill-verify.ts';
 import { readStatusHeader, StatusOutOfFrameError } from './status-reader.ts';
 
 /**
@@ -127,6 +128,11 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       : new OcrEngine({ tessdataPath: config.tessdataPath, threshold: config.ocrThreshold });
   const matcher = new SkillMatcher(data.skills);
   const skillClassifier = new SkillClassifier();
+  // 分類モデルが名前を知らないスキルだけを、文字認識で拾い直す（skill-verify.ts）。
+  // モデルは知らないスキルを「いちばん近い既知のスキル」として高い確信度で返すため、
+  // 確信度では見分けられない。読み取りに使う口が無ければ裏取りもできない。
+  const unknownToClassifier = skillsUnknownToClassifier(data.skills, classifierSkillIds());
+  const verifier = ocr === null ? null : new SkillVerifier(ocr, unknownToClassifier);
 
   return createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -234,17 +240,30 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       let found: SkillMatch[];
       if (classified.length > 0) {
         text = '';
+        // モデルの語彙に無いスキルは、いちばん近い既知のスキルとして高い確信度で
+        // 返ってくる。同じ帯を文字認識にかけ、語彙に無い名前を強く指していれば
+        // そちらを採る（skill-verify.ts）。語彙に有るスキルには手を出さない。
+        const readings =
+          verifier === null ? null : await verifier.read(image, classified.map((p) => p.crop));
         const bySkillId = new Map<string, SkillMatch>();
-        for (const prediction of classified) {
-          if (prediction.skillId === null || prediction.confidence < CLASSIFIER_MIN_CONFIDENCE) continue;
-          const skill = data.skillsById.get(prediction.skillId);
-          if (skill === undefined) continue;
-          const kept = bySkillId.get(prediction.skillId);
-          if (kept === undefined || prediction.confidence > kept.score) {
-            bySkillId.set(prediction.skillId, {
+        for (const [index, prediction] of classified.entries()) {
+          const reading = readings?.[index] ?? null;
+          const corrected = reading?.skill ?? null;
+          const skill =
+            corrected ??
+            (prediction.skillId === null || prediction.confidence < CLASSIFIER_MIN_CONFIDENCE
+              ? undefined
+              : data.skillsById.get(prediction.skillId));
+          if (skill === undefined || skill === null) continue;
+          const score = corrected === null ? prediction.confidence : reading!.score;
+          const kept = bySkillId.get(skill.id);
+          if (kept === undefined || score > kept.score) {
+            bySkillId.set(skill.id, {
               skill,
-              text: skill.name,
-              score: prediction.confidence,
+              // 文字認識で拾い直した行は、読めた文字をそのまま返す。
+              // 画面で「なぜその答えになったか」を確かめられるようにしておく。
+              text: corrected === null ? skill.name : reading!.text,
+              score,
               margin: 1,
               runnerUp: null,
             });
