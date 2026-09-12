@@ -13,7 +13,7 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 ```
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
-pnpm test                      # vitest run。26 ファイル 228 件
+pnpm test                      # vitest run。26 ファイル 232 件
 pnpm test packages/sim/test/plan.test.ts    # ファイルを絞る
 pnpm exec vitest run packages/sim/test/optimize.test.ts -t '予算を超える構成は返さない'  # テスト名で絞る
 pnpm dev                       # UI の開発サーバ
@@ -42,7 +42,7 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 
 ### テストの前提
 
-228 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
+232 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
 
 - 読み取りの 7 件：`.tessdata/jpn.traineddata`（`pnpm fetch-tessdata`）が必要。
 - ステータス読み取りの 6 件：`RACEEMU_REAL_SCREENSHOT_DIR` に実機の写真を置いた場所を指す。写真はゲームの著作物なのでリポジトリに無い。
