@@ -105,7 +105,23 @@ export class Evaluator {
   /** 構成を評価した回数。キャッシュに当たったぶんは数えない。 */
   evaluations = 0;
 
-  constructor(private readonly context: OptimizeContext) {}
+  /** いま使っている相手。自己整合のときは探索の途中で差し替わる。 */
+  private field: FieldSpec | null;
+
+  constructor(private readonly context: OptimizeContext) {
+    this.field = context.field ?? null;
+  }
+
+  /**
+   * 相手を作り直す。
+   *
+   * 束が変わると同じ構成でも結果が変わるので、それまでの評価は使えない。
+   * 捨てたぶんは測り直しになる。docs/order-field.md 4.6 節を参照。
+   */
+  setField(field: FieldSpec | null): void {
+    this.field = field;
+    this.cache.clear();
+  }
 
   private key(skillIds: readonly string[], trials: number): string {
     return `${trials}|${[...skillIds].sort().join(',')}`;
@@ -121,7 +137,7 @@ export class Evaluator {
     const { results } = await this.context.pool.run(setting, this.context.system, {
       count: trials,
       seed: this.context.seed,
-      field: this.context.field ?? null,
+      field: this.field,
       chunkSize: spreadChunkSize(trials, this.context.pool.concurrency),
     });
     const times = new Float64Array(results.length);
@@ -237,6 +253,15 @@ export interface OptimizeOptions {
    * 数百になるので、絞らないと仕上げまで到達しない。docs/solver-design.md 7.5 節を参照。
    */
   readonly neighbourTopK?: number;
+  /**
+   * 相手のスキルに、いま評価している構成を混ぜる。
+   *
+   * 順位条件を判定するとき、自分だけがスキルを積んで強くなると、相手は
+   * 置いていかれるだけになり、前寄りの条件が過大に評価される。貪欲で初期解が
+   * 決まった時点で、その構成を相手の一部にも配って測り直す。
+   * 相手を判定していないときは効かない。docs/order-field.md 4.6 節を参照。
+   */
+  readonly selfConsistent?: boolean;
 }
 
 export interface OptimizeEntry {
@@ -268,6 +293,8 @@ const DEFAULT_INHERITED_UNIQUE_LIMIT = 6;
 /** 途中経過を出す間隔。候補が数百あるので、黙って何分も走るのを避ける。 */
 const PROGRESS_EVERY = 25;
 const DEFAULT_NEIGHBOUR_TOP_K = 30;
+/** 自己整合で自分の構成を配る相手の割合 */
+const SELF_CONSISTENT_RATE = 0.3;
 
 /** 固有の継承版の本数が上限に収まっているか。 */
 function withinInheritedUniqueLimit(
@@ -312,7 +339,7 @@ export async function optimizeSkills(
 
   // 基準は候補を 1 つも取らない構成
   const baseIds = context.base.skillIds.filter((id) => !candidates.includes(id));
-  const baseline = await evaluator.evaluate(baseIds, lastStage);
+  let baseline = await evaluator.evaluate(baseIds, lastStage);
 
   // 位置取り調整の参考行。基準の評価をそのまま使うので、余分に走るのは 1 回ぶんだけ。
   let positionCompetition: PositionCompetitionEffect | null = null;
@@ -427,6 +454,24 @@ export async function optimizeSkills(
     ...pickedNow,
     ...marginals.slice(0, Math.max(1, neighbourTopK)).map((s) => s.skillId),
   ];
+
+  // 自己整合。貪欲で初期解が決まったところで、その構成を相手の一部にも配る。
+  //
+  // 自分だけがスキルを積むと、相手は置いていかれるだけになり、前寄りの条件が
+  // 過大に評価される。束が変わるので、それまでの評価は捨てて基準から測り直す。
+  // 局所探索の中では作り直さない。1 巡ごとに測り直すと、巡どうしの短縮量が
+  // 別々の相手に対する値になり、並べられなくなる。
+  // docs/order-field.md 4.6 節を参照。
+  const field = context.field ?? null;
+  if (options.selfConsistent === true && field !== null) {
+    const mix = [...baseIds, ...pickedNow];
+    report(`自己整合: 相手の 3 割に ${mix.length} 個を配って測り直す`);
+    evaluator.setField({
+      ...field,
+      profile: { ...field.profile, mixSkillIds: mix, mixRate: SELF_CONSISTENT_RATE },
+    });
+    baseline = await evaluator.evaluate(baseIds, lastStage);
+  }
 
   // 最終段まで残った構成は、採否によらず記録する。
   // 採用したものだけを残すと、僅差で負けた構成が見えなくなるためである。

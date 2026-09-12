@@ -1,7 +1,8 @@
 import { RaceCalculator } from '../calculator.ts';
-import type { SystemSetting } from '../setting.ts';
+import type { SystemSetting, UmaStatus } from '../setting.ts';
 import { ADJUSTMENT_COUNT_BUCKETS, type RaceSimulationResult } from '../state.ts';
 import { buildFieldBundle, type FieldBundle } from '../field/field.ts';
+import { opponentSkillPool } from '../field/opponent-skills.ts';
 import { runMultiRace } from '../multi/race.ts';
 import type { CriticalSpec, FieldSpec } from './protocol.ts';
 import {
@@ -25,14 +26,24 @@ function resolveField(
   data: SimData,
   system: SystemSetting,
   spec: FieldSpec | null | undefined,
+  self: UmaStatus,
 ): FieldBundle | null {
   if (spec === null || spec === undefined) return null;
-  const key = JSON.stringify(spec);
+  // 相手を自分と同格にする指定のときは、束が自分のステータスに依る。鍵に混ぜる。
+  const key = JSON.stringify(
+    spec.profile.matchSelf === true
+      ? [spec, self.speed, self.stamina, self.power, self.guts, self.wisdom, self.condition,
+         self.distanceFit, self.surfaceFit, self.styleFit, self.uniqueLevel]
+      : [spec],
+  );
   let bundle = fieldCache.get(key);
   if (bundle === undefined) {
     bundle = buildFieldBundle(spec.profile, spec.track, system, data.trackData, {
       samples: spec.samples,
       seed: spec.seed,
+      self,
+      skillPool: opponentSkillPool(data.skillsById),
+      skillsById: data.skillsById,
     });
     fieldCache.set(key, bundle);
   }
@@ -58,7 +69,7 @@ export function runChunk(
   fieldSpec?: FieldSpec | null,
 ): ChunkOutput {
   const resolved = fromSerializable(setting, data);
-  const field = resolveField(data, system, fieldSpec);
+  const field = resolveField(data, system, fieldSpec, resolved.uma);
   const calculator = new RaceCalculator(system, data.trackData);
   const results: RaceSimulationResult[] = new Array(count);
   const skillIds = setting.skillIds;

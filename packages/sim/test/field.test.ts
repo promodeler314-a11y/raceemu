@@ -113,7 +113,11 @@ describe('フィールド軌跡モデル', () => {
       const a = toSkillSummaries(serializable.skillIds, ignored.skillStats, count)[0]!;
       const b = toSkillSummaries(serializable.skillIds, judged.skillStats, count)[0]!;
       expect(a.triggerRate).toBeGreaterThan(0.8);
-      expect(b.triggerRate).toBeLessThan(0.1);
+      // 相手を自分と同格にし、束ごとに引き直すようになってから、逃げでも
+      // 後ろに沈む試行が出る。判定すればはっきり下がる、というところまでを見る。
+      // docs/order-field.md 4.3 節。
+      expect(b.triggerRate).toBeLessThan(a.triggerRate / 2);
+      expect(b.triggerRate).toBeLessThan(0.4);
     } finally {
       await pool.dispose();
     }

@@ -1,7 +1,13 @@
 import { approximateTypeToState } from '../../../../packages/sim/src/skill/approximate.ts';
 import type { SkillData } from '../../../../packages/sim/src/skill/types.ts';
 import { formatTime, percentile } from '../format.ts';
-import { currentTrackDetail, gameData, useStore, type Snapshot } from '../store.ts';
+import {
+  currentTrackDetail,
+  gameData,
+  useStore,
+  type Snapshot,
+  type TriggerBand,
+} from '../store.ts';
 import { TimeHistogram } from './Charts.tsx';
 import { Panel } from './Inputs.tsx';
 
@@ -23,6 +29,31 @@ function hasApproximateCondition(skill: SkillData): boolean {
 
 const PHASE_LABELS = ['序盤', '中盤', '終盤', 'ラスト'];
 
+/**
+ * 発動率が相手の強さでどこまで動くか。
+ *
+ * 幅が広いスキルは、相手の想定を変えると評価がひっくり返る。
+ * docs/order-field.md 4.5 節を参照。
+ */
+function BandCell({ band }: { band: TriggerBand | undefined }) {
+  if (band === undefined) {
+    return <td className="py-1.5 pr-3 text-right text-ink3">—</td>;
+  }
+  const low = Math.min(band.weaker, band.base, band.stronger);
+  const high = Math.max(band.weaker, band.base, band.stronger);
+  const width = high - low;
+  return (
+    <td
+      className="py-1.5 pr-3 text-right font-mono tabular-nums"
+      title={`相手 −100 で ${(band.weaker * 100).toFixed(1)} %、+100 で ${(band.stronger * 100).toFixed(1)} %`}
+    >
+      <span className={width >= 0.2 ? 'text-warn-ink' : undefined}>
+        {(low * 100).toFixed(0)} – {(high * 100).toFixed(0)} %
+      </span>
+    </td>
+  );
+}
+
 export function SummaryOutput() {
   const summary = useStore((s) => s.summary);
   const results = useStore((s) => s.results);
@@ -30,6 +61,11 @@ export function SummaryOutput() {
   const showTrial = useStore((s) => s.showTrial);
   const snapshots = useStore((s) => s.snapshots);
   const skillSummaries = useStore((s) => s.skillSummaries);
+  const band = useStore((s) => s.band);
+  const bandRunning = useStore((s) => s.bandRunning);
+  const runBand = useStore((s) => s.runBand);
+  const running = useStore((s) => s.running);
+  const useField = useStore((s) => s.useField);
   const detail = currentTrackDetail(track);
 
   if (summary === null) {
@@ -167,6 +203,24 @@ export function SummaryOutput() {
             <span className="text-xs text-ink3">
               △ 発動条件に近似が含まれるスキル ・ 数値は {summary.all.count.toLocaleString('ja-JP')} 試行の平均
             </span>
+            {/*
+              発動率は相手の想定に依る。1 つの数字だけを出すと、そのことが見えない。
+              3 通りぶん余計に走るので、押したときだけ測る。
+              docs/order-field.md 4.5 節を参照。
+            */}
+            <button
+              type="button"
+              className="ml-auto rounded-sm border border-rule2 px-2 py-0.5 text-xs disabled:opacity-50"
+              onClick={() => void runBand()}
+              disabled={bandRunning || running || !useField}
+              title={
+                useField
+                  ? '相手の強さを −100、0、+100 で走らせ、発動率がどこまで動くかを出す'
+                  : '順位条件を判定していないので、相手の強さを振っても発動率は動かない'
+              }
+            >
+              {bandRunning ? '幅を測っている' : '相手の強さで幅を見る'}
+            </button>
           </div>
           <div className="mt-2 overflow-x-auto">
             <table data-testid="skill-table" className="w-full min-w-[36rem] text-sm">
@@ -174,6 +228,15 @@ export function SummaryOutput() {
                 <tr className="border-b border-rule text-xs text-ink3">
                   <th scope="col" className="py-1 pr-3 text-left font-normal">スキル</th>
                   <th scope="col" className="py-1 pr-3 text-right font-normal">発動率</th>
+                  {band !== null && (
+                    <th
+                      scope="col"
+                      className="py-1 pr-3 text-right font-normal"
+                      title="相手を 100 弱くしたとき ― 100 強くしたとき"
+                    >
+                      相手の強さで振れる幅
+                    </th>
+                  )}
                   <th scope="col" className="py-1 pr-3 text-right font-normal">平均発動位置</th>
                   <th scope="col" className="py-1 pr-3 text-right font-normal">2 回発動</th>
                   <th scope="col" className="py-1 text-left font-normal">発動位置の分布</th>
@@ -205,6 +268,7 @@ export function SummaryOutput() {
                           <span className="w-14 font-mono">{(skill.triggerRate * 100).toFixed(1)} %</span>
                         </div>
                       </td>
+                      {band !== null && <BandCell band={band[skill.skillId]} />}
                       <td className="py-1.5 pr-3 text-right font-mono tabular-nums">
                         {Number.isFinite(skill.averageFirstPosition)
                           ? `${skill.averageFirstPosition.toFixed(0)} m`
