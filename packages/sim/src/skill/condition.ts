@@ -440,7 +440,9 @@ function compileCondition(
       // フィールドが無いときは、本家と同じく満たしている前提にする。
       return (state) => {
         const order = state.order;
-        return order === null ? true : condition.check(order);
+        if (order === null) return true;
+        if (state.beforeStart) return false;
+        return condition.check(order);
       };
 
     case 'order_rate': {
@@ -457,6 +459,7 @@ function compileCondition(
       return (state) => {
         const order = state.order;
         if (order === null) return true;
+        if (state.beforeStart) return false;
         if (atLeast !== undefined) return order >= atLeast;
         if (atMost !== undefined) return order <= atMost;
         return true;
@@ -485,24 +488,30 @@ function compileCondition(
      * 距離差の条件。単位はスキルデータの注記から確定した。
      * バ身は constants.ts の bashinMeters で換算する。
      * フィールドが無いときは、順位条件と同じく満たしている前提にする。
+     * 出走前は、全頭が同じ位置にいるせいで差が 0 になるので判定しない。
      */
     case 'distance_diff_top':
       return (s) => {
         const distance = s.distanceFromTop;
-        return distance === null ? true : condition.check(distance / bashinMeters);
+        if (distance === null) return true;
+        if (s.beforeStart) return false;
+        return condition.check(distance / bashinMeters);
       };
 
     case 'distance_diff_top_float':
       // 「先頭との距離×10m」。値は 0.1 m 単位である。
       return (s) => {
         const distance = s.distanceFromTop;
-        return distance === null ? true : condition.check(distance * 10);
+        if (distance === null) return true;
+        if (s.beforeStart) return false;
+        return condition.check(distance * 10);
       };
 
     case 'bashin_diff_infront':
       return (s) => {
         const distance = s.distanceToFront;
         if (distance === null) return true;
+        if (s.beforeStart) return false;
         // 前に誰もいなければ差は定義できない。先頭にいるということなので満たさない。
         if (!Number.isFinite(distance)) return false;
         return condition.check(distance / bashinMeters);
@@ -512,6 +521,7 @@ function compileCondition(
       return (s) => {
         const distance = s.distanceToBehind;
         if (distance === null) return true;
+        if (s.beforeStart) return false;
         if (!Number.isFinite(distance)) return false;
         return condition.check(distance / bashinMeters);
       };
@@ -520,7 +530,9 @@ function compileCondition(
       // 注記の「相対位置」。先頭を 0、最後方を 100 とする。
       return (s) => {
         const rate = s.distanceDiffRate;
-        return rate === null ? true : condition.check(rate);
+        if (rate === null) return true;
+        if (s.beforeStart) return false;
+        return condition.check(rate);
       };
 
     case 'post_number':

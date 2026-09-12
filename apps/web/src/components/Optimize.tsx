@@ -20,6 +20,7 @@ export function OptimizePanel() {
   const log = useStore((s) => s.optimizeLog);
   const result = useStore((s) => s.optimizeResult);
   const useField = useStore((s) => s.useField);
+  const setUseField = useStore((s) => s.setUseField);
   const hintLevels = useStore((s) => s.hintLevels);
 
   const plan = useStore((s) => s.plan);
@@ -92,9 +93,23 @@ export function OptimizePanel() {
           )}
         </div>
       </div>
+      {/*
+        順位条件の切り替えは設定の面にもあるが、探索の結果を最も大きく動かすのがこれである。
+        知らせるだけで切り替えを別の面に置いておくと、warning を読んでも直せない。
+      */}
+      <label className="mt-2 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={useField}
+          onChange={(e) => setUseField(e.target.checked)}
+          disabled={running || busy}
+        />
+        順位条件を判定する
+      </label>
       {!useField && (
         <p className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink">
           順位条件を判定していない。脚質と噛み合わない条件のスキルが過大に評価される。
+          固有の継承版は 8 割 5 分が順位条件を持つので、判定しないと継承版だけがまとめて得をする。
         </p>
       )}
 
