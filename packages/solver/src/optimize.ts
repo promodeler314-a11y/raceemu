@@ -224,6 +224,19 @@ export interface OptimizeOptions {
   readonly signal?: AbortSignal;
   /** 位置取り調整の参考行を測るか。既定は測る。1 回ぶん余分に走る。 */
   readonly measurePositionCompetition?: boolean;
+  /**
+   * 固有の継承版を積める本数。既定は 6 で、これはゲームの上限である。
+   * スキルポイントとは別の制約なので、予算を上げても 7 つ目は取れない。
+   * docs/solver-design.md 7.4 節を参照。
+   */
+  readonly inheritedUniqueLimit?: number;
+  /**
+   * 近傍を作るのに使う候補の数。単体評価の効率で上位から採る。
+   *
+   * 近傍の大きさは候補数と構成の大きさの積で効く。育成計画から始めると候補が
+   * 数百になるので、絞らないと仕上げまで到達しない。docs/solver-design.md 7.5 節を参照。
+   */
+  readonly neighbourTopK?: number;
 }
 
 export interface OptimizeEntry {
@@ -249,6 +262,21 @@ export interface OptimizeResult {
 }
 
 const DEFAULT_STAGES = [200, 600, 2000];
+const DEFAULT_INHERITED_UNIQUE_LIMIT = 6;
+const DEFAULT_NEIGHBOUR_TOP_K = 30;
+
+/** 固有の継承版の本数が上限に収まっているか。 */
+function withinInheritedUniqueLimit(
+  skillIds: readonly string[],
+  model: CostModel,
+  limit: number,
+): boolean {
+  let count = 0;
+  for (const id of skillIds) {
+    if (model.rarity(id) === 'inherit') count++;
+  }
+  return count <= limit;
+}
 
 /**
  * 単体の効率で並べて貪欲に初期解を作り、そこから局所探索で詰める。
@@ -266,6 +294,8 @@ export async function optimizeSkills(
   const significance = options.significance ?? 2;
   const maxRounds = options.maxRounds ?? 8;
   const minKeep = options.minKeep ?? 4;
+  const inheritedUniqueLimit = options.inheritedUniqueLimit ?? DEFAULT_INHERITED_UNIQUE_LIMIT;
+  const neighbourTopK = options.neighbourTopK ?? DEFAULT_NEIGHBOUR_TOP_K;
   const evaluator = new Evaluator(context);
   const report = options.onProgress ?? (() => {});
   const abort = () => {
@@ -309,12 +339,19 @@ export async function optimizeSkills(
       [...selected(current, candidates), single.skillId],
       context.cost,
     );
-    if (context.cost.totalCost(next) <= options.budget) current = [...baseIds, ...next];
+    if (context.cost.totalCost(next) > options.budget) continue;
+    if (!withinInheritedUniqueLimit(next, context.cost, inheritedUniqueLimit)) continue;
+    current = [...baseIds, ...next];
   }
   report(`貪欲な初期解: ${selected(current, candidates).length} 個 / ${context.cost.totalCost(selected(current, candidates))} pt`);
 
   // 最終段まで残った構成は、採否によらず記録する。
   // 採用したものだけを残すと、僅差で負けた構成が見えなくなるためである。
+  // 近傍に使う候補。単体評価の効率で上位から採る。
+  // selected() には全候補を渡し続ける。絞ったせいで、いま選ばれているものを
+  // 候補でないと見なして外せなくなるのを避けるためである。
+  const moveCandidates = singles.slice(0, Math.max(1, neighbourTopK)).map((s) => s.skillId);
+
   const seen = new Map<string, OptimizeEntry>();
   const record = async (ids: readonly string[]) => {
     const picked = selected(ids, candidates);
@@ -335,7 +372,11 @@ export async function optimizeSkills(
   let rounds = 0;
   for (; rounds < maxRounds; rounds++) {
     abort();
-    const neighbours = buildNeighbourhood(current, candidates, context.cost, options.budget, baseIds);
+    const neighbours = buildNeighbourhood(current, candidates, moveCandidates, context.cost, {
+      budget: options.budget,
+      baseIds,
+      inheritedUniqueLimit,
+    });
     if (neighbours.length === 0) break;
     report(`第 ${rounds + 1} 巡: 近傍 ${neighbours.length} 通り`);
 
@@ -403,14 +444,23 @@ function selected(ids: readonly string[], candidates: readonly string[]): string
  * 1 つ足す、1 つ外す、1 つを別のものに入れ替える。
  *
  * 同じグループのスキルは 1 つに絞ってから予算を見る。
- * 予算を超える近傍と、絞った結果いまの構成に戻ってしまう近傍は捨てる。
+ * 予算を超える近傍、固有の継承版が上限を超える近傍、絞った結果いまの構成に
+ * 戻ってしまう近傍は捨てる。
+ *
+ * 足す先と入れ替え先は `moveCandidates` に限る。近傍の大きさは候補数と構成の
+ * 大きさの積で効くので、候補が数百あるときはここを絞らないと仕上げまで届かない。
+ * いま選ばれているものを外す近傍は、絞りに関わらず必ず作る。
  */
 function buildNeighbourhood(
   current: readonly string[],
   candidates: readonly string[],
+  moveCandidates: readonly string[],
   model: CostModel,
-  budget: number,
-  baseIds: readonly string[],
+  limits: {
+    readonly budget: number;
+    readonly baseIds: readonly string[];
+    readonly inheritedUniqueLimit: number;
+  },
 ): string[][] {
   const picked = selected(current, candidates);
   const pickedSet = new Set(picked);
@@ -421,12 +471,13 @@ function buildNeighbourhood(
     const deduped = dedupeByGroup(ids, model);
     const key = [...deduped].sort().join(',');
     if (emitted.has(key)) return;
-    if (model.totalCost(deduped) > budget) return;
+    if (model.totalCost(deduped) > limits.budget) return;
+    if (!withinInheritedUniqueLimit(deduped, model, limits.inheritedUniqueLimit)) return;
     emitted.add(key);
-    result.push([...baseIds, ...deduped]);
+    result.push([...limits.baseIds, ...deduped]);
   };
 
-  for (const id of candidates) {
+  for (const id of moveCandidates) {
     if (pickedSet.has(id)) continue;
     push([...picked, id]);
   }
@@ -434,7 +485,7 @@ function buildNeighbourhood(
     push(picked.filter((x) => x !== id));
   }
   for (const out of picked) {
-    for (const inId of candidates) {
+    for (const inId of moveCandidates) {
       if (pickedSet.has(inId)) continue;
       push([...picked.filter((x) => x !== out), inId]);
     }

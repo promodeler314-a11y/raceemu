@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { costModelFor, gameData, useStore } from '../store.ts';
 import { Panel } from './Inputs.tsx';
+import { PlanInput, ROUTE_LABEL } from './Plan.tsx';
 
 const fieldCls =
   'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
@@ -21,15 +22,32 @@ export function OptimizePanel() {
   const useField = useStore((s) => s.useField);
   const hintLevels = useStore((s) => s.hintLevels);
 
-  const costModel = useMemo(() => costModelFor(hintLevels), [hintLevels]);
+  const plan = useStore((s) => s.plan);
+  const planCandidates = useStore((s) => s.planCandidates);
+
+  // 結果の表示に使う費用は、育成計画のときはヒントの割引を含む。
+  const levels = plan.enabled && planCandidates !== null ? planCandidates.hintLevels : hintLevels;
+  const costModel = useMemo(() => costModelFor(levels), [levels]);
   const poolCost = costModel.totalCost(skillIds);
+  const routeOf = (id: string) =>
+    planCandidates?.entries.find((entry) => entry.skillId === id)?.route ?? null;
 
   return (
     <Panel title="組み合わせ探索">
-      <p className="text-xs text-ink3">
-        いま選んでいる {skillIds.length} 個を候補として、予算に収まる範囲で最もタイムを縮める組み合わせを探す。
-        候補をすべて取ると {poolCost} pt かかる。
-      </p>
+      {plan.enabled ? (
+        <p className="text-xs text-ink3">
+          育成ウマ娘とデッキ、それに継承から候補を組み立て、予算に収まる範囲で最もタイムを縮める
+          組み合わせを探す。固有の継承版は 6 つまでしか積めない。
+        </p>
+      ) : (
+        <p className="text-xs text-ink3">
+          いま選んでいる {skillIds.length} 個を候補として、予算に収まる範囲で最もタイムを縮める組み合わせを探す。
+          候補をすべて取ると {poolCost} pt かかる。
+        </p>
+      )}
+      <div className="mt-3">
+        <PlanInput />
+      </div>
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="block text-xs text-ink3">
@@ -50,7 +68,7 @@ export function OptimizePanel() {
             type="button"
             className="rounded-sm bg-primary-bg px-4 py-1.5 text-sm text-primary-fg disabled:opacity-50"
             onClick={() => void run()}
-            disabled={running || busy || skillIds.length < 2}
+            disabled={running || busy || (!plan.enabled && skillIds.length < 2)}
           >
             {running ? '探索中' : '探索する'}
           </button>
@@ -99,6 +117,9 @@ export function OptimizePanel() {
                   className="rounded-full border border-rule2 px-2 py-0.5 text-xs"
                 >
                   {name(id)} <span className="text-ink3">{costModel.cost(id)} pt</span>
+                  {routeOf(id) !== null && (
+                    <span className="text-ink3">・{ROUTE_LABEL[routeOf(id)!]}</span>
+                  )}
                 </span>
               ))}
             </div>
@@ -169,6 +190,7 @@ export function OptimizePanel() {
                   <th className="text-right">短縮（秒）</th>
                   <th className="text-right">pt</th>
                   <th className="text-right">ミリ秒/pt</th>
+                  {planCandidates !== null && <th className="pl-3 text-left">経路</th>}
                 </tr>
               </thead>
               <tbody>
@@ -189,6 +211,7 @@ export function OptimizePanel() {
                     </td>
                     <td className="text-right tabular-nums">—</td>
                     <td className="text-right tabular-nums">—</td>
+                    {planCandidates !== null && <td className="pl-3 text-ink3">—</td>}
                   </tr>
                 )}
                 {result.singles.map((single) => (
@@ -202,6 +225,11 @@ export function OptimizePanel() {
                     <td className="text-right tabular-nums">
                       {(1000 * single.efficiency).toFixed(3)}
                     </td>
+                    {planCandidates !== null && (
+                      <td className="pl-3 text-ink3">
+                        {routeOf(single.skillId) === null ? '—' : ROUTE_LABEL[routeOf(single.skillId)!]}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

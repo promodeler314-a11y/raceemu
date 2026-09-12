@@ -1,5 +1,5 @@
 """
-本家（mee1080/umasim）のスキル・コースデータを取り直す。
+本家（mee1080/umasim）のスキル、コース、サポートカード、育成ウマ娘のデータを取り直す。
 
 packages/data/assets/{skills,courses}.json は本家の値をそのまま持っている
 （docs/m1-report.md 1 節）。新しいウマ娘やスキルは本家のデータが更新され
@@ -22,6 +22,8 @@ import urllib.request
 from pathlib import Path
 
 SKILL_URL = 'https://raw.githubusercontent.com/mee1080/umasim/refs/heads/main/data/skill_data.txt'
+SUPPORT_URL = 'https://raw.githubusercontent.com/mee1080/umasim/refs/heads/main/data/support_card.txt'
+CHARA_URL = 'https://raw.githubusercontent.com/mee1080/umasim/refs/heads/main/data/chara.txt'
 COURSE_URL = (
     'https://raw.githubusercontent.com/mee1080/umasim/refs/heads/main/'
     'race/src/commonMain/kotlin/io/github/mee1080/umasim/race/data/rawData.kt'
@@ -54,6 +56,97 @@ def fetch_courses():
         n = len(courses) if isinstance(courses, dict) else type(courses).__name__
         raise SystemExit(f'取れた競馬場数が少なすぎる: {n}')
     return courses
+
+
+def split_skills(value):
+    return [s.strip() for s in (value or '').split(', ') if s.strip()]
+
+
+def fetch_supports():
+    """
+    サポートカードを取る。1 行が 1 枚 1 凸で、列は本家の SupportCardLoader の順である。
+
+    先頭が id、名前、キャラ名、レアリティ、凸、最大レベル、得意。
+    そのあと 26 列ずつの能力値の塊が 2 つ続き、その次がヒントで取れるスキル名の一覧である。
+    ヒントレベルとヒント発生率は 1 つめの塊の中にある（それぞれ 16 番目と 17 番目）。
+
+    ヒントで取れるスキルは凸で変わらないので、カードごとに 1 つだけ持ち、
+    凸ごとに変わるヒントレベルと発生率だけを並べる。
+    """
+    cards = {}
+    for line in fetch(SUPPORT_URL).split('\n'):
+        d = line.rstrip('\n').split('\t')
+        if len(d) < 60:
+            continue
+        card = cards.setdefault(int(d[0]), {
+            'id': int(d[0]),
+            'name': d[1],
+            'chara': d[2],
+            'rarity': int(d[3]),
+            'type': d[6],
+            'skills': split_skills(d[59]),
+            'hints': [],
+        })
+        if split_skills(d[59]) != card['skills']:
+            raise SystemExit(f"ヒントのスキルが凸で変わっている: {d[1]}")
+        talent = int(d[4])
+        if any(h['talent'] == talent for h in card['hints']):
+            continue
+        card['hints'].append({
+            'talent': talent,
+            'level': int(d[7 + 16]),
+            'frequency': int(d[7 + 17]),
+        })
+    for card in cards.values():
+        card['hints'].sort(key=lambda h: h['talent'])
+    if len(cards) < 300:
+        raise SystemExit(f'取れたサポートカードが少なすぎる: {len(cards)}')
+    return sorted(cards.values(), key=lambda c: c['id'])
+
+
+def fetch_charas():
+    """
+    育成ウマ娘を取る。1 行が 1 人 1 覚醒ランクで、列は本家の CharaLoader の順である。
+
+    17 番目が、そのランクまでに覚えるスキル名の一覧である。固有スキルを含む。
+    ランクが上がると後ろに足されるだけなので、最大ランクの一覧と、
+    ランクごとの個数だけを持つ。
+    """
+    rows = {}
+    for line in fetch(CHARA_URL).split('\n'):
+        d = line.rstrip('\n').split('\t')
+        if len(d) < 18:
+            continue
+        rows.setdefault(int(d[0]), {})[int(d[5])] = {
+            'name': d[1],
+            'charaId': int(d[2]),
+            'charaName': d[3],
+            'rarity': int(d[4]),
+            'skills': split_skills(d[16]),
+        }
+    out = []
+    for chara_id, by_rank in rows.items():
+        ranks = sorted(by_rank)
+        top = by_rank[ranks[-1]]
+        counts = []
+        for rank in ranks:
+            skills = by_rank[rank]['skills']
+            if top['skills'][:len(skills)] != skills:
+                raise SystemExit(f"覚醒ランクでスキルが前方一致しない: {top['name']}")
+            counts.append(len(skills))
+        out.append({
+            'id': chara_id,
+            'name': top['name'],
+            'charaId': top['charaId'],
+            'charaName': top['charaName'],
+            'rarity': top['rarity'],
+            'skills': top['skills'],
+            # counts[i] は覚醒ランク i+1 までに覚えている数
+            'skillCountByRank': counts,
+        })
+    if len(out) < 100:
+        raise SystemExit(f'取れた育成ウマ娘が少なすぎる: {len(out)}')
+    return sorted(out, key=lambda c: c['id'])
 
 
 def describe(items, limit=20):
@@ -102,17 +195,63 @@ def course_label(entry):
     return f"{loc_name} {course.get('name')}"
 
 
+def by_id(rows):
+    return {str(row['id']): row for row in rows}
+
+
+def card_label(card):
+    return f"{card['name']}（{card['id']}）"
+
+
+def chara_label(chara):
+    return f"{chara['name']}（{chara['id']}）"
+
+
+def lag_lines(old_skills, new_skills, supports, charas):
+    """
+    新しく増えたスキルのうち、サポートカードにも育成ウマ娘にも出ないものを挙げる。
+
+    この 2 ファイルはスキルのデータより遅れることがある
+    （docs/solver-design.md 7.6 節）。出ないことを取れないことと読むと、
+    金と進化の候補が遅れたぶんだけ落ちる。
+    既に出ないものは毎回同じ顔ぶれになるので、増えたぶんだけを出す。
+    """
+    known = {name for card in supports for name in card['skills']}
+    known |= {name for chara in charas for name in chara['skills']}
+    old_ids = {s['id'] for s in old_skills}
+    missing = sorted(
+        s['name'] for s in new_skills
+        if s['id'] not in old_ids
+        and s.get('sp') and s['rarity'] in ('normal', 'rare')
+        and s['name'] not in known
+    )
+    if not missing:
+        return []
+    return [
+        f'増えた白と金のうち、カードにもウマ娘にも出ないもの {len(missing)} 件: ' + describe(missing)
+    ]
+
+
 def main():
     skills_path = ASSETS / 'skills.json'
     courses_path = ASSETS / 'courses.json'
+    supports_path = ASSETS / 'supports.json'
+    charas_path = ASSETS / 'charas.json'
     old_skills = json.loads(skills_path.read_text(encoding='utf-8'))
     old_courses = json.loads(courses_path.read_text(encoding='utf-8'))
+    old_supports = json.loads(supports_path.read_text(encoding='utf-8')) if supports_path.exists() else []
+    old_charas = json.loads(charas_path.read_text(encoding='utf-8')) if charas_path.exists() else []
 
     new_skills = fetch_skills()
     new_courses = fetch_courses()
+    new_supports = fetch_supports()
+    new_charas = fetch_charas()
 
     lines = diff_lines('スキル', skill_bodies(old_skills), skill_bodies(new_skills), skill_label)
     lines += diff_lines('コース', flatten_courses(old_courses), flatten_courses(new_courses), course_label)
+    lines += diff_lines('サポートカード', by_id(old_supports), by_id(new_supports), card_label)
+    lines += diff_lines('育成ウマ娘', by_id(old_charas), by_id(new_charas), chara_label)
+    lines += lag_lines(old_skills, new_skills, new_supports, new_charas)
 
     added_locations = [v['name'] for k, v in new_courses.items() if k not in old_courses]
     removed_locations = [v['name'] for k, v in old_courses.items() if k not in new_courses]
@@ -126,6 +265,8 @@ def main():
 
     dump(new_skills, skills_path)
     dump(new_courses, courses_path)
+    dump(new_supports, supports_path)
+    dump(new_charas, charas_path)
 
     print('\n'.join(lines) if lines else '変わっていない')
 
