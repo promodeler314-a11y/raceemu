@@ -119,10 +119,24 @@ GitHub Pages への配信、探索をサーバ側で回す口、画面をモッ�
 
 ## 残っていること
 
-- **順位に関わる条件のうち 122 回ぶん。** レーンに関わるものと周囲の頭数である。[M9](docs/m9-report.md) で全頭が状態を持つようになったのでレーンは揃ったが、`is_behind_in` や `lane_type` がレーンのどの値をどう比べるものなのかを確かめていない。
-- **相手のプリセット。** 勝率の面では相手を 1 頭ずつ入力するか、保存した個体から選ぶ。チャンピオンズミーティングの想定を丸ごと当てる口はまだ無い。
-- **読み取りを確かめた機種の幅。** 実機は 3 枚（横幅は 2 通り）しか見ていない。内容領域の求め方は黒帯を落とす前提なので、別の色の帯が入る端末で外れうる。適性の色も `B` と `C` は 1 か所ずつしか測っていない（[読み取り](docs/ocr-design.md)の 7.8 節）。
-- **個体を溜めたあとの見せ方。** 保存と割り当てまでで、スキルと速さの相関のような統計は出していない。
-- **バ身を 2.5 m とした換算と、相対位置の定義。** スキルデータの注記からの読み取りであって、ゲーム内での実測ではない。
-- **中断からの再開。** 途中までの結果は残すようにしたが、塊が順不同で終わるため埋まっていない試行番号が飛び飛びに残り、1 つの再開位置では表せない。
-- **サーバ側の残り。** ポッドの中での並列数の実測、アプリから宛先を選ぶ口、候補スキルの全件化（[サーバ側で探索を回す設計](docs/server-design.md)の 8 節）。
+**[issue](https://github.com/promodeler314-a11y/raceemu/issues) で追う。** 以前はここに一覧を置いていたが、
+同じ項目を README と[方針](docs/roadmap.md)と[モックとのズレ](docs/ui-gap.md)と[サーバ側の設計](docs/server-design.md)が
+別の言葉で持っていて、どれが最新か分からなくなった。設計書は「なぜそうするか」を持ち、
+「いま何が残っているか」は issue だけが持つ。
+
+束はラベルで分けてある。
+
+| ラベル | 意味 | 件数 |
+| --- | --- | ---: |
+| [`needs-measurement`](https://github.com/promodeler314-a11y/raceemu/labels/needs-measurement) | ゲームからの実測が要る。コードだけでは閉じない | 5 |
+| [`quick-win`](https://github.com/promodeler314-a11y/raceemu/labels/quick-win) | 小さく、他の作業と衝突しない | 4 |
+| [`major`](https://github.com/promodeler314-a11y/raceemu/labels/major) | 機能として大きい。面をまたぐ | 6 |
+| [`later`](https://github.com/promodeler314-a11y/raceemu/labels/later) | 後回しでよい | 8 |
+
+いちばん重要なのは `needs-measurement` である。
+順位条件のフィールドは[段取り](docs/order-field.md)の 1 から 6 まで入ったが、**ゲームと突き合わせていない。**
+バ身の換算と順位率の対応表もスキルデータの注記からの読み取りであって、実測ではない。
+この 3 つ（[#51](https://github.com/promodeler314-a11y/raceemu/issues/51)、
+[#52](https://github.com/promodeler314-a11y/raceemu/issues/52)、
+[#53](https://github.com/promodeler314-a11y/raceemu/issues/53)）が決まらないあいだ、
+順位条件まわりの精度は誰にも分からない。**コードを書く作業ではなく、ゲームを遊んで数字を取る作業である。**

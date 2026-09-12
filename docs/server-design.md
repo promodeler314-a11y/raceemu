@@ -206,9 +206,9 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 1. ~~`apps/api` を作る~~ 済み。
 2. ~~イメージとマニフェスト~~ 済み（`deploy/`）。`tsx` は実行時に要るので devDependencies を落とさずに入れている。
 3. ~~イメージを置く経路~~ 済み（`.github/workflows/image.yml`）。`main` への取り込みごとに `ghcr.io` を更新する。置き方は[配信](deploy.md)の 5 節にある。
-4. **ポッドの中で並列数がどう決まるかを実測する。** 4.1 の前提の確認である。`GET /api/health` が `concurrencySource` を返すので、`cgroup` と出ていれば読めている。
-5. アプリ側に宛先の設定と、投げ先を選ぶ口を足す。宛先が無ければ今までどおりブラウザで回す。
-6. コミットの SHA をフッタに出す。
-7. 全スキルを候補にできるようにする。**ここまで来て初めて 1 節の目的が果たされる。**
+4. **ポッドの中で並列数がどう決まるかを実測する**（[#48](https://github.com/promodeler314-a11y/raceemu/issues/48)）**。** 4.1 の前提の確認である。`GET /api/health` が `concurrencySource` を返すので、`cgroup` と出ていれば読めている。
+5. アプリ側に宛先の設定と、投げ先を選ぶ口を足す（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)）。宛先が無ければ今までどおりブラウザで回す。
+6. コミットの SHA をフッタに出す（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)）。
+7. 全スキルを候補にできるようにする（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)、先に [#58](https://github.com/promodeler314-a11y/raceemu/issues/58) が要る）。**ここまで来て初めて 1 節の目的が果たされる。**
 
 途中で止めてもアプリは壊れない。2 節の前提がそれを保証する。
