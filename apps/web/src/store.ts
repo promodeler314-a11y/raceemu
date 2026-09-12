@@ -278,10 +278,10 @@ interface AppState {
   /** 順位条件を実際に判定するか。false なら本家と同じく満たしている前提。 */
   useField: boolean;
   /**
-   * 1 試行あたりの所要時間の実測。条件ごとに持つ（`paceKey` が鍵を作る）。
-   * 単位はミリ秒で、並列で走らせた実時間をそのまま試行数で割ったものである。
+   * 所要時間の実測。条件ごとに最大 2 点を持つ（`paceKey` が鍵を作る）。
+   * 2 点あると固定の費用と 1 試行あたりの費用を分けて出せる。
    */
-  pace: Record<string, number>;
+  pace: Record<string, readonly PaceSample[]>;
   options: RunOptions;
   /** デバフの種類ごとの個数。0 の項目は持たない。 */
   debuffCounts: Record<string, number>;
@@ -602,7 +602,10 @@ export const useStore = create<AppState>((set, get) => ({
         pace:
           trials === 0
             ? state.pace
-            : { ...state.pace, [multiPaceKey(state.track.gateCount)]: multiElapsedMs / trials },
+            : recordPace(state.pace, multiPaceKey(state.track.gateCount), {
+                count: trials,
+                ms: multiElapsedMs,
+              }),
         tab: 'field',
       });
     } catch (error) {
@@ -682,8 +685,11 @@ export const useStore = create<AppState>((set, get) => ({
         summary: summarize(results, elapsedMs),
         results,
         elapsedMs,
-        // 次に押す前の見積もりに使う。中断しても終わったぶんで割れば同じ速さが出る。
-        pace: { ...state.pace, [paceKey(state.useField)]: elapsedMs / results.length },
+        // 次に押す前の見積もりに使う。中断しても、終わったぶんの回数で数えれば点になる。
+        pace: recordPace(state.pace, paceKey(state.useField), {
+          count: results.length,
+          ms: elapsedMs,
+        }),
         skillSummaries: toSkillSummaries(serializable.skillIds, skillStats, results.length),
         notice:
           cancelled === true
@@ -1017,27 +1023,71 @@ export function transferTextOf(state: { uma: UmaStatus; skillIds: readonly strin
  * 試行回数は単騎で 20 万、全頭同時で 5 万まで指定できる。押す前に何も出ないと、
  * 数十分かかる設定を作ってから初めて気付くことになる（docs/roadmap.md 4.2 節）。
  *
- * 見積もりは条件ごとの 1 試行あたりの実時間に回数を掛けるだけである。
- * 実測があればそれを使う。無いあいだは下の値を目安として出す。
+ * **回数に比例しない費用がある。** Worker を立てる手間と、順位条件を入れたときに
+ * Worker ごとにフィールドの束（64 本）を組む手間は、回数を増やしても変わらない。
+ * 順位条件ありでは 2 秒を超え、2000 試行の実測からそのまま比例で伸ばすと
+ * 20000 試行を 2.5 倍に見積もる。そこで固定のぶんと 1 試行あたりのぶんを分け、
+ * 回数の違う 2 点が揃ったら直線を当てる。
  *
- * 目安の値は手元（Windows、24 スレッド、Worker 23 本）で測ったものである。
+ * 下の目安は手元（Windows、24 スレッド、Worker 23 本、東京 芝2400m）で測った。
  *
- * | 条件 | 単一スレッド | 23 並列 |
+ * | 条件 | 固定 | 1 試行 |
  * | --- | ---: | ---: |
- * | 単騎・順位条件なし | 1.38 ms | 0.52 ms |
- * | 単騎・順位条件あり | 2.22 ms | 1.37 ms |
- * | 9 頭同時 | 21.3 ms | 5.63 ms |
+ * | 単騎・順位条件なし | 1.9 秒 | 0.24 ms |
+ * | 単騎・順位条件あり | 2.7 秒 | 0.64 ms |
+ * | 9 頭同時 | 0.6 秒 | 4.43 ms |
  *
- * 並列数で割って出すことはしない。順位条件を入れると Worker ごとにフィールドの
- * 束（64 本）を組み直すため、本数を増やしても割り算ぶんには速くならない。
- * 機種差もあるので、1 回走らせて実測に置き換わるまでは外れうる。
+ * 機種差が 1.5 倍ほどあるので、走らせて実測に置き換わるまでは外れうる。
  */
-const FALLBACK_MS_PER_TRIAL = {
-  solo: 0.52,
-  field: 1.37,
-  /** 全頭同時は頭数にほぼ比例する。9 頭 5.63 ms を 1 頭あたりに割ったもの。 */
-  multiPerHorse: 5.63 / 9,
+interface Pace {
+  /** 回数によらずかかるぶん（ミリ秒） */
+  readonly fixedMs: number;
+  /** 1 試行あたり（ミリ秒） */
+  readonly perTrialMs: number;
+}
+
+const FALLBACK_PACE = {
+  solo: { fixedMs: 1900, perTrialMs: 0.24 },
+  field: { fixedMs: 2700, perTrialMs: 0.64 },
+  /** 全頭同時は 1 試行のぶんが頭数にほぼ比例する。9 頭 4.43 ms を割ったもの。 */
+  multi: { fixedMs: 600, perTrialMsPerHorse: 4.43 / 9 },
 } as const;
+
+/** 実測の 1 点。回数と、そのときかかった実時間。 */
+export interface PaceSample {
+  readonly count: number;
+  readonly ms: number;
+}
+
+/**
+ * 実測を書き足す。いちばん新しい 1 点と、回数の違う直前の 1 点を残す。
+ * 同じ回数で何度も走らせても 2 点目が埋まらないので、古いほうを捨てない。
+ */
+export function recordPace(
+  pace: Readonly<Record<string, readonly PaceSample[]>>,
+  key: string,
+  sample: PaceSample,
+): Record<string, readonly PaceSample[]> {
+  const previous = pace[key] ?? [];
+  const other = previous.find((entry) => entry.count !== sample.count);
+  return { ...pace, [key]: other === undefined ? [sample] : [sample, other] };
+}
+
+/** 2 点あれば直線を当てる。当てられなければ比例で伸ばす。 */
+function paceOf(samples: readonly PaceSample[], fallback: Pace): { pace: Pace; measured: boolean } {
+  const [latest, other] = samples;
+  if (latest === undefined) return { pace: fallback, measured: false };
+  if (other !== undefined && other.count !== latest.count) {
+    const perTrialMs = (latest.ms - other.ms) / (latest.count - other.count);
+    const fixedMs = latest.ms - perTrialMs * latest.count;
+    // 揺らぎで傾きや固定のぶんが負に出ることがある。そのときは比例に落とす。
+    if (perTrialMs > 0 && fixedMs >= 0) return { pace: { fixedMs, perTrialMs }, measured: true };
+  }
+  return {
+    pace: { fixedMs: 0, perTrialMs: latest.count === 0 ? 0 : latest.ms / latest.count },
+    measured: true,
+  };
+}
 
 /** 実測を覚えるときの鍵。所要時間が変わる条件だけを混ぜる。 */
 export function paceKey(useField: boolean): string {
@@ -1054,32 +1104,43 @@ export interface Estimate {
   readonly measured: boolean;
 }
 
-function estimateWith(pace: Readonly<Record<string, number>>, key: string, fallback: number, count: number): Estimate {
-  const measured = pace[key];
-  if (measured !== undefined) return { ms: measured * count, measured: true };
-  return { ms: fallback * count, measured: false };
+function estimateWith(
+  pace: Readonly<Record<string, readonly PaceSample[]>>,
+  key: string,
+  fallback: Pace,
+  count: number,
+): Estimate {
+  const { pace: fitted, measured } = paceOf(pace[key] ?? [], fallback);
+  return { ms: fitted.fixedMs + fitted.perTrialMs * count, measured };
 }
 
 /** 単騎の実行にかかる時間。 */
-export function estimateRun(state: { pace: Record<string, number>; useField: boolean; count: number }): Estimate {
+export function estimateRun(state: {
+  pace: Record<string, readonly PaceSample[]>;
+  useField: boolean;
+  count: number;
+}): Estimate {
   return estimateWith(
     state.pace,
     paceKey(state.useField),
-    state.useField ? FALLBACK_MS_PER_TRIAL.field : FALLBACK_MS_PER_TRIAL.solo,
+    state.useField ? FALLBACK_PACE.field : FALLBACK_PACE.solo,
     state.count,
   );
 }
 
 /** 全頭同時の実行にかかる時間。 */
 export function estimateMulti(state: {
-  pace: Record<string, number>;
+  pace: Record<string, readonly PaceSample[]>;
   track: TrackRef;
   multiTrials: number;
 }): Estimate {
   return estimateWith(
     state.pace,
     multiPaceKey(state.track.gateCount),
-    FALLBACK_MS_PER_TRIAL.multiPerHorse * state.track.gateCount,
+    {
+      fixedMs: FALLBACK_PACE.multi.fixedMs,
+      perTrialMs: FALLBACK_PACE.multi.perTrialMsPerHorse * state.track.gateCount,
+    },
     state.multiTrials,
   );
 }
