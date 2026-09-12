@@ -1,8 +1,10 @@
 import { RaceCalculator } from '../calculator.ts';
 import { framePerSecond, type Style } from '../data/constants.ts';
 import type { RaceTrack } from '../data/track.ts';
+import { runMultiRace, type MultiEntry } from '../multi/race.ts';
 import type { RaceSetting, SystemSetting, TrackRef, UmaStatus } from '../setting.ts';
 import type { SkillData } from '../skill/types.ts';
+import type { RaceState } from '../state.ts';
 
 /**
  * 他のウマ娘の位置の時系列。
@@ -22,6 +24,8 @@ export interface FieldSample {
    * ゴール後はコース長のままにしておく。
    */
   readonly positions: Float64Array;
+  /** 相手の脚質。位置取りの判定が先頭馬の脚質を読むので持たせる。 */
+  readonly styles: readonly Style[];
 }
 
 export interface FieldBundle {
@@ -89,8 +93,11 @@ export function opponentSettings(
 /**
  * フィールドの束を作る。
  *
- * 1 本の軌跡は相手 1 頭ぶんのレースを普通に回して位置を記録したものである。
- * 相手同士も相互作用しないので、頭数ぶん独立に回すだけで済む。
+ * 相手 8 頭を一緒に走らせて位置を記録する。
+ * 1 頭ずつ独立に回すと、相手は先頭に対して詰めたり離れたりしないので、
+ * 同じ脚質どうしが縦に伸びずに塊になり、自分は塊の前か後ろにしか居られない。
+ * 順位が塊の境目にしか出ないため、3 位以内や 6 位以降のような条件が
+ * 量子化で 0 % になる。docs/order-field.md 2.3 節と 4.1 節を参照。
  */
 export function buildFieldBundle(
   profile: FieldProfile,
@@ -100,36 +107,33 @@ export function buildFieldBundle(
   options: { readonly samples: number; readonly seed: number; readonly skills?: readonly SkillData[] },
 ): FieldBundle {
   const settings = opponentSettings(profile, track, options.skills ?? []);
+  const styles = settings.map((setting) => setting.uma.style);
   const calculator = new RaceCalculator(system, trackData);
-  const courseLength =
-    trackData[track.location]?.courses[track.course]?.distance ?? 0;
+  const courseLength = trackData[track.location]?.courses[track.course]?.distance ?? 0;
+  // 相手も実在の先頭に対して位置取りする。勝率の面と同じ規則にする。
+  const entries: MultiEntry[] = settings.map((setting) => ({
+    setting: { ...setting, positionKeepMode: 'VIRTUAL' },
+  }));
 
   const samples: FieldSample[] = [];
+  const opponents = settings.length;
   for (let s = 0; s < options.samples; s++) {
-    const runs = settings.map((setting, index) =>
-      calculator.simulate(setting, {
-        // 相手ごとに別の試行番号を使う。束の中で同じ相手が同じ走りをしないようにする。
-        seed: options.seed,
-        trial: s * 1000 + index,
-        recordFrames: true,
-      }),
-    );
-    const frames = Math.max(1, ...runs.map((run) => run.state.simulation.frames.length));
-    const opponents = runs.length;
+    const rows: number[][] = [];
+    runMultiRace(calculator, entries, {
+      seed: options.seed,
+      trial: s,
+      onFrame: (_frame, states) => {
+        rows.push(states.map((state) => Math.min(state.simulation.startPosition, courseLength)));
+      },
+    });
+    const frames = Math.max(1, rows.length);
     const positions = new Float64Array(frames * opponents);
-    for (let i = 0; i < opponents; i++) {
-      const list = runs[i]!.state.simulation.frames;
-      let last = 0;
-      for (let f = 0; f < frames; f++) {
-        const frame = list[f];
-        if (frame !== undefined) last = frame.startPosition;
-        else last = courseLength;
-        positions[f * opponents + i] = last;
-      }
+    for (let f = 0; f < rows.length; f++) {
+      for (let i = 0; i < opponents; i++) positions[f * opponents + i] = rows[f]![i]!;
     }
-    samples.push({ opponents, frames, positions });
+    samples.push({ opponents, frames, positions, styles });
   }
-  return { samples, opponents: settings.length, courseLength };
+  return { samples, opponents, courseLength };
 }
 
 /**
@@ -157,11 +161,28 @@ export interface FieldView {
   distanceToBehind(frameElapsed: number, position: number): number;
   /** 先頭から最後方までの隔たり。全員が同じ位置なら 0。 */
   spread(frameElapsed: number, position: number): number;
+  /**
+   * 位置取りの判定に渡す先頭馬。
+   *
+   * 判定が読むのは先頭の `startPosition` と脚質だけなので、その 2 つが揃っていればよい。
+   * docs/order-field.md 4.2 節を参照。
+   */
+  paceMaker(frameElapsed: number): RaceState | null;
 }
 
 /** あらかじめ作った束の 1 本を読む実装 */
 export class RecordedField implements FieldView {
   private readonly sample: FieldSample;
+  /**
+   * 位置取りに渡す先頭馬の器。
+   *
+   * 位置取りの判定は `simulation.startPosition` と `setting.basicRunningStyle` しか
+   * 読まないので、その 2 つだけを持つ器を使い回す。毎フレーム作り直さない。
+   */
+  private readonly leader = {
+    simulation: { startPosition: 0 },
+    setting: { basicRunningStyle: 'NIGE' as Style },
+  };
 
   constructor(
     bundle: FieldBundle,
@@ -228,6 +249,25 @@ export class RecordedField implements FieldView {
       if (gap > 0 && gap < best) best = gap;
     }
     return best;
+  }
+
+  /** そのフレームで最も前にいる相手を、位置取りの判定に渡す形で返す。 */
+  paceMaker(frameElapsed: number): RaceState | null {
+    const { frames, opponents, positions, styles } = this.sample;
+    const frame = Math.min(frameElapsed, frames - 1);
+    const offset = frame * opponents;
+    let best = Number.NEGATIVE_INFINITY;
+    let at = 0;
+    for (let i = 0; i < opponents; i++) {
+      const other = positions[offset + i]!;
+      if (other > best) {
+        best = other;
+        at = i;
+      }
+    }
+    this.leader.simulation.startPosition = best;
+    this.leader.setting.basicRunningStyle = styles[at] ?? 'NIGE';
+    return this.leader as unknown as RaceState;
   }
 
   /** 先頭から最後方までの隔たり。全員が同じ位置なら 0。 */

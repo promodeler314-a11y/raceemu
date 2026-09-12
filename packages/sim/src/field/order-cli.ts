@@ -75,7 +75,7 @@ function buildAlone(settings: readonly RaceSetting[], seed: number): FieldBundle
         positions[f * opponents + i] = list[f]?.startPosition ?? courseLength;
       }
     }
-    samples.push({ opponents, frames, positions });
+    samples.push({ opponents, frames, positions, styles: settings.map((s2) => s2.uma.style) });
   }
   return { samples, opponents: settings.length, courseLength };
 }
@@ -98,7 +98,7 @@ function buildTogether(settingsOf: (sample: number) => readonly RaceSetting[], s
     const frames = rows.length;
     const positions = new Float64Array(frames * opponents);
     for (let f = 0; f < frames; f++) for (let i = 0; i < opponents; i++) positions[f * opponents + i] = rows[f]![i]!;
-    samples.push({ opponents, frames, positions });
+    samples.push({ opponents, frames, positions, styles: settings.map((s2) => s2.uma.style) });
   }
   return { samples, opponents, courseLength };
 }

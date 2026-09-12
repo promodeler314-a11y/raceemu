@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../data/src/node.ts';
-import { RaceCalculator } from '../src/calculator.ts';
+import { RaceCalculator, updateFrame } from '../src/calculator.ts';
 import { bashinMeters } from '../src/data/constants.ts';
 import {
   ORDER_RATE_CONTINUE_TYPES,
@@ -11,7 +11,10 @@ import { buildFieldBundle, defaultFieldProfile, RecordedField } from '../src/fie
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { WorkerPool } from '../src/parallel/pool.ts';
 import { toSerializable, toSkillSummaries } from '../src/parallel/protocol.ts';
+import { RngSet } from '../src/rng.ts';
 import { defaultSystemSetting, type RaceSetting } from '../src/setting.ts';
+import { compileConditions, newSkillScratch } from '../src/skill/condition.ts';
+import { SkillCondition } from '../src/skill/types.ts';
 
 const data = loadGameData();
 const system = defaultSystemSetting();
@@ -221,8 +224,15 @@ describe('距離差の条件', () => {
       expect(triggerRate(style, '貴顕の使命を果たすべく', false), style).toBe(1);
     }
     // 判定を入れると、先頭寄りで進む脚質だけが満たす。
-    expect(triggerRate('NIGE', '貴顕の使命を果たすべく', true)).toBe(1);
-    expect(triggerRate('OI', '貴顕の使命を果たすべく', true)).toBe(0);
+    //
+    // 逃げが 10 割にならないのは、相手を一緒に走らせるようにしたためである
+    // （docs/order-field.md 4.1 節）。相手が隊列を組むので、逃げでも先頭から
+    // 離れる試行が出る。1 頭ずつ独立に走らせていたころは塊の前に出るだけで
+    // 済んでいた。
+    const nige = triggerRate('NIGE', '貴顕の使命を果たすべく', true);
+    const oi = triggerRate('OI', '貴顕の使命を果たすべく', true);
+    expect(nige).toBeGreaterThan(0.5);
+    expect(oi).toBe(0);
   });
 
   it('先頭との距離が脚質の順に開く', () => {
@@ -245,5 +255,50 @@ describe('距離差の条件', () => {
     expect(nige).toBeLessThan(sen);
     expect(sen).toBeLessThan(sasi);
     expect(sasi).toBeLessThan(oi);
+  });
+});
+
+describe('出走前の順位', () => {
+  /**
+   * スタート直後、全頭が同じ位置にいる間は「自分より前にいる相手」が 0 になり、
+   * 誰から見ても順位が 1 になる。出走の遅れは 0 から 0.1 秒で数フレームだが、
+   * 「序盤に 1 位」のような条件はその数フレームで満たされてしまう。
+   * docs/order-field.md 2.4 節と 4.4 節を参照。
+   */
+  const bundle = buildFieldBundle(defaultFieldProfile(9), track, system, data.trackData, {
+    samples: 4,
+    seed: 9001,
+  });
+  const calculator = new RaceCalculator(system, data.trackData);
+  const anySkill = data.skillsByName.get('末脚')![0]!;
+
+  const orderIsOne = (state: ReturnType<RaceCalculator['createState']>) => {
+    const groups = [[new SkillCondition('order', '==', 1)]];
+    return compileConditions(anySkill, groups, state.setting, new RngSet(7, 0), newSkillScratch())(
+      state,
+    );
+  };
+
+  it('出走前は、同着で 1 位に見えても条件を満たさない', () => {
+    const state = calculator.createState(setting('NIGE'), { seed: 7, trial: 0, field: new RecordedField(bundle, 0) });
+    expect(state.beforeStart).toBe(true);
+    // 位置の上では全頭が同じところにいるので、順位そのものは 1 になる。
+    expect(state.order).toBe(1);
+    // それでも条件は満たさない。
+    expect(orderIsOne(state)).toBe(false);
+  });
+
+  it('出走したあとは順位のとおりに判定する', () => {
+    const state = calculator.createState(setting('NIGE'), { seed: 7, trial: 0, field: new RecordedField(bundle, 0) });
+    for (let guard = 0; guard < 600 && state.beforeStart; guard++) updateFrame(state);
+    expect(state.beforeStart).toBe(false);
+    expect(orderIsOne(state)).toBe(state.order === 1);
+  });
+
+  it('フィールドが無ければ、出走前でも本家と同じく満たしている前提になる', () => {
+    const state = calculator.createState(setting('NIGE'), { seed: 7, trial: 0 });
+    expect(state.beforeStart).toBe(true);
+    expect(state.order).toBeNull();
+    expect(orderIsOne(state)).toBe(true);
   });
 });

@@ -285,6 +285,19 @@ export class RaceState {
     return this.paceMakerSource === null ? null : this.paceMakerSource();
   }
 
+  /**
+   * まだ出走していないか。
+   *
+   * スタート直後、全頭が同じ位置にいる間は「自分より前にいる相手」が 0 になり、
+   * 誰から見ても順位が 1 になる。出走の遅れは 0 から 0.1 秒で数フレームだが、
+   * 「序盤に 1 位」のような条件はその数フレームで満たされてしまう。
+   * フィールドがあるとき、この間は順位と距離差の条件を満たさないものとして扱う。
+   * docs/order-field.md 2.4 節と 4.4 節を参照。
+   */
+  get beforeStart(): boolean {
+    return this.simulation.delayTime > 0;
+  }
+
   /** 1 位を 1 とする順位。フィールドが無ければ null。 */
   get order(): number | null {
     if (this.field === null) return null;

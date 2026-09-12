@@ -88,6 +88,13 @@ export class RaceCalculator {
     isVirtualLeader: boolean,
     field: FieldView | null = null,
   ): RaceState {
+    // フィールドがあるときは、自分も束の先頭に対して位置取りする。
+    // 相手は先頭に対して詰めたり離れたりしているので、自分だけ固定区間で
+    // ペースダウンすると隊列から外れ、ゴールで最後方に沈む。
+    // docs/order-field.md 2.3 節と 4.2 節を参照。
+    if (field !== null && setting.positionKeepMode !== 'VIRTUAL') {
+      setting = { ...setting, positionKeepMode: 'VIRTUAL' };
+    }
     const emptyDerived = new DerivedSetting(setting, emptyPassiveBonus(), this.trackData);
     const invokedSkills = invokeSkills(setting, emptyDerived, rng);
 
@@ -122,8 +129,14 @@ export class RaceCalculator {
     simulation.passiveTriggered = passiveBonus.skills.length;
     for (const skill of passiveBonus.skills) simulation.coolDownMap.set(skill.invoke.coolDownId, 0);
 
+    // フィールドがあるときの先頭馬は束から取る。自前の仮想先頭馬は作らない。
     let virtualLeader: RaceState | null = null;
-    if (!isVirtualLeader && setting.positionKeepMode === 'VIRTUAL' && setting.virtualLeader !== undefined) {
+    if (
+      field === null &&
+      !isVirtualLeader &&
+      setting.positionKeepMode === 'VIRTUAL' &&
+      setting.virtualLeader !== undefined
+    ) {
       const leaderSetting: RaceSetting = {
         ...setting,
         uma: setting.virtualLeader,
@@ -134,6 +147,10 @@ export class RaceCalculator {
     }
 
     const state = new RaceState(derived, simulation, this.system, rng, virtualLeader, recordFrames, field);
+    // 位置取りの判定が読む先頭馬。全頭同時の駆動は自分で差し替えるので、ここでは上書きしない。
+    if (field !== null) {
+      state.paceMakerSource = () => field.paceMaker(state.simulation.frameElapsed);
+    }
 
     if (!derived.fixRandom) {
       simulation.startDelay = rng.stream('startDelay').nextDouble() * 0.1;
@@ -334,6 +351,8 @@ function progressRace(state: RaceState): RaceSimulationResult {
 function updateOrderRateContinue(state: RaceState): void {
   const order = state.order;
   if (order === null) return;
+  // 出走前は全頭が同着なので、帯を外れたことにしない（docs/order-field.md 4.4 節）。
+  if (state.beforeStart) return;
   const specialState = state.simulation.specialState;
   const gateCount = state.setting.base.track.gateCount;
   for (const type of ORDER_RATE_CONTINUE_TYPES) {

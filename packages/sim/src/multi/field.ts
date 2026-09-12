@@ -73,6 +73,11 @@ export class LiveField implements FieldView {
   }
 
   /** そのフレームで最も前にいる他頭。位置取りの判定が見る相手になる。 */
+  /** `FieldView` の口。同時に走っているので、フレーム番号は使わない。 */
+  paceMaker(_frameElapsed: number): RaceState | null {
+    return this.leader();
+  }
+
   leader(): RaceState | null {
     let best: RaceState | null = null;
     let bestPosition = Number.NEGATIVE_INFINITY;
