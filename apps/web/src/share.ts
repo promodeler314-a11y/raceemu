@@ -21,6 +21,22 @@ export interface ShareOptions {
   readonly positionKeepRate: number;
 }
 
+/**
+ * 順位条件を判定するときの相手の想定。
+ * `store.ts` の `FieldSetting` と同じ形だが、共有の書式は独立させておく。
+ */
+export interface ShareFieldSetting {
+  readonly matchSelf: boolean;
+  readonly offset: number;
+  readonly sigma: number;
+  readonly redrawComposition: boolean;
+  readonly withSkills: boolean;
+}
+
+export function defaultShareField(): ShareFieldSetting {
+  return { matchSelf: true, offset: 0, sigma: 100, redrawComposition: true, withSkills: true };
+}
+
 export interface ShareState {
   readonly uma: UmaStatus;
   readonly track: TrackRef;
@@ -31,6 +47,7 @@ export interface ShareState {
   readonly debuffCounts: Readonly<Record<string, number>>;
   readonly hintLevels: Readonly<Record<string, number>>;
   readonly useField: boolean;
+  readonly field: ShareFieldSetting;
 }
 
 const STYLES: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
@@ -126,6 +143,12 @@ export function encodeShareState(state: ShareState): string {
       KEEP_MODES.indexOf(state.options.positionKeepMode),
       state.options.positionKeepRate,
       state.useField ? 1 : 0,
+      // 相手の想定は版 2 の途中で足した。足りない項目は読む側が既定で埋める。
+      state.field.offset,
+      state.field.sigma,
+      (state.field.matchSelf ? 1 : 0) |
+        (state.field.redrawComposition ? 2 : 0) |
+        (state.field.withSkills ? 4 : 0),
     ].join(','),
     encodeCounts(state.debuffCounts),
     encodeCounts(state.hintLevels),
@@ -184,6 +207,16 @@ export function decodeShareState(encoded: string): ShareState | null {
       debuffCounts: decodeCounts(parts[6]),
       hintLevels: decodeCounts(parts[7]),
       useField: option[4] === 1,
+      field:
+        option[7] === undefined || !Number.isFinite(option[7])
+          ? defaultShareField()
+          : {
+              offset: Number.isFinite(option[5]) ? option[5]! : 0,
+              sigma: Number.isFinite(option[6]) ? option[6]! : 100,
+              matchSelf: (option[7]! & 1) !== 0,
+              redrawComposition: (option[7]! & 2) !== 0,
+              withSkills: (option[7]! & 4) !== 0,
+            },
     };
   } catch {
     return null;

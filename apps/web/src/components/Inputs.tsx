@@ -743,6 +743,94 @@ export function OptionsInput() {
   );
 }
 
+/**
+ * 順位条件を判定するときの相手の想定。
+ *
+ * 相手の強さは順位条件つきスキルの評価をそのまま左右する入力である。
+ * 既定を自分から独立に固定しておくと、強い自分は最初から最後まで先頭に
+ * いることになり、後方寄りの条件が全部 0 % になる。
+ * docs/order-field.md 2.1 節と 4.3 節を参照。
+ */
+export function OpponentInput() {
+  const field = useStore((s) => s.field);
+  const setField = useStore((s) => s.setField);
+  const useField = useStore((s) => s.useField);
+  const gateCount = useStore((s) => s.track.gateCount);
+
+  // 「自分と同じ」「−100」「+100」の 3 段。数値の直接入力も残す。
+  const levels: readonly { readonly label: string; readonly offset: number }[] = [
+    { label: '自分と同じ', offset: 0 },
+    { label: '−100', offset: -100 },
+    { label: '+100', offset: 100 },
+  ];
+
+  return (
+    <Panel title="相手の想定" variant="plain">
+      {!useField && (
+        <p className="text-xs text-ink3">
+          順位条件を判定していないので、ここの設定は結果に効かない。実行バーの
+          「順位条件を判定する」を入れると効く。
+        </p>
+      )}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="相手の強さ">
+          <select
+            className={fieldCls}
+            value={field.matchSelf ? String(field.offset) : 'fixed'}
+            onChange={(e) => {
+              const value = e.target.value;
+              if (value === 'fixed') setField({ matchSelf: false, offset: 0 });
+              else setField({ matchSelf: true, offset: Number(value) });
+            }}
+          >
+            {levels.map((level) => (
+              <option key={level.offset} value={String(level.offset)}>
+                {level.label}
+              </option>
+            ))}
+            <option value="fixed">固定（1100-900-900-600-900）</option>
+          </select>
+        </Field>
+        <Field label="ばらつき（標準偏差）">
+          <input
+            type="number"
+            className={fieldCls}
+            value={field.sigma}
+            min={0}
+            max={400}
+            step={10}
+            onChange={(e) => setField({ sigma: Math.max(0, Number(e.target.value)) })}
+          />
+        </Field>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        <label className="flex items-center gap-1.5 text-xs text-ink2">
+          <input
+            type="checkbox"
+            checked={field.redrawComposition}
+            onChange={(e) => setField({ redrawComposition: e.target.checked })}
+          />
+          脚質構成を引き直す
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-ink2">
+          <input
+            type="checkbox"
+            checked={field.withSkills}
+            onChange={(e) => setField({ withSkills: e.target.checked })}
+          />
+          相手にスキルを持たせる
+        </label>
+      </div>
+      <p className="text-xs text-ink3">
+        相手 {gateCount - 1} 頭を一緒に走らせて位置を記録し、その束に対して順位を判定する。
+        引き直しを入れると、束の 1 本ごとに脚質構成・強さ・やる気・スキルが変わる。
+        相手を固定して引き直しを切ると、順位が塊の境目にしか出ず、3 位以内や 6 位以降の
+        条件が 0 % になる。
+      </p>
+    </Panel>
+  );
+}
+
 export function RunPanel() {
   const { count, seed, running, progress, setCount, setSeed, run, cancel, useField, setUseField } =
     useStore();
@@ -816,7 +904,12 @@ export function RunPanel() {
         </span>
       )}
       <label className="flex items-center gap-1.5 text-xs text-ink2">
-        <input type="checkbox" checked={useField} onChange={(e) => setUseField(e.target.checked)} />
+        <input
+          type="checkbox"
+          data-testid="use-field"
+          checked={useField}
+          onChange={(e) => setUseField(e.target.checked)}
+        />
         順位条件を判定する
         <span className="text-ink3">（相手 {gateCount - 1} 頭）</span>
       </label>

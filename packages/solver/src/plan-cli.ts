@@ -2,6 +2,7 @@
  * 育成計画の時点での組み合わせ探索。
  *   pnpm plan [--chara 育成ウマ娘名] [--cards 名前,名前,...] [--budget 600] [--style SEN]
  *             [--season 1] [--weather 1] [--time 1]
+ *             [--opponent -100|0|100] [--selfconsistent on]
  *
  * 季節と天候と時刻は 0 で指定なしになり、本家と同じく条件が無視される。
  *
@@ -48,6 +49,10 @@ const budget = Number(arg('budget', '600'));
 const stamina = Number(arg('stamina', '1000'));
 const style = arg('style', 'SEN') as 'NIGE' | 'SEN' | 'SASI' | 'OI';
 const useField = arg('field', 'on') !== 'off';
+/** 自己整合。相手にも同じ構成を配って測り直す（docs/order-field.md 4.6 節）。 */
+const selfConsistent = arg('selfconsistent', 'off') === 'on';
+/** 相手の強さを上下させる。幅を見るときに振る（4.5 節）。 */
+const opponentOffset = Number(arg('opponent', '0'));
 const charaQuery = arg('chara', 'スペシャルウィーク');
 const cardQuery = arg('cards', '');
 
@@ -101,7 +106,7 @@ const routeLabel: Record<Route, string> = {
 };
 
 const label = (value: number, names: readonly string[]) => (value ? (names[value - 1] ?? String(value)) : '指定なし');
-console.log(`東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'}`);
+console.log(`東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'} / 相手 ${opponentOffset >= 0 ? '+' : ''}${opponentOffset} / 自己整合 ${selfConsistent ? 'あり' : 'なし'}`);
 console.log(
   `季節 ${label(season, ['春', '夏', '秋', '冬'])} / 天候 ${label(weather, ['晴', '曇', '雨', '雪'])} / ` +
     `時刻 ${time === 4 ? 'ナイター' : label(time, ['昼'])}`,
@@ -134,13 +139,21 @@ const cost = createCostModel(skillsById, { hintLevels: plan.hintLevels });
 const context: OptimizeContext = {
   pool, system, cost, seed: 20260911,
   base: toSerializable({ ...setting, skills: alwaysSkills }),
-  field: useField ? { profile: defaultFieldProfile(9), track, seed: 9001, samples: 64 } : null,
+  field: useField
+    ? {
+        profile: { ...defaultFieldProfile(9), offset: opponentOffset },
+        track,
+        seed: 9001,
+        samples: 64,
+      }
+    : null,
 };
 const name = (id: string) => skillsById.get(id)?.name ?? id;
 
 const result = await optimizeSkills(context, {
   candidates: plan.skillIds,
   budget,
+  selfConsistent,
   onProgress: (m) => console.log('  ' + m),
 });
 

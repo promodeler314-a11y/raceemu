@@ -1,6 +1,7 @@
 /**
  * 組み合わせ探索の実行と実測。
  *   pnpm optimize [--budget 600] [--style SEN] [--stamina 1000]
+ *                 [--opponent -100|0|100] [--selfconsistent on]
  */
 import { loadGameData } from '../../data/src/node.ts';
 import { defaultFieldProfile } from '../../sim/src/field/field.ts';
@@ -23,6 +24,10 @@ const budget = Number(arg('budget', '600'));
 const stamina = Number(arg('stamina', '1000'));
 const style = arg('style', 'SEN') as 'NIGE' | 'SEN' | 'SASI' | 'OI';
 const useField = arg('field', 'on') !== 'off';
+/** 自己整合。相手にも同じ構成を配って測り直す（docs/order-field.md 4.6 節）。 */
+const selfConsistent = arg('selfconsistent', 'off') === 'on';
+/** 相手の強さを上下させる。幅を見るときに振る（4.5 節）。 */
+const opponentOffset = Number(arg('opponent', '0'));
 
 // 順位条件を持つものと持たないものを混ぜる。
 // 順位条件つきのスキルは、フィールドの有無で評価が変わるはずである。
@@ -54,11 +59,18 @@ const cost = createCostModel(data.skillsById);
 const context: OptimizeContext = {
   pool, system, cost, seed: 20260904,
   base: toSerializable({ ...setting, skills: [] }),
-  field: useField ? { profile: defaultFieldProfile(9), track, seed: 9001, samples: 64 } : null,
+  field: useField
+    ? {
+        profile: { ...defaultFieldProfile(9), offset: opponentOffset },
+        track,
+        seed: 9001,
+        samples: 64,
+      }
+    : null,
 };
 const name = (id: string) => data.skillsById.get(id)?.name ?? id;
 
-console.log(`東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'}`);
+console.log(`東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'} / 相手 ${opponentOffset >= 0 ? '+' : ''}${opponentOffset} / 自己整合 ${selfConsistent ? 'あり' : 'なし'}`);
 console.log(`候補 ${candidates.length} 個: ` + candidates.map((s) => `${s.name}(${s.sp})`).join(', '));
 console.log('');
 
@@ -82,6 +94,7 @@ console.log('');
 const result = await optimizeSkills(context, {
   candidates: candidates.map((s) => s.id),
   budget,
+  selfConsistent,
   onProgress: (m) => console.log('  ' + m),
 });
 

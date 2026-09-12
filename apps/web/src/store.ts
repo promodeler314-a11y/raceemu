@@ -23,6 +23,7 @@ import {
 } from '../../../packages/sim/src/setting.ts';
 import { summarize, type SimulationSummary } from '../../../packages/sim/src/summary.ts';
 import { buildFieldBundle, defaultFieldProfile } from '../../../packages/sim/src/field/field.ts';
+import { opponentSkillPool } from '../../../packages/sim/src/field/opponent-skills.ts';
 import { OrderTally, type OrderSummary } from '../../../packages/sim/src/multi/summary.ts';
 import type { Style } from '../../../packages/sim/src/data/constants.ts';
 import { resolveMethod } from '../../../packages/solver/src/critical.ts';
@@ -97,6 +98,45 @@ function getPool(): WorkerPool {
   return pool;
 }
 
+/**
+ * 順位条件を判定するときの相手の想定。
+ *
+ * 束は 1 つの相手ではなく相手の分布である。ここが順位条件つきスキルの
+ * 評価をそのまま左右する入力なので、既定を固定したままにはできない。
+ * docs/order-field.md 4.3 節を参照。
+ */
+export interface FieldSetting {
+  /** 相手を自分と同格にする。切ると 1100-900-900-600-900 の固定になる。 */
+  readonly matchSelf: boolean;
+  /** 基準に一律で足す値。相手の強さを上下させる。 */
+  readonly offset: number;
+  /** ステータスに乗せるばらつきの標準偏差。0 で全頭が同じになる。 */
+  readonly sigma: number;
+  /** 脚質構成を束の 1 本ごとに引き直す。切ると 1 通りに固定される。 */
+  readonly redrawComposition: boolean;
+  /** 相手に典型スキルを持たせる。 */
+  readonly withSkills: boolean;
+}
+
+/**
+ * 相手の強さを振ったときの発動率の幅。
+ *
+ * 相手の分布を変えれば発動率は動く。1 つの数字だけを出すと、その数字が
+ * 相手の想定に依ることが見えない。docs/order-field.md 4.5 節を参照。
+ */
+export interface TriggerBand {
+  /** 相手を 100 弱くしたとき */
+  readonly weaker: number;
+  /** いまの想定 */
+  readonly base: number;
+  /** 相手を 100 強くしたとき */
+  readonly stronger: number;
+}
+
+export function defaultFieldSetting(): FieldSetting {
+  return { matchSelf: true, offset: 0, sigma: 100, redrawComposition: true, withSkills: true };
+}
+
 /** 保存する設定。結果は含めない。 */
 export interface PersistedSettings {
   readonly uma: UmaStatus;
@@ -108,6 +148,7 @@ export interface PersistedSettings {
   readonly debuffCounts: Readonly<Record<string, number>>;
   readonly hintLevels: Readonly<Record<string, number>>;
   readonly useField: boolean;
+  readonly field?: FieldSetting;
   readonly plan?: PlanSetting;
 }
 
@@ -277,6 +318,13 @@ interface AppState {
   inverseResult: InverseResult | null;
   /** 順位条件を実際に判定するか。false なら本家と同じく満たしている前提。 */
   useField: boolean;
+  /** 順位条件を判定するときの相手の想定 */
+  field: FieldSetting;
+  /** 相手の強さを振ったときの発動率の幅。測る前は null。 */
+  band: Record<string, TriggerBand> | null;
+  bandRunning: boolean;
+  /** 探索の途中で、いま評価している構成を相手にも配るか。 */
+  optimizeSelfConsistent: boolean;
   /**
    * 所要時間の実測。条件ごとに最大 2 点を持つ（`paceKey` が鍵を作る）。
    * 2 点あると固定の費用と 1 試行あたりの費用を分けて出せる。
@@ -319,6 +367,10 @@ interface AppState {
   applyTransfer: (parsed: ParsedTransfer) => void;
   setCount: (count: number) => void;
   setUseField: (useField: boolean) => void;
+  setField: (patch: Partial<FieldSetting>) => void;
+  /** 相手の強さを −100、0、+100 で走らせ、発動率の幅を測る。 */
+  runBand: () => Promise<void>;
+  setOptimizeSelfConsistent: (value: boolean) => void;
   setSeed: (seed: number) => void;
   setOptions: (patch: Partial<RunOptions>) => void;
   setDebuffCount: (id: string, count: number) => void;
@@ -468,6 +520,10 @@ export const useStore = create<AppState>((set, get) => ({
    * M6 のレポート 7 節が既定にすべきと書いていたもので、実装が追いついた。
    */
   useField: true,
+  field: defaultFieldSetting(),
+  band: null,
+  bandRunning: false,
+  optimizeSelfConsistent: false,
   pace: {},
   options: defaultRunOptions(),
   debuffCounts: {},
@@ -520,6 +576,54 @@ export const useStore = create<AppState>((set, get) => ({
     }),
   setCount: (count) => set({ count }),
   setUseField: (useField) => set({ useField }),
+  setField: (patch) => set((s) => ({ field: { ...s.field, ...patch }, band: null })),
+  setOptimizeSelfConsistent: (optimizeSelfConsistent) => set({ optimizeSelfConsistent }),
+
+  runBand: async () => {
+    const state = get();
+    if (state.running || state.bandRunning) return;
+    const spec = fieldSpec(state);
+    if (spec === null) {
+      set({ notice: '順位条件を判定していないので、相手の強さを振っても発動率は動きません。' });
+      return;
+    }
+    controller = new AbortController();
+    set({ bandRunning: true, error: null });
+    try {
+      const setting = buildSetting(state);
+      const serializable = toSerializable(setting);
+      // 3 通りぶん余計に走るので、試行数は本体より落とす。
+      // 見たいのは幅であって、小数第 1 位まで合わせる必要は無い。
+      const count = Math.max(100, Math.min(state.count, 2000));
+      const rates = await Promise.all(
+        [-100, 0, 100].map(async (offset) => {
+          const { skillStats, results } = await getPool().run(serializable, system, {
+            count,
+            seed: state.seed,
+            signal: controller?.signal,
+            field: { ...spec, profile: { ...spec.profile, offset: spec.profile.offset + offset } },
+          });
+          const summaries = toSkillSummaries(serializable.skillIds, skillStats, results.length);
+          return new Map(summaries.map((summary) => [summary.skillId, summary.triggerRate]));
+        }),
+      );
+      const band: Record<string, TriggerBand> = {};
+      for (const id of serializable.skillIds) {
+        band[id] = {
+          weaker: rates[0]!.get(id) ?? 0,
+          base: rates[1]!.get(id) ?? 0,
+          stronger: rates[2]!.get(id) ?? 0,
+        };
+      }
+      set({ band });
+    } catch (error) {
+      if (!(error instanceof SimulationCancelled)) {
+        set({ error: error instanceof Error ? error.message : String(error) });
+      }
+    } finally {
+      set({ bandRunning: false });
+    }
+  },
   setSeed: (seed) => set({ seed }),
   setOpponent: (id, patch) =>
     set((s) => ({
@@ -660,7 +764,7 @@ export const useStore = create<AppState>((set, get) => ({
     const state = get();
     if (state.running) return;
     controller = new AbortController();
-    set({ running: true, progress: 0, error: null, detail: null, skillSummaries: [] });
+    set({ running: true, progress: 0, error: null, detail: null, skillSummaries: [], band: null });
     const started = performance.now();
     try {
       const setting = buildSetting(state);
@@ -885,6 +989,7 @@ export const useStore = create<AppState>((set, get) => ({
         {
           candidates,
           budget: state.optimizeBudget,
+          selfConsistent: state.optimizeSelfConsistent,
           signal: controller.signal,
           onProgress: (message) => set((s) => ({ optimizeLog: [...s.optimizeLog, message] })),
         },
@@ -912,6 +1017,7 @@ export const useStore = create<AppState>((set, get) => ({
       debuffCounts: state.debuffCounts,
       hintLevels: state.hintLevels,
       useField: state.useField,
+      field: state.field,
     });
     return `${location.origin}${location.pathname}#s=${encoded}`;
   },
@@ -936,7 +1042,8 @@ export const useStore = create<AppState>((set, get) => ({
         debuffCounts: { ...settings.debuffCounts },
         hintLevels: { ...settings.hintLevels },
         useField: settings.useField,
-        // 育成計画は後から足した項目なので、古い保存には入っていない。
+        // 相手の想定と育成計画は後から足した項目なので、古い保存には入っていない。
+        field: { ...defaultFieldSetting(), ...settings.field },
         plan: { ...DEFAULT_PLAN, ...settings.plan },
       });
     }
@@ -973,6 +1080,7 @@ export const useStore = create<AppState>((set, get) => ({
       debuffCounts: { ...shared.debuffCounts },
       hintLevels: { ...shared.hintLevels },
       useField: shared.useField,
+      field: { ...defaultFieldSetting(), ...shared.field },
     });
     return true;
   },
@@ -1001,8 +1109,19 @@ export function defaultOpponents(gateCount: number): Opponent[] {
 /** 順位条件を判定するときの相手の想定。頭数は 9 と 12 だけを扱う。 */
 function fieldSpec(state: AppState) {
   if (!state.useField) return null;
+  const base = defaultFieldProfile(state.track.gateCount);
+  const field = state.field;
   return {
-    profile: defaultFieldProfile(state.track.gateCount),
+    profile: {
+      ...base,
+      matchSelf: field.matchSelf,
+      offset: field.offset,
+      sigma: field.sigma,
+      // やる気はステータスのばらつきと一緒に扱う。片方だけ固定する意味が無い。
+      drawCondition: field.sigma > 0,
+      redrawComposition: field.redrawComposition,
+      withSkills: field.withSkills,
+    },
     track: state.track,
     seed: 9001,
     samples: 64,
@@ -1164,11 +1283,14 @@ let detailField: ReturnType<typeof buildFieldBundle> | null = null;
 function getDetailField(state: AppState) {
   const spec = fieldSpec(state);
   if (spec === null) return null;
-  const key = JSON.stringify(spec);
+  // 相手を自分と同格にするときは束が自分のステータスに依るので、鍵に混ぜる。
+  const key = JSON.stringify([spec, spec.profile.matchSelf ? state.uma : null]);
   if (key !== detailFieldKey) {
     detailField = buildFieldBundle(spec.profile, spec.track, system, gameData.trackData, {
       samples: spec.samples,
       seed: spec.seed,
+      self: state.uma,
+      skillPool: opponentSkillPool(gameData.skillsById),
     });
     detailFieldKey = key;
   }
@@ -1223,6 +1345,7 @@ function settingsOf(state: AppState): PersistedSettings {
     debuffCounts: state.debuffCounts,
     hintLevels: state.hintLevels,
     useField: state.useField,
+    field: state.field,
     plan: state.plan,
   };
 }
@@ -1237,6 +1360,7 @@ const SETTING_KEYS = [
   'debuffCounts',
   'hintLevels',
   'useField',
+  'field',
   'plan',
 ] as const;
 

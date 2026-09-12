@@ -81,11 +81,7 @@ const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
   console.log('| --- | ---: | ---: | ---: | ---: |');
   for (const speed of [900, 1000, 1100, 1200, 1300, 1400]) {
     const profile = defaultFieldProfile(9);
-    const opponents = opponentSettings(
-      { ...profile, uma: { ...profile.uma, speed } },
-      track,
-      [],
-    );
+    const opponents = opponentSettings({ ...profile, uma: { ...profile.uma, speed } }, track);
     const entries: MultiEntry[] = [{ setting: base('SEN') }, ...opponents.map((setting) => ({ setting }))];
     const tally = new OrderTally(entries.length);
     for (let t = 0; t < trials; t++) tally.add(runMultiRace(calculator, entries, { seed: 4649, trial: t }));
@@ -145,7 +141,7 @@ const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
   const skill = data.skillsByName.get('円弧のマエストロ')?.[0];
   if (skill !== undefined) {
     const profile = defaultFieldProfile(9);
-    const opponents = opponentSettings(profile, track, []).map((setting) => ({ setting }));
+    const opponents = opponentSettings(profile, track).map((setting) => ({ setting }));
     const run = (skills: typeof skill[]) => {
       const entries: MultiEntry[] = [{ setting: { ...base('SEN'), skills } }, ...opponents];
       const times: number[] = [];

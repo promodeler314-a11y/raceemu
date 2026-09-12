@@ -1,5 +1,12 @@
 import { useEffect } from 'react';
-import { CourseInput, OptionsInput, RunPanel, SkillInput, UmaInput } from './components/Inputs.tsx';
+import {
+  CourseInput,
+  OpponentInput,
+  OptionsInput,
+  RunPanel,
+  SkillInput,
+  UmaInput,
+} from './components/Inputs.tsx';
 import { SummaryOutput } from './components/Summary.tsx';
 import { FrameCharts } from './components/Charts.tsx';
 import { CompareOutput } from './components/Compare.tsx';
@@ -57,6 +64,7 @@ export default function App() {
             <StatusImportPanel />
             <TransferPanel />
             <OptionsInput />
+            <OpponentInput />
           </section>
         ) : (
           <SettingsRail />

@@ -21,6 +21,8 @@ export function OptimizePanel() {
   const result = useStore((s) => s.optimizeResult);
   const useField = useStore((s) => s.useField);
   const setUseField = useStore((s) => s.setUseField);
+  const selfConsistent = useStore((s) => s.optimizeSelfConsistent);
+  const setSelfConsistent = useStore((s) => s.setOptimizeSelfConsistent);
   const hintLevels = useStore((s) => s.hintLevels);
 
   const plan = useStore((s) => s.plan);
@@ -105,6 +107,21 @@ export function OptimizePanel() {
           disabled={running || busy}
         />
         順位条件を判定する
+      </label>
+      {/*
+        自己整合。自分だけがスキルを積むと、相手は置いていかれるだけになり、
+        前寄りの条件が過大に評価される。束を作り直すぶん時間が倍近くかかるので、
+        既定では切ってある。docs/order-field.md 4.6 節を参照。
+      */}
+      <label className="mt-1 flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={selfConsistent}
+          onChange={(e) => setSelfConsistent(e.target.checked)}
+          disabled={running || busy || !useField}
+        />
+        相手にも同じ構成を配る（自己整合）
+        <span className="text-xs text-ink3">初期解が決まった時点で相手の 3 割に配り、測り直す</span>
       </label>
       {!useField && (
         <p className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink">

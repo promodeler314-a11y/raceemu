@@ -187,15 +187,20 @@ const runOnce = async () => {
   return row === undefined ? NaN : Number.parseFloat(row[1]);
 };
 // 既定で入っているので、まず外して「順位を無視した」側を測る。
-await page.uncheck('input[type=checkbox]');
+// 名前で引く。面に他の切り替えが増えたときに、先頭の 1 つを掴んで取り違えないようにする。
+await page.uncheck('[data-testid=use-field]');
 const withoutField = await runOnce();
-await page.check('input[type=checkbox]');
+await page.check('[data-testid=use-field]');
 const withField = await runOnce();
 console.log(`--- 逃げ + 真骨頂（後方寄り条件）の発動率: 順位無視 ${withoutField}% → フィールドあり ${withField}%`);
 if (!(withoutField > 80)) fail('順位を無視したときの発動率が低すぎる');
-if (!(withField < 10)) fail('フィールドを入れても発動率が落ちていない');
+// 相手を自分と同格にして束ごとに引き直すようになってから、逃げでも後ろに沈む
+// 試行が出るので、判定しても 0 にはならない。はっきり落ちるところまでを見る。
+// docs/order-field.md 4.3 節。
+if (!(withField < withoutField / 2)) fail('フィールドを入れても発動率が落ちていない');
+if (!(withField < 40)) fail('フィールドを入れても発動率が落ちていない');
 // 以降の節はフィールド無しの速さで書いてあるので、外したままにする。
-await page.uncheck('input[type=checkbox]');
+await page.uncheck('[data-testid=use-field]');
 await goTab('設定');
 await page.click('button[aria-label="真骨頂 を外す"]');
 

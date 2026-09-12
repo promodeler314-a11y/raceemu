@@ -1,6 +1,6 @@
 /**
  * 順位条件の判定が、相手の作り方でどう変わるかの実測。
- *   pnpm order-field [--trials 200] [--exp all|base|skills|together|mismatch|redraw|live] [--level weak|strong|both] [--skipstart]
+ *   pnpm order-field [--trials 200] [--exp all|base|skills|together|redraw|live] [--level weak|strong|both] [--skipstart]
  *
  * 脚質ごとに、代表的な順位条件が各フェーズで「1 フレームでも満たされた」試行の割合と、
  * 中盤末・終盤末・ゴールでの順位分布を出す。docs/order-field.md を参照。
@@ -14,11 +14,14 @@ import type { SkillData } from '../skill/types.ts';
 import type { RaceState } from '../state.ts';
 import {
   RecordedField,
+  buildFieldBundle,
   defaultFieldProfile,
+  fixedFieldProfile,
   opponentSettings,
   type FieldBundle,
   type FieldSample,
 } from './field.ts';
+import { opponentSkillPool } from './opponent-skills.ts';
 
 function arg(name: string, fallback: string): string {
   const i = process.argv.indexOf(`--${name}`);
@@ -120,7 +123,13 @@ function traceOf(frames: readonly { startPosition: number }[], sample: FieldSamp
   return { orders, positions };
 }
 
-/** 自分は従来どおり（固定区間でペースダウンする近似）で走る */
+/**
+ * 束を渡してそのまま走らせる。
+ *
+ * 以前は自分が `APPROXIMATE` のまま走る形だったが、フィールドがあるときは
+ * calculator が `VIRTUAL` に切り替えるようになった（docs/order-field.md 4.2 節）。
+ * いまここで A と C を分けているのは、相手を独立に走らせるか一緒に走らせるかだけである。
+ */
 function runAlone(self: UmaStatus, bundle: FieldBundle, selfSkills: readonly SkillData[]): Trace[] {
   const traces: Trace[] = [];
   for (let t = 0; t < trials; t++) {
@@ -284,14 +293,16 @@ const levels: Record<string, readonly number[]> = {
   strong: [1400, 1100, 1100, 900, 1100],
 };
 const profile = defaultFieldProfile(track.gateCount);
+/** A の相手。引き直さず、1100-900-900-600-900 で同一。 */
+const fixed = fixedFieldProfile(track.gateCount);
 const lineup: Style[] = [];
-for (const st of styles) for (let i = 0; i < profile.counts[st]; i++) lineup.push(st);
+for (const st of styles) for (let i = 0; i < fixed.counts[st]; i++) lineup.push(st);
 console.log(`${data.trackData[track.location]!.name} ${data.trackData[track.location]!.courses[track.course]!.name} / ${track.gateCount} 頭 / ${trials} 試行`);
 console.log(`相手の脚質構成（既定）: ${lineup.map((s) => label[s]).join(' ')}`);
 console.log(`相手のスキル: ${genericSkills.map((s) => s.name).join(', ')} ＋ 脚質ごとのもの`);
 if (skipStart) console.log('出走前のフレームは判定から外している');
 
-const enabled = (name: string) => (which === 'all' ? name !== 'mismatch' : which === name);
+const enabled = (name: string) => which === 'all' || which === name;
 
 for (const [level, stats] of Object.entries(levels)) {
   if (levelArg !== 'both' && levelArg !== level) continue;
@@ -301,7 +312,7 @@ for (const [level, stats] of Object.entries(levels)) {
     const head = `自分=${label[style]} ${stats.join('-')}`;
 
     if (enabled('base')) {
-      const bundle = buildAlone(opponentSettings(profile, track, []), SEED);
+      const bundle = buildAlone(opponentSettings(fixed, track), SEED);
       report(`【A 既定】相手は 1100-900-900-600-900 で同一、スキル無し、1 頭ずつ独立に走らせる / ${head}`, runAlone(self, bundle, selfSkills));
     }
     const sameLevel = lineup.map((st, i) => settingOf(jitterUma(umaOf(st, stats), i, 80), [...genericSkills, ...styleSkills[st].slice(0, 3)]));
@@ -313,40 +324,19 @@ for (const [level, stats] of Object.entries(levels)) {
       const bundle = buildTogether(() => sameLevel, SEED);
       report(`【C 一緒に走らせる】B の相手を一緒に走らせ、自分も先頭に対して位置取りする / ${head}`, runPaced(self, bundle, () => lineup, selfSkills));
     }
-    if (enabled('mismatch')) {
-      // 相手は一緒に走らせた束、自分は従来どおり固定区間でペースダウンするだけ。位置取りの規則が食い違うとどうなるか。
-      const bundle = buildTogether(() => sameLevel, SEED);
-      report(`【C' 食い違い】B の相手を一緒に走らせた束に、自分は従来どおり（APPROXIMATE）で走る / ${head}`, runAlone(self, bundle, selfSkills));
-    }
     if (enabled('redraw')) {
-      // 束の 1 本ごとに、脚質構成・強さ・やる気・スキルを引き直す
-      const compositions: readonly (readonly number[])[] = [
-        [2, 3, 3, 0], [1, 3, 3, 1], [2, 2, 3, 1], [3, 3, 2, 0], [1, 4, 2, 1], [2, 3, 2, 1], [2, 2, 2, 2], [1, 2, 3, 2],
-      ];
-      const stylesPer: Style[][] = [];
-      const settingsOf = (sample: number): RaceSetting[] => {
-        const comp = compositions[sample % compositions.length]!;
-        const settings: RaceSetting[] = [];
-        const sty: Style[] = [];
-        let idx = 0;
-        styles.forEach((st, k) => {
-          for (let i = 0; i < comp[k]!; i++, idx++) {
-            const key = sample * 16 + idx;
-            const uma = jitterUma(umaOf(st, stats), key, 120);
-            const condition = (['BEST', 'GOOD', 'NORMAL'] as const)[Math.abs(jitter(key, 9, 100)) % 3]!;
-            const pool = [...genericSkills, ...styleSkills[st]];
-            const n = 5 + (Math.abs(jitter(key, 7, 100)) % 4);
-            const start = Math.abs(jitter(key, 8, 100)) % pool.length;
-            const skills = Array.from({ length: n }, (_, j) => pool[(start + j) % pool.length]!);
-            settings.push(settingOf({ ...uma, condition }, skills, 'VIRTUAL'));
-            sty.push(st);
-          }
-        });
-        stylesPer[sample] = sty;
-        return settings;
-      };
-      const bundle = buildTogether(settingsOf, SEED);
-      report(`【D 引き直し】束ごとに構成・強さ・やる気・スキルを引き直して一緒に走らせ、自分も位置取りする / ${head}`, runPaced(self, bundle, (i) => stylesPer[i]!, selfSkills));
+      // 実装そのもの。束の 1 本ごとに構成・強さ・やる気・スキルを引き直す。
+      // ここを field.ts の buildFieldBundle に通すことで、D と実装が同じものであることを保つ。
+      const bundle = buildFieldBundle(profile, track, system, data.trackData, {
+        samples: SAMPLES,
+        seed: SEED,
+        self,
+        skillPool: opponentSkillPool(data.skillsById),
+      });
+      report(
+        `【D 引き直し】束ごとに構成・強さ・やる気・スキルを引き直して一緒に走らせ、自分も位置取りする / ${head}`,
+        runPaced(self, bundle, (i) => bundle.samples[i]!.styles, selfSkills),
+      );
     }
     if (enabled('live')) {
       const opponents = sameLevel.map((s) => ({ ...s, positionKeepMode: 'VIRTUAL' as const }));
