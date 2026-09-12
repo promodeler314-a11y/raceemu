@@ -28,3 +28,24 @@ export function standardError(values: readonly number[]): number {
   const variance = values.reduce((a, b) => a + (b - mean) ** 2, 0) / (n - 1);
   return Math.sqrt(variance / n);
 }
+
+/**
+ * 所要時間を人が読める形にする。実行前の見積もりと、実測の表示に使う。
+ *
+ * 見積もりに秒の小数は要らない。1 分を超えたら分を主にする。
+ * 1 時間を超える設定も作れるので、そこまで面倒を見る。
+ */
+export function formatDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 0) return '–';
+  const seconds = Math.round(ms / 1000);
+  if (seconds < 1) return '1 秒未満';
+  if (seconds < 60) return `${seconds} 秒`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    const rest = seconds % 60;
+    return rest === 0 ? `${minutes} 分` : `${minutes} 分 ${rest} 秒`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const restMinutes = minutes % 60;
+  return restMinutes === 0 ? `${hours} 時間` : `${hours} 時間 ${restMinutes} 分`;
+}

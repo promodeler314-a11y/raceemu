@@ -13,7 +13,7 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 ```
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
-pnpm test                      # vitest run。21 ファイル 175 件
+pnpm test                      # vitest run。24 ファイル 201 件
 pnpm test packages/sim/test/plan.test.ts    # ファイルを絞る
 pnpm exec vitest run packages/sim/test/optimize.test.ts -t '予算を超える構成は返さない'  # テスト名で絞る
 pnpm dev                       # UI の開発サーバ
@@ -31,7 +31,7 @@ pnpm bench --count 10000       # 並列実行の実測
 pnpm monotonicity --trials 60  # 逆算の前提（単調性）の検査
 pnpm optimize --budget 600 --style SEN
 pnpm plan --chara スペシャルウィーク --budget 600
-pnpm multi --trials 500        # 全頭同時
+pnpm run multi --trials 500    # 全頭同時（multi は pnpm の下位コマンドと衝突するので run を挟む）
 pnpm order-field --trials 200  # 順位条件の判定が相手の作り方でどう変わるか
 ```
 
@@ -42,10 +42,12 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 
 ### テストの前提
 
-175 件のうち 11 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
+201 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
 
-- 読み取りの 5 件：`.tessdata/jpn.traineddata`（`pnpm fetch-tessdata`）が必要。
+- 読み取りの 7 件：`.tessdata/jpn.traineddata`（`pnpm fetch-tessdata`）が必要。
 - ステータス読み取りの 6 件：`RACEEMU_REAL_SCREENSHOT_DIR` に実機の写真を置いた場所を指す。写真はゲームの著作物なのでリポジトリに無い。
+
+`pnpm e2e` はブラウザ本体が要る。手元に無ければ `pnpm exec playwright install chromium` で入れる。
 
 テストは実際にレースを回すので 1 件で数十秒かかる。`vitest.config.ts` が `testTimeout` を 120 秒に上げているのはそのためで、既定の 5 秒には戻せない。
 
@@ -104,6 +106,13 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 
 `src/store.ts` が Zustand の単一ストアで、設定の保持だけでなく Worker の駆動も持つ（1000 行超。ここが事実上のアプリ本体）。
 設定とスナップショットは IndexedDB（`persist.ts`）、共有は URL ハッシュ（`share.ts`）。サポートカードと育成ウマ娘のデータは数百 KB あるので、育成計画に切り替えたときに動的 import で取る。
+
+**`useStore` のセレクタの中でオブジェクトを組み立てないこと。** 毎回新しい参照が返り、
+zustand が変化と見て描画が止まらなくなる（React error #185、画面は「表示できませんでした」になる）。
+値は個別に選び、組み立ては `useMemo` で行う。型検査では捕まらず、`pnpm e2e` が捕まえる。
+
+`transfer.ts` が本家との設定の受け渡し（1 行の文字列）を持つ。固有は名前が継承版と同じなので、
+書き出しから外してキャラ名のほうに運ばせている。
 
 `vite.config.ts` の自作プラグインが `skills.json` から未使用の項目を落とす。`assets/skills.json` 自体は本家のデータなので触らない。削った効果が黙って戻らないよう、`pnpm e2e` がバンドルの大きさに上限を置いている。
 

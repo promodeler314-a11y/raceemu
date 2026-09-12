@@ -25,8 +25,12 @@ const server = createServer(async (req, res) => {
     return;
   }
   try {
-    const path = normalize(decodeURIComponent(new URL(req.url, 'http://x').pathname));
-    const file = join(root, path === '/' ? 'index.html' : path);
+    // normalize は Windows で区切りを '\' に変えるため、既定のページに落とす判定は
+    // 変換前の URL で行う。これを normalize 後の値で見ると、'/' が '\' になって
+    // 一致せず、配信の根をそのまま readFile することになる（Windows で 404 になる）。
+    const requested = decodeURIComponent(new URL(req.url, 'http://x').pathname);
+    const path = normalize(requested);
+    const file = join(root, requested === '/' ? 'index.html' : path);
     const body = await readFile(file);
     res.writeHead(200, { 'content-type': types[extname(file)] ?? 'application/octet-stream' });
     res.end(body);
@@ -182,12 +186,15 @@ const runOnce = async () => {
   const row = rows.find((r) => r[0] === '真骨頂');
   return row === undefined ? NaN : Number.parseFloat(row[1]);
 };
+// 既定で入っているので、まず外して「順位を無視した」側を測る。
+await page.uncheck('input[type=checkbox]');
 const withoutField = await runOnce();
 await page.check('input[type=checkbox]');
 const withField = await runOnce();
 console.log(`--- 逃げ + 真骨頂（後方寄り条件）の発動率: 順位無視 ${withoutField}% → フィールドあり ${withField}%`);
 if (!(withoutField > 80)) fail('順位を無視したときの発動率が低すぎる');
 if (!(withField < 10)) fail('フィールドを入れても発動率が落ちていない');
+// 以降の節はフィールド無しの速さで書いてあるので、外したままにする。
 await page.uncheck('input[type=checkbox]');
 await goTab('設定');
 await page.click('button[aria-label="真骨頂 を外す"]');
@@ -412,6 +419,63 @@ await page.waitForFunction(
   { timeout: 60000 },
 );
 console.log('--- Esc で中断できた');
+
+// 見積もり: 押す前に待ち時間が出ていること
+await goTab('設定');
+const estimateText = (await page.locator('[data-testid=run-estimate]').textContent()) ?? '';
+console.log('--- 実行前の見積もり:', estimateText.trim());
+if (!/(見込み|目安)/.test(estimateText)) fail('実行前に所要時間が出ていない');
+// 1 回走らせてあるので、目安ではなく実測に置き換わっているはず。
+if (!estimateText.includes('見込み')) fail('走らせたあとも実測に置き換わっていない');
+// 回数を増やすと見積もりも伸びる。
+const estimateOf = async () =>
+  ((await page.locator('[data-testid=run-estimate]').textContent()) ?? '').trim();
+const countInput = page.locator('input[type=number][max="200000"]').first();
+await countInput.fill('2000');
+await page.waitForTimeout(150);
+const small = await estimateOf();
+await countInput.fill('200000');
+await page.waitForTimeout(150);
+const large = await estimateOf();
+console.log(`--- 2000 試行 ${small} / 200000 試行 ${large}`);
+if (small === large) fail('試行回数を 100 倍にしても見積もりが変わらない');
+await countInput.fill('2000');
+
+// 本家形式の受け渡し: 読み込みと書き出し
+const transfer = page.locator('textarea[aria-label="本家の設定文字列"]');
+await transfer.fill('スペシャルウィーク,1111,1222,1333,444,555,B,C,S,円弧のマエストロ,そんなスキルは無い');
+await page.click('button:has-text("読み込む")');
+await page.waitForTimeout(250);
+const readBack = await page.getByLabel('スピード', { exact: true }).inputValue();
+console.log('--- 本家形式を読み込んだあとのスピード:', readBack);
+if (readBack !== '1111') fail(`本家形式のステータスが入っていない: ${readBack}`);
+const transferSkills = await heldNames();
+console.log('--- 読み込んだあとの所持スキル:', transferSkills.join(' / '));
+if (!transferSkills.some((name) => name.startsWith('円弧のマエストロ'))) {
+  fail('本家形式のスキルが入っていない');
+}
+if (!transferSkills.some((name) => name.startsWith('シューティングスター'))) {
+  fail('キャラ名から固有が入っていない');
+}
+const warnText = (await page.locator('[data-testid=transfer-unknown]').textContent()) ?? '';
+if (!warnText.includes('そんなスキルは無い')) fail('引き当てられなかった語が知らされていない');
+console.log('--- 取りこぼしの知らせ:', warnText.trim().slice(0, 40));
+
+await page.click('button:has-text("いまの設定を書き出す")');
+await page.waitForTimeout(250);
+const written = await transfer.inputValue();
+console.log('--- 書き出した 1 行:', written);
+if (!written.includes('1111,1222,1333,444,555,B,C,S')) fail(`書き出した値がずれている: ${written}`);
+if (written.includes('シューティングスター')) fail('固有を書き出している');
+// 書き出したものを読み直しても取りこぼしが出ないこと
+await transfer.fill(written);
+await page.click('button:has-text("読み込む")');
+await page.waitForTimeout(250);
+if ((await page.locator('[data-testid=transfer-unknown]').count()) > 0) {
+  const left = await page.locator('[data-testid=transfer-unknown]').textContent();
+  fail(`書き出したものを読み直すと取りこぼしが出る: ${left}`);
+}
+console.log('--- 書き出して読み直せた');
 
 // 名前のないボタンが残っていないこと
 const unnamed = await page.evaluate(

@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { Style } from '../../../../packages/sim/src/data/constants.ts';
 import { listIndividuals, type Individual } from '../individualsApi.ts';
-import { defaultOpponents, gameData, skillChoices, useStore } from '../store.ts';
+import { defaultOpponents, estimateMulti, gameData, skillChoices, useStore } from '../store.ts';
+import { formatDuration } from '../format.ts';
 import { Panel } from './Inputs.tsx';
 
 const fieldCls = 'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
@@ -179,6 +180,14 @@ export function FieldPanel() {
   const progress = useStore((s) => s.multiProgress);
   const busy = useStore((s) => s.running || s.optimizeRunning);
   const result = useStore((s) => s.multiResult);
+  // 全頭同時は 1 試行が単騎の 10 倍ほどかかる。押す前に待ち時間を出す。
+  // 組み立てはセレクタの外で行う（Inputs.tsx の RunPanel と同じ理由）。
+  const pace = useStore((s) => s.pace);
+  const track = useStore((s) => s.track);
+  const estimate = useMemo(
+    () => estimateMulti({ pace, track, multiTrials: trials }),
+    [pace, track, trials],
+  );
 
   // 保存済み個体は行ごとではなく面全体で 1 回だけ取りに行く。9 行が
   // それぞれ叩くと、開くたびに毎回同じ一覧を 9 回取りに行くことになる。
@@ -263,7 +272,7 @@ export function FieldPanel() {
           >
             {running ? '計算中' : '勝率を出す'}
           </button>
-          {running && (
+          {running ? (
             <>
               <button
                 type="button"
@@ -276,6 +285,18 @@ export function FieldPanel() {
                 {progress} / {trials}
               </span>
             </>
+          ) : (
+            <span
+              className="pb-1.5 text-xs text-ink3"
+              data-testid="multi-estimate"
+              title={
+                estimate.measured
+                  ? '直前の実測から出している'
+                  : '作り付けの目安。1 回走らせると実測に置き換わる'
+              }
+            >
+              {estimate.measured ? '見込み' : '目安'} 約 {formatDuration(estimate.ms)}
+            </span>
           )}
           <button type="button" className="text-xs text-ink3 underline" onClick={reset}>
             相手を既定に戻す
