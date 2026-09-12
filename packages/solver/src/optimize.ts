@@ -252,6 +252,8 @@ export interface OptimizeResult {
   /** 最終段まで残った構成を、短縮量の大きい順に並べたもの */
   readonly top: readonly OptimizeEntry[];
   readonly singles: readonly SingleEffect[];
+  /** 初期解に 1 つ足したときの短縮量。並べ替えと足切りはこちらで行う。 */
+  readonly marginals: readonly SingleEffect[];
   /** 買えないが効いているもの。測らなかったときは null。 */
   readonly positionCompetition: PositionCompetitionEffect | null;
   readonly cost: number;
@@ -263,6 +265,8 @@ export interface OptimizeResult {
 
 const DEFAULT_STAGES = [200, 600, 2000];
 const DEFAULT_INHERITED_UNIQUE_LIMIT = 6;
+/** 途中経過を出す間隔。候補が数百あるので、黙って何分も走るのを避ける。 */
+const PROGRESS_EVERY = 25;
 const DEFAULT_NEIGHBOUR_TOP_K = 30;
 
 /** 固有の継承版の本数が上限に収まっているか。 */
@@ -318,39 +322,114 @@ export async function optimizeSkills(
     evaluator.races += positionCompetition.races;
   }
 
-  // 単体評価。並べ替えの手がかりなので、少ない試行で足りる。
-  report('単体評価');
+  // 単体評価。貪欲な初期解を作るための手がかりなので、少ない試行で足りる。
+  report(`単体評価: ${candidates.length} 個`);
   const singles: SingleEffect[] = [];
   const baselineShort = await evaluator.evaluate(baseIds, firstStage);
-  for (const id of candidates) {
+  for (const [index, id] of candidates.entries()) {
     abort();
     const evaluation = await evaluator.evaluate([...baseIds, id], firstStage);
     const diff = pairedDiff(baselineShort, evaluation);
     const cost = context.cost.cost(id);
     singles.push({ skillId: id, diff, cost, efficiency: cost === 0 ? 0 : diff.mean / cost });
+    if ((index + 1) % PROGRESS_EVERY === 0) {
+      report(`  単体評価 ${index + 1} / ${candidates.length}`);
+    }
   }
   singles.sort((a, b) => b.efficiency - a.efficiency);
 
-  // 貪欲な初期解
+  // 貪欲な初期解。1 つ採るたびに、残りの限界貢献度を測り直す。
+  //
+  // 単体の順に積み上げると、食い合うスキルを並べて取ってしまう。
+  // 最終直線で出る加速スキルは、終盤の頭で出る加速を既に持っていると
+  // 5 分の 1 まで落ちるのに、単体の値では横並びに見える。
+  //
+  // 毎回すべて測り直すと、候補数と採る数の積だけ走ることになる。
+  // 限界貢献度は構成が育つほど下がりやすいので、前に測った値を上界として
+  // 扱い、上界でも首位に届かないものは測らずに飛ばす。上界が下がらない
+  // 場合（噛み合って伸びる組み合わせ）もあるため、これは近似である。
   let current: string[] = [...baseIds];
-  for (const single of singles) {
-    if (single.diff.mean <= 0) continue;
-    const next = dedupeByGroup(
-      [...selected(current, candidates), single.skillId],
-      context.cost,
+  const bounds = new Map(singles.map((s) => [s.skillId, s.efficiency]));
+  const remaining = new Set(candidates);
+  for (let picked = 0; ; picked++) {
+    abort();
+    const held = selected(current, candidates);
+    const heldCost = context.cost.totalCost(held);
+    const currentEval = await evaluator.evaluate(current, firstStage);
+
+    let bestId: string | null = null;
+    let bestEfficiency = 0;
+    let measured = 0;
+    const queue = [...remaining].sort((a, b) => (bounds.get(b) ?? 0) - (bounds.get(a) ?? 0));
+    for (const id of queue) {
+      if ((bounds.get(id) ?? 0) <= bestEfficiency) break;
+      const next = dedupeByGroup([...held, id], context.cost);
+      const addedCost = context.cost.totalCost(next) - heldCost;
+      if (heldCost + addedCost > options.budget) continue;
+      if (!withinInheritedUniqueLimit(next, context.cost, inheritedUniqueLimit)) continue;
+      const evaluation = await evaluator.evaluate([...baseIds, ...next], firstStage);
+      const diff = pairedDiff(currentEval, evaluation);
+      const efficiency = addedCost <= 0 ? 0 : diff.mean / addedCost;
+      bounds.set(id, efficiency);
+      measured++;
+      if (efficiency > bestEfficiency) {
+        bestEfficiency = efficiency;
+        bestId = id;
+      }
+    }
+    if (bestId === null) break;
+    remaining.delete(bestId);
+    current = [...baseIds, ...dedupeByGroup([...held, bestId], context.cost)];
+    report(
+      `  ${picked + 1} 個目: ${bestId} を採る（測り直し ${measured} 件）`,
     );
-    if (context.cost.totalCost(next) > options.budget) continue;
-    if (!withinInheritedUniqueLimit(next, context.cost, inheritedUniqueLimit)) continue;
-    current = [...baseIds, ...next];
   }
   report(`貪欲な初期解: ${selected(current, candidates).length} 個 / ${context.cost.totalCost(selected(current, candidates))} pt`);
 
-  // 最終段まで残った構成は、採否によらず記録する。
-  // 採用したものだけを残すと、僅差で負けた構成が見えなくなるためである。
-  // 近傍に使う候補。単体評価の効率で上位から採る。
+  // 限界貢献度。初期解に 1 つ足したときの短縮量で測り直す。
+  //
+  // 単体評価は「何も持っていない構成へ 1 つ足す」で測るので、既に持っている
+  // ものと食い合うスキルを過大に評価する。最終直線で出る加速スキルは、終盤の
+  // 頭で出る加速を既に持っていると 5 分の 1 まで落ちる。それでも並べ替えと
+  // 足切りを単体の値でやると、食い合う側が枠を取り続ける。
+  // docs/solver-design.md 3.4 節を参照。
+  report(`限界貢献度: ${candidates.length} 個`);
+  const marginals: SingleEffect[] = [];
+  const currentShort = await evaluator.evaluate(current, firstStage);
+  const pickedNow = selected(current, candidates);
+  const pickedCost = context.cost.totalCost(pickedNow);
+  const pickedSet = new Set(pickedNow);
+  for (const [index, id] of candidates.entries()) {
+    abort();
+    if (pickedSet.has(id)) continue;
+    const next = dedupeByGroup([...pickedNow, id], context.cost);
+    // 同じグループの上位に乗り換えるときは、費用は差額になる。
+    const addedCost = context.cost.totalCost(next) - pickedCost;
+    const evaluation = await evaluator.evaluate([...baseIds, ...next], firstStage);
+    const diff = pairedDiff(currentShort, evaluation);
+    marginals.push({
+      skillId: id,
+      diff,
+      cost: addedCost,
+      efficiency: addedCost <= 0 ? 0 : diff.mean / addedCost,
+    });
+    if ((index + 1) % PROGRESS_EVERY === 0) {
+      report(`  限界貢献度 ${index + 1} / ${candidates.length}`);
+    }
+  }
+  marginals.sort((a, b) => b.efficiency - a.efficiency);
+
+  // 近傍に使う候補。限界貢献度の効率で上位から採る。
+  // いま選んでいるものは必ず残す。外したあとに戻せなくなるのを避けるためである。
   // selected() には全候補を渡し続ける。絞ったせいで、いま選ばれているものを
   // 候補でないと見なして外せなくなるのを避けるためである。
-  const moveCandidates = singles.slice(0, Math.max(1, neighbourTopK)).map((s) => s.skillId);
+  const moveCandidates = [
+    ...pickedNow,
+    ...marginals.slice(0, Math.max(1, neighbourTopK)).map((s) => s.skillId),
+  ];
+
+  // 最終段まで残った構成は、採否によらず記録する。
+  // 採用したものだけを残すと、僅差で負けた構成が見えなくなるためである。
 
   const seen = new Map<string, OptimizeEntry>();
   const record = async (ids: readonly string[]) => {
@@ -427,6 +506,7 @@ export async function optimizeSkills(
     bestDiff: currentDiff,
     top,
     singles,
+    marginals,
     positionCompetition,
     cost: context.cost.totalCost(selected(current, candidates)),
     races: evaluator.races,

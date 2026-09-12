@@ -116,12 +116,14 @@ const result = await optimizeSkills(context, {
 });
 
 console.log('');
-console.log('単体で効いた上位（200 試行）:');
-for (const single of result.singles.slice(0, 12)) {
-  const entry = plan.entries.find((e) => e.skillId === single.skillId);
+console.log('限界貢献度の上位（初期解に 1 つ足したときの短縮量）:');
+for (const marginal of result.marginals.slice(0, 12)) {
+  const entry = plan.entries.find((e) => e.skillId === marginal.skillId);
+  const single = result.singles.find((s) => s.skillId === marginal.skillId);
   console.log(
-    `  ${name(single.skillId).padEnd(12, '　')} ${single.diff.mean.toFixed(4)} 秒 / ${single.cost} pt` +
-      ` = ${(1000 * single.efficiency).toFixed(3)} ミリ秒/pt` +
+    `  ${name(marginal.skillId).padEnd(12, '　')} ${marginal.diff.mean.toFixed(4)} 秒 / ${marginal.cost} pt` +
+      ` = ${(1000 * marginal.efficiency).toFixed(3)} ミリ秒/pt` +
+      (single === undefined ? '' : `（単体 ${single.diff.mean.toFixed(4)} 秒）`) +
       (entry === undefined ? '' : `  ${routeLabel[entry.route]}`),
   );
 }

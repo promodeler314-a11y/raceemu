@@ -246,7 +246,12 @@ if (singleRows.length !== 4) fail(`単体評価の行数が想定と違う: ${si
 const referenceRow = singleRows[0];
 if (!referenceRow[0].includes('位置取り調整')) fail('位置取り調整の参考行がない');
 if (!referenceRow[0].includes('買えない')) fail('参考行に買えない旨が出ていない');
-if (referenceRow[2] !== '—') fail(`参考行に pt が入っている: ${referenceRow[2]}`);
+// 列は スキル / 単体 / 限界 / pt / ミリ秒/pt
+if (referenceRow[3] !== '—') fail(`参考行に pt が入っている: ${referenceRow[3]}`);
+if (referenceRow[2] !== '—') fail(`参考行に限界貢献度が入っている: ${referenceRow[2]}`);
+const marginalCells = singleRows.slice(1).map((r) => r[2]);
+if (marginalCells.length === 0) fail('単体評価の行が無い');
+console.log('  限界貢献度の列:', marginalCells.join(' | '));
 console.log('  参考行:', referenceRow[0], '/', referenceRow[1]);
 await page.locator(optimizeSection).screenshot({ path: 'docs/images/m7-optimize.png' });
 
