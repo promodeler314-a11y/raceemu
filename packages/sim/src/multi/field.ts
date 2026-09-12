@@ -1,4 +1,5 @@
-import type { FieldView } from '../field/field.ts';
+import type { FieldView, PaceMakerView } from '../field/field.ts';
+import type { Style } from '../data/constants.ts';
 import type { RaceState } from '../state.ts';
 
 /**
@@ -17,8 +18,23 @@ export class LiveField implements FieldView {
     readonly gateCount: number,
   ) {}
 
+  /** 先頭を返すための器。束を読む側（RecordedField）と同じ扱いである。 */
+  private readonly view: { startPosition: number; style: Style } = {
+    startPosition: 0,
+    style: 'NIGE',
+  };
+
   get opponents(): number {
     return this.gateCount - 1;
+  }
+
+  /** そのフレームで最も前にいる他頭。時刻は見ず、いまの値を読む。 */
+  paceMaker(_frameElapsed: number): PaceMakerView | null {
+    const leader = this.leader();
+    if (leader === null) return null;
+    this.view.startPosition = leader.simulation.startPosition;
+    this.view.style = leader.setting.basicRunningStyle;
+    return this.view;
   }
 
   order(_frameElapsed: number, position: number): number {

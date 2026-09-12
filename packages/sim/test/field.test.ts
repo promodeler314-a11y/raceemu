@@ -221,8 +221,15 @@ describe('距離差の条件', () => {
       expect(triggerRate(style, '貴顕の使命を果たすべく', false), style).toBe(1);
     }
     // 判定を入れると、先頭寄りで進む脚質だけが満たす。
-    expect(triggerRate('NIGE', '貴顕の使命を果たすべく', true)).toBe(1);
-    expect(triggerRate('OI', '貴顕の使命を果たすべく', true)).toBe(0);
+    //
+    // 逃げでも全試行では満たさない。束を一緒に走らせるようにしたので相手に隊列が
+    // でき、逃げが先頭集団から離れる試行が出る（docs/order-field.md 4.1 節）。
+    // ここで見たいのは脚質で分かれることなので、差が開いていることを確かめる。
+    const nige = triggerRate('NIGE', '貴顕の使命を果たすべく', true);
+    const oi = triggerRate('OI', '貴顕の使命を果たすべく', true);
+    expect(nige).toBeGreaterThan(0.5);
+    expect(oi).toBe(0);
+    expect(nige - oi).toBeGreaterThan(0.5);
   });
 
   it('先頭との距離が脚質の順に開く', () => {

@@ -8,11 +8,12 @@ import {
   startSpeed,
   surfaceFitAccelerateCoef,
   type PositionKeepState,
+  type Style,
 } from './data/constants.ts';
 import { getSlope, type Corner } from './data/track.ts';
 import type { RngSet } from './rng.ts';
 import type { DerivedSetting, DebuffType, SystemSetting } from './setting.ts';
-import type { FieldView } from './field/field.ts';
+import type { FieldView, PaceMakerView } from './field/field.ts';
 import { ORDER_RATE_CONTINUE_TYPES } from './data/orderRate.ts';
 import { approximateConditions } from './skill/approximate.ts';
 import type { Invoke, SkillData } from './skill/types.ts';
@@ -277,11 +278,27 @@ export class RaceState {
    * 外から与える先頭馬の取り出し口。
    * 毎フレーム呼ばれるので、そのフレームで最も前にいる相手を返してよい。
    */
-  paceMakerSource: (() => RaceState | null) | null = null;
+  paceMakerSource: (() => PaceMakerView | null) | null = null;
 
-  /** 位置取りの判定が見る先頭馬 */
-  get paceMaker(): RaceState | null {
-    if (this.ownedPaceMaker !== null) return this.ownedPaceMaker;
+  /** 自前の先頭馬を返すための器。毎フレーム作り直さない。 */
+  private readonly ownedView: { startPosition: number; style: Style } = {
+    startPosition: 0,
+    style: 'NIGE',
+  };
+
+  /**
+   * 位置取りの判定が見る先頭馬。
+   *
+   * 自分で作った先頭馬があればそれを使う。入力で与えたものが、生成した
+   * フィールドより優先される。無ければ外の取り出し口に訊く。
+   */
+  get paceMaker(): PaceMakerView | null {
+    const owned = this.ownedPaceMaker;
+    if (owned !== null) {
+      this.ownedView.startPosition = owned.simulation.startPosition;
+      this.ownedView.style = owned.setting.basicRunningStyle;
+      return this.ownedView;
+    }
     return this.paceMakerSource === null ? null : this.paceMakerSource();
   }
 

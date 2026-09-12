@@ -113,7 +113,7 @@ export function runMultiRace(
       recordFrames: options.recordFramesFor === i,
       field,
     });
-    state.paceMakerSource = () => field.leader();
+    state.paceMakerSource = () => field.paceMaker(state.simulation.frameElapsed);
     states.push(state);
     fields.push(field);
   }
