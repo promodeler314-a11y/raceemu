@@ -15,6 +15,7 @@
     "optimize": "tsx packages/solver/src/optimize-cli.ts",
     "api": "tsx apps/api/src/main.ts",
     "multi": "tsx packages/sim/src/multi/cli.ts",
+    "order-field": "tsx packages/sim/src/field/order-cli.ts",
     "fetch-tessdata": "node scripts/fetch-tessdata.mjs",
     "e2e:import": "node apps/web/e2e/import.mjs",
     "build-skill-classifier-labels": "tsx scripts/build-skill-classifier-labels.ts"

@@ -48,6 +48,7 @@ pnpm e2e                       # ビルドした UI を実際のブラウザで�
 pnpm monotonicity --trials 60  # 逆算の前提（単調性）の検査
 pnpm optimize --budget 600 --style SEN  # 組み合わせ探索の実測
 pnpm multi --trials 500        # 全頭同時に走らせたときの挙動の実測
+pnpm order-field --trials 200  # 順位条件の判定が相手の作り方でどう変わるかの実測
 pnpm fetch-tessdata            # 画面の読み取りに使う学習データ（35 MB）
 pnpm e2e:import                # 画面の読み取りをサーバとブラウザで確認
 pnpm api                       # サーバ側の口（apps/api）
@@ -71,6 +72,7 @@ pnpm api                       # サーバ側の口（apps/api）
 - [レースエミュレータ改良版の設計](docs/webapp-design.md)
 - [逆算と組み合わせ探索の設計](docs/solver-design.md)
 - [順位条件の扱い](docs/order-condition.md)
+- [順位条件の判定を実戦に近づける](docs/order-field.md)
 - [全頭を同時に走らせる設計](docs/multi-horse-design.md)
 - [スキル画面の読み取り](docs/ocr-design.md)
 - [配信](docs/deploy.md)
