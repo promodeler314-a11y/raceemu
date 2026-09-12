@@ -1,4 +1,5 @@
 import type { DerivedSetting } from '../../sim/src/setting.ts';
+import { ignoreConditions } from '../../sim/src/skill/approximate.ts';
 import { staticConditionTarget } from '../../sim/src/skill/condition.ts';
 import type { SkillCondition, SkillData } from '../../sim/src/skill/types.ts';
 
@@ -42,4 +43,28 @@ export function screenSkills(
   setting: DerivedSetting,
 ): SkillData[] {
   return [...skills].filter((skill) => canTrigger(skill, setting));
+}
+
+/**
+ * 条件が「モデルが無視しているもの」だけでできているか。
+ *
+ * 本家は順位や他のウマ娘の顔ぶれに関わる条件を「満たしている前提」で落とす。
+ * 落とされた条件しか持たないスキルは、どんな設定でも必ず発動する扱いになる。
+ * 候補が 20 個のうちは表に出なかったが、数百個に広げると探索がこれを片端から拾う。
+ * おひとり様と対抗意識のように、同時には成り立たないものまで一緒に積まれる。
+ *
+ * 判定に要る情報をモデルが持っていない以上、正しく判定することはできない。
+ * できるのは、どれがそうなのかを示して、外す口を用意することである。
+ * docs/solver-design.md 4 節と 8 節を参照。
+ */
+export function dependsOnlyOnIgnored(skill: SkillData, setting: DerivedSetting): boolean {
+  const groups = skill.invokes.flatMap((invoke) => [...invoke.preConditions, ...invoke.conditions]);
+  if (groups.length === 0) return false;
+  return groups.every((group) =>
+    group.every(
+      (condition) =>
+        staticConditionTarget(condition.type, setting) === null &&
+        condition.type in ignoreConditions,
+    ),
+  );
 }

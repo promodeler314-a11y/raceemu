@@ -192,6 +192,14 @@ export function PlanInput() {
               />
               固有の継承版を開く（6 つまで）
             </label>
+            <label className="flex items-center gap-1">
+              <input
+                type="checkbox"
+                checked={plan.includeIgnoredOnly}
+                onChange={(e) => setPlan({ includeIgnoredOnly: e.target.checked })}
+              />
+              判定できない条件のスキルも入れる
+            </label>
           </div>
 
           {preview !== null && (
@@ -199,6 +207,13 @@ export function PlanInput() {
               候補 {preview.skillIds.length} 個：
               {ROUTES.map((route) => `${ROUTE_LABEL[route]} ${preview.countByRoute[route]}`).join('、')}
               。いまのコースと脚質で発動しようがないものは、走らせる前に落としてある。
+              {preview.droppedByIgnored.length > 0 && (
+                <>
+                  {' '}
+                  順位や他のウマ娘の顔ぶれに依る条件はモデルが判定できず、必ず発動する扱いになるため、
+                  それしか条件を持たない {preview.droppedByIgnored.length} 個も外してある。
+                </>
+              )}
             </p>
           )}
         </div>

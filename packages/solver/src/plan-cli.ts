@@ -1,6 +1,9 @@
 /**
  * 育成計画の時点での組み合わせ探索。
  *   pnpm plan [--chara 育成ウマ娘名] [--cards 名前,名前,...] [--budget 600] [--style SEN]
+ *             [--season 1] [--weather 1] [--time 1]
+ *
+ * 季節と天候と時刻は 0 で指定なしになり、本家と同じく条件が無視される。
  *
  * 候補を手持ちのスキル表ではなく入手経路から組み立てる。
  * docs/solver-design.md 7 節を参照。
@@ -29,7 +32,18 @@ function arg(name: string, fallback: string): string {
 const data = loadGameData();
 const deck = loadDeckData();
 const system = defaultSystemSetting();
-const track = { location: 10006, course: 10606, condition: 1, gateCount: 9 } as const;
+const season = Number(arg('season', '1'));
+const weather = Number(arg('weather', '1'));
+const time = Number(arg('time', '1'));
+const track = {
+  location: 10006,
+  course: 10606,
+  condition: 1,
+  gateCount: 9,
+  season: season || undefined,
+  weather: weather || undefined,
+  time: time || undefined,
+} as const;
 const budget = Number(arg('budget', '600'));
 const stamina = Number(arg('stamina', '1000'));
 const style = arg('style', 'SEN') as 'NIGE' | 'SEN' | 'SASI' | 'OI';
@@ -70,10 +84,14 @@ const setting: RaceSetting = {
 };
 
 const derived = new DerivedSetting(setting, emptyPassiveBonus(), data.trackData);
-const plan = buildPlanCandidates(data.skills, data.skillsByName, deck, derived, {
-  charaId: chara.id,
-  cards: cards.map((card) => ({ id: card.id })),
-});
+const plan = buildPlanCandidates(
+  data.skills,
+  data.skillsByName,
+  deck,
+  derived,
+  { charaId: chara.id, cards: cards.map((card) => ({ id: card.id })) },
+  { includeIgnoredOnly: arg('ignored', 'off') === 'on' },
+);
 
 const routeLabel: Record<Route, string> = {
   chara: 'ウマ娘',
@@ -82,7 +100,12 @@ const routeLabel: Record<Route, string> = {
   inheritedUnique: '継承（固有）',
 };
 
+const label = (value: number, names: readonly string[]) => (value ? (names[value - 1] ?? String(value)) : '指定なし');
 console.log(`東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'}`);
+console.log(
+  `季節 ${label(season, ['春', '夏', '秋', '冬'])} / 天候 ${label(weather, ['晴', '曇', '雨', '雪'])} / ` +
+    `時刻 ${time === 4 ? 'ナイター' : label(time, ['昼'])}`,
+);
 console.log(`育成ウマ娘 ${chara.name}`);
 if (cards.length > 0) console.log(`デッキ ${cards.map((c) => c.name).join('、')}`);
 console.log(
@@ -92,6 +115,12 @@ console.log(
       .join(' / ') +
     ` = ${plan.skillIds.length} 個`,
 );
+if (plan.droppedByIgnored.length > 0) {
+  console.log(
+    `判定できない条件しか持たないため外した ${plan.droppedByIgnored.length} 個: ` +
+      plan.droppedByIgnored.map((id) => data.skillsById.get(id)?.name ?? id).join('、'),
+  );
+}
 console.log('');
 
 const skillsById = data.skillsById;

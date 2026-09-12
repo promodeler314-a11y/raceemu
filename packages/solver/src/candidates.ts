@@ -2,7 +2,7 @@ import { charaSkills, supportHint, type DeckData } from '../../data/src/deck.ts'
 import { skillLvToFactor } from '../../sim/src/data/constants.ts';
 import type { DerivedSetting } from '../../sim/src/setting.ts';
 import type { SkillData } from '../../sim/src/skill/types.ts';
-import { canTrigger } from './screen.ts';
+import { canTrigger, dependsOnlyOnIgnored } from './screen.ts';
 
 /**
  * 育成計画から候補を組み立てる。
@@ -55,6 +55,14 @@ export interface PlanOptions {
   /** 固有の継承版を候補に入れる。既定は入れる。 */
   readonly openInheritedUniques?: boolean;
   /**
+   * モデルが無視している条件しか持たないスキルを候補に入れるか。既定は入れない。
+   *
+   * 順位や他のウマ娘の顔ぶれに依る条件は「満たしている前提」で落とされるため、
+   * そういうスキルは必ず発動する扱いになり、探索が片端から拾う。
+   * docs/solver-design.md 8 節を参照。
+   */
+  readonly includeIgnoredOnly?: boolean;
+  /**
    * ヒントレベルを一律この値として扱う。
    *
    * 省いたときはカードが持つ底上げの値を使う。実際にどこまで上がるかは
@@ -64,6 +72,8 @@ export interface PlanOptions {
 }
 
 export interface PlanCandidates {
+  /** 無視している条件しか持たないために外したスキルの ID */
+  readonly droppedByIgnored: readonly string[];
   /** 候補。同じスキルは最も安い経路のものだけが残る。 */
   readonly entries: readonly Candidate[];
   /** 探索に渡す候補の ID */
@@ -104,6 +114,16 @@ export function buildPlanCandidates(
 ): PlanCandidates {
   const openWhites = options.openWhites ?? true;
   const openInheritedUniques = options.openInheritedUniques ?? true;
+  const includeIgnoredOnly = options.includeIgnoredOnly ?? false;
+  const dropped: string[] = [];
+  const usable = (skill: SkillData): boolean => {
+    if (!canTrigger(skill, setting)) return false;
+    if (!includeIgnoredOnly && dependsOnlyOnIgnored(skill, setting)) {
+      dropped.push(skill.id);
+      return false;
+    }
+    return true;
+  };
 
   // 同じスキルに複数の経路があるときは、最も安いものを残す。
   const best = new Map<string, Candidate>();
@@ -122,7 +142,7 @@ export function buildPlanCandidates(
 
     for (const name of charaSkills(chara, plan.charaRank)) {
       const skill = purchasableByName(skillsByName, name);
-      if (skill === undefined || !canTrigger(skill, setting)) continue;
+      if (skill === undefined || !usable(skill)) continue;
       offer({
         skillId: skill.id,
         name: skill.name,
@@ -142,7 +162,7 @@ export function buildPlanCandidates(
     const level = clampLevel(options.hintLevel ?? hint?.level ?? 0);
     for (const name of card.skills) {
       const skill = purchasableByName(skillsByName, name);
-      if (skill === undefined || !canTrigger(skill, setting)) continue;
+      if (skill === undefined || !usable(skill)) continue;
       offer({
         skillId: skill.id,
         name: skill.name,
@@ -160,7 +180,7 @@ export function buildPlanCandidates(
     const white = openWhites && skill.rarity === 'normal';
     const inherited = openInheritedUniques && skill.rarity === 'inherit';
     if (!white && !inherited) continue;
-    if (!canTrigger(skill, setting)) continue;
+    if (!usable(skill)) continue;
     offer({
       skillId: skill.id,
       name: skill.name,
@@ -186,5 +206,6 @@ export function buildPlanCandidates(
     hintLevels,
     alwaysSkillIds,
     countByRoute,
+    droppedByIgnored: [...new Set(dropped)],
   };
 }
