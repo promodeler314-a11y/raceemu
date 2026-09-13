@@ -1,9 +1,15 @@
 /**
- * 近似確率の感度分析。確率を半分と倍に振って、平均タイムとスキルごとの短縮量の幅を出す。
+ * 近似の感度分析。既定は近似確率を半分と倍に振って、平均タイムとスキルごとの短縮量の幅を出す。
  *   pnpm sensitivity [--trials 600] [--style SEN] [--stamina 1000]
  *                    [--field on|off] [--scales 0.5,1,2] [--workers 3]
+ *                    [--near 1.25,2.5,5]
  *
- * docs/roadmap.md 3.7 節と docs/solver-design.md 4 節を参照。
+ * `--near` を渡すと、振る軸が近似確率から「近く」と見なす距離（メートル）に変わる。
+ * フィールドを渡したときの前後のウマ娘・近くの人数・追い抜きはこの距離で決まるので、
+ * 距離を振れば「その値をどれだけ信じてよいか」がそのまま幅として出る。
+ * 一覧には基準の 1 バ身（2.5）を必ず含めること。
+ *
+ * docs/roadmap.md 3.7 節と docs/solver-design.md 4 節、docs/order-field.md 8 節を参照。
  */
 import { loadGameData } from '../../data/src/node.ts';
 import { defaultFieldProfile } from '../../sim/src/field/field.ts';
@@ -13,7 +19,7 @@ import { toSerializable } from '../../sim/src/parallel/protocol.ts';
 import { defaultSystemSetting, type RaceSetting } from '../../sim/src/setting.ts';
 import { createCostModel } from './cost.ts';
 import type { OptimizeContext } from './optimize.ts';
-import { dependsOnApproximate, measureSensitivity } from './sensitivity.ts';
+import { dependsOnApproximate, dependsOnNearDistance, measureSensitivity } from './sensitivity.ts';
 
 function arg(name: string, fallback: string): string {
   const index = process.argv.indexOf(`--${name}`);
@@ -27,10 +33,14 @@ const trials = Number(arg('trials', '600'));
 const stamina = Number(arg('stamina', '1000'));
 const style = arg('style', 'SEN') as 'NIGE' | 'SEN' | 'SASI' | 'OI';
 const useField = arg('field', 'on') !== 'off';
-const scales = arg('scales', '0.5,1,2')
+// --near を渡したらそちらを振る。渡さなければ近似確率の倍率を振る。
+const nearArg = arg('near', '');
+const axis = nearArg === '' ? ('rate' as const) : ('near' as const);
+const scales = (nearArg === '' ? arg('scales', '0.5,1,2') : nearArg)
   .split(',')
   .map((x) => Number(x.trim()))
   .filter((x) => Number.isFinite(x));
+const axisLabel = axis === 'near' ? '近くの距離' : '倍率';
 
 /**
  * 候補。近似条件を見るものと見ないものを混ぜる。
@@ -79,11 +89,17 @@ const name = (id: string) => data.skillsById.get(id)?.name ?? id;
 
 console.log(
   `東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 順位条件 ${useField ? '判定する' : '無視'} / ` +
-    `倍率 ${scales.join(', ')} / ${trials} 試行`,
+    `${axisLabel} ${scales.join(', ')} / ${trials} 試行`,
 );
+if (axis === 'near' && !useField) {
+  console.log('（--field off では「近くの距離」は効かない。位置から計算するのはフィールドがあるときだけである）');
+}
+/** その軸を振ったときに動くはずのスキルか */
+const movesWithAxis = (skill: (typeof candidates)[number]): boolean =>
+  axis === 'near' ? dependsOnNearDistance(skill) : dependsOnApproximate(skill, useField);
 console.log(
-  `候補 ${candidates.length} 個（近似条件を見るもの ` +
-    `${candidates.filter(dependsOnApproximate).length} 個）`,
+  `候補 ${candidates.length} 個（振る軸に効く条件を見るもの ` +
+    `${candidates.filter(movesWithAxis).length} 個）`,
 );
 console.log('');
 
@@ -91,13 +107,14 @@ const result = await measureSensitivity(context, {
   candidates: candidates.map((s) => s.id),
   trials,
   scales,
+  axis,
   skillsById: data.skillsById,
   onProgress: (m) => console.log('  ' + m),
 });
 
 console.log('');
-console.log('近似確率を振ったときの平均タイム（候補を 1 つも取らない構成）:');
-console.log('| 倍率 | 平均タイム | 既定との差 | 最大スパート率 |');
+console.log(`${axisLabel}を振ったときの平均タイム（候補を 1 つも取らない構成）:`);
+console.log(`| ${axisLabel} | 平均タイム | 既定との差 | 最大スパート率 |`);
 console.log('| ---: | ---: | ---: | ---: |');
 for (const summary of result.scales) {
   console.log(
@@ -111,12 +128,15 @@ const times = result.scales.map((s) => s.meanTime);
 console.log('');
 console.log(
   `平均タイムの幅は ${(Math.max(...times) - Math.min(...times)).toFixed(4)} 秒。` +
-    'これが「近似の置き方だけで動く量」である。',
+    `これが「${axis === 'near' ? '近くの距離' : '近似の確率'}の置き方だけで動く量」である。`,
 );
 
 console.log('');
 console.log('スキルごとの短縮量（幅の広い順）:');
-const header = ['| スキル | 近似 |', ...result.scales.map((s) => ` 倍率 ${s.scale.toFixed(2)} |`)];
+const header = [
+  `| スキル | ${axis === 'near' ? '距離' : '近似'} |`,
+  ...result.scales.map((s) => ` ${axisLabel} ${s.scale.toFixed(2)} |`),
+];
 console.log(header.join('') + ' 幅 | 幅 ÷ 誤差 |');
 console.log('| --- | :-: |' + result.scales.map(() => ' ---: |').join('') + ' ---: | ---: |');
 const sorted = [...result.skills].sort((a, b) => b.width - a.width);
@@ -130,7 +150,7 @@ for (const entry of sorted) {
 
 console.log('');
 console.log(
-  '幅 ÷ 誤差が 1 を超えるスキルは、短縮量が試行の揺れではなく近似の置き方で動いている。',
+  `幅 ÷ 誤差が 1 を超えるスキルは、短縮量が試行の揺れではなく${axisLabel}の置き方で動いている。`,
 );
 console.log('その差は近似の中に消えるものとして読む。');
 console.log('');

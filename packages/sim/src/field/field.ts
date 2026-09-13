@@ -391,10 +391,18 @@ export function buildFieldBundle(
  * レース中の順位を、フィールドの 1 本と自分の位置から求める。
  * 毎フレームの計算は頭数に比例するだけで、多くても 18 回の比較で済む。
  */
+/** 前後の近くにいる相手の数 */
+export interface NearCount {
+  /** 自分より前にいて、距離が指定以内の相手の数 */
+  readonly front: number;
+  /** 自分より後ろにいて、距離が指定以内の相手の数 */
+  readonly behind: number;
+}
+
 /**
  * 順位と距離差の問い合わせ口。
  *
- * 条件の判定側はこの 5 つしか呼ばない。
+ * 条件の判定側はこの 6 つしか呼ばない。
  * あらかじめ作った束を読む実装と、同時に走っている他頭を読む実装があり、
  * 差し替えても判定側は変わらない。
  * docs/multi-horse-design.md 2 節を参照。
@@ -412,6 +420,13 @@ export interface FieldView {
   distanceToBehind(frameElapsed: number, position: number): number;
   /** 先頭から最後方までの隔たり。全員が同じ位置なら 0。 */
   spread(frameElapsed: number, position: number): number;
+  /**
+   * 前後 `distance` メートル以内にいる相手の数。
+   *
+   * 「近くに何人いるか」「前がひらけているか」を確率で抽選せずに数えるために使う。
+   * docs/order-condition.md 5.3 節を参照。
+   */
+  countNear(frameElapsed: number, position: number, distance: number): NearCount;
   /**
    * 位置取りの判定に渡す先頭馬。
    *
@@ -500,6 +515,26 @@ export class RecordedField implements FieldView {
       if (gap > 0 && gap < best) best = gap;
     }
     return best;
+  }
+
+  /** 前後 `distance` メートル以内にいる相手の数 */
+  countNear(frameElapsed: number, position: number, distance: number): NearCount {
+    const { frames, opponents, positions } = this.sample;
+    const frame = Math.min(frameElapsed, frames - 1);
+    const offset = frame * opponents;
+    let front = 0;
+    let behind = 0;
+    for (let i = 0; i < opponents; i++) {
+      const gap = positions[offset + i]! - position;
+      if (gap > 0) {
+        if (gap <= distance) front++;
+      } else if (-gap <= distance) {
+        // 同着（gap が 0）は後ろに数える。出走前は判定そのものを止めているので、
+        // ここに同着が来るのはゴール後に位置が揃ったときだけである。
+        behind++;
+      }
+    }
+    return { front, behind };
   }
 
   /** そのフレームで最も前にいる相手を、位置取りの判定に渡す形で返す。 */

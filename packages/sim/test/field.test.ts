@@ -236,7 +236,11 @@ describe('距離差の条件', () => {
     const nige = triggerRate('NIGE', '貴顕の使命を果たすべく', true);
     const oi = triggerRate('OI', '貴顕の使命を果たすべく', true);
     expect(nige).toBeGreaterThan(0.5);
-    expect(oi).toBe(0);
+    // 追込はちょうど 0 だったが、追い抜きモードを確率ではなく位置から決めるように
+    // してから（issue #74、docs/order-field.md 8 節）60 試行に 1 本だけ入るようになった。
+    // 追い抜きモードはレーン移動に効くので、走る線が変われば先頭との距離も変わる。
+    // 見たいのは脚質で発動が分かれることなので、ちょうど 0 ではなく上限で見る。
+    expect(oi).toBeLessThan(0.1);
   });
 
   it('先頭との距離が脚質の順に開く', () => {
