@@ -2,6 +2,11 @@
  * 組み合わせ探索の実行と実測。
  *   pnpm optimize [--budget 600] [--style SEN] [--stamina 1000]
  *                 [--opponent -100|0|100] [--selfconsistent on]
+ *                 [--all on] [--dropped include]
+ *
+ * `--all on` は候補を決め打ちの 20 個ではなく、買えるスキル全体にする
+ * （docs/server-design.md 8 節の 7）。数百個になるので、サーバ側で回す前の
+ * 実測はここで取る。`--dropped include` で ▲ も候補に残す。
  */
 import { loadGameData } from '../../data/src/node.ts';
 import { defaultFieldProfile } from '../../sim/src/field/field.ts';
@@ -15,6 +20,7 @@ import {
   type RaceSetting,
 } from '../../sim/src/setting.ts';
 import { classifySkills, FIDELITY_MARK } from '../../sim/src/skill/classify.ts';
+import { buildAllSkillCandidates } from './candidates.ts';
 import { createCostModel } from './cost.ts';
 import { optimizeSkills, pairedDiff, Evaluator, type OptimizeContext } from './optimize.ts';
 
@@ -43,7 +49,10 @@ const candidateNames = [
   '末脚', '先行のコツ○', '中距離コーナー○', '中距離直線○', '善後策',
   'スリップストリーム', '負けん気', '深呼吸', '一匹狼', '危険回避',
 ];
-const candidates = candidateNames
+const useAllSkills = arg('all', 'off') === 'on';
+/** ▲（条件を落としている）を候補に残すか。既定は外す。 */
+const keepDropped = arg('dropped', 'exclude') === 'include';
+const namedCandidates = candidateNames
   .map((name) => data.skillsByName.get(name)?.[0])
   .filter((s): s is NonNullable<typeof s> => s !== undefined);
 const missing = candidateNames.filter((name) => data.skillsByName.get(name) === undefined);
@@ -55,10 +64,32 @@ const setting: RaceSetting = {
     condition: 'BEST', style, distanceFit: 'A', surfaceFit: 'A', styleFit: 'A',
     popularity: 1, gateNumber: 5, uniqueLevel: 6,
   },
-  track, skills: candidates,
+  track, skills: namedCandidates,
   skillActivateAdjustment: 'NONE', randomPosition: 'RANDOM',
   debuffCounts: {}, positionKeepMode: 'APPROXIMATE', positionKeepRate: 100,
 };
+
+const derivedForScreen = new DerivedSetting(
+  { ...setting, skills: [] },
+  emptyPassiveBonus(),
+  data.trackData,
+);
+const allCandidates = buildAllSkillCandidates(data.skills, derivedForScreen, {
+  excludeDropped: !keepDropped,
+  hasField: useField,
+});
+const candidates = useAllSkills
+  ? allCandidates.skillIds
+      .map((id) => data.skillsById.get(id))
+      .filter((s): s is NonNullable<typeof s> => s !== undefined)
+  : namedCandidates;
+if (useAllSkills) {
+  console.log(
+    `全スキルを候補にした: ${candidates.length} 個` +
+      `（発動しようがないものと、無視の条件しか持たない ${allCandidates.droppedByIgnored.length} 個は落とした` +
+      `${keepDropped ? '' : `。▲ の ${allCandidates.droppedByFidelity.length} 個も外した`}）`,
+  );
+}
 
 const pool = new WorkerPool(nodeWorkerFactory);
 const cost = createCostModel(data.skillsById);
@@ -91,7 +122,12 @@ const marked = (id: string) => {
 };
 
 console.log(`東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'} / 相手 ${opponentOffset >= 0 ? '+' : ''}${opponentOffset} / 自己整合 ${selfConsistent ? 'あり' : 'なし'}`);
-console.log(`候補 ${candidates.length} 個: ` + candidates.map((s) => `${s.name}(${s.sp})`).join(', '));
+console.log(
+  `候補 ${candidates.length} 個: ` +
+    (useAllSkills
+      ? candidates.slice(0, 10).map((s) => `${s.name}(${s.sp})`).join(', ') + ' ほか'
+      : candidates.map((s) => `${s.name}(${s.sp})`).join(', ')),
+);
 console.log('');
 
 // 共通乱数の効きを測る
