@@ -19,7 +19,16 @@ import {
 /**
  * フィールドの束は指定が同じなら同じものになるので、Worker ごとに作り置きする。
  * 生成には数百ミリ秒かかるため、塊のたびに作り直すと計算時間を上回る。
+ *
+ * **ただし溜め込まない。** 束 1 つは 64 本ぶんの位置の時系列で、
+ * 東京 芝2400m で 7.06 MB ある。コース横断の評価（`cross.ts`）はコースごとに
+ * 別の束を作るので、上限が無いと 26 コースで Worker 1 本あたり 180 MB になり、
+ * Worker を何本も立てているブラウザの面が落ちる。
+ *
+ * 使い方はどれも「1 つの束を使い切ってから次へ」なので、直近の数本だけ残せば
+ * 取りこぼさない（探索は 1 本を使い回し、相手の強さの幅は 3 本を順に使う）。
  */
+const FIELD_CACHE_LIMIT = 4;
 const fieldCache = new Map<string, FieldBundle>();
 
 function resolveField(
@@ -45,7 +54,15 @@ function resolveField(
       skillPool: opponentSkillPool(data.skillsById),
       skillsById: data.skillsById,
     });
-    fieldCache.set(key, bundle);
+  }
+  // Map は入れた順を覚えている。読んだものを入れ直して末尾へ送り、
+  // あふれたら先頭（いちばん長く使われていないもの）を捨てる。
+  fieldCache.delete(key);
+  fieldCache.set(key, bundle);
+  while (fieldCache.size > FIELD_CACHE_LIMIT) {
+    const oldest = fieldCache.keys().next();
+    if (oldest.done === true) break;
+    fieldCache.delete(oldest.value);
   }
   return bundle;
 }

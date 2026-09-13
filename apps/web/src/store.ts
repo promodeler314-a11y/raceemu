@@ -27,7 +27,9 @@ import { buildFieldBundle, defaultFieldProfile } from '../../../packages/sim/src
 import { opponentSkillPool } from '../../../packages/sim/src/field/opponent-skills.ts';
 import { OrderTally, type OrderSummary } from '../../../packages/sim/src/multi/summary.ts';
 import { replayMultiRace, type MultiReplay } from '../../../packages/sim/src/multi/replay.ts';
-import type { Style } from '../../../packages/sim/src/data/constants.ts';
+import type { Distance, Style } from '../../../packages/sim/src/data/constants.ts';
+import { courseDistances, matchCourses, type CourseMatch } from '../../../packages/sim/src/data/track.ts';
+import { runCrossCourse, type CrossCourseRow } from '../../../packages/sim/src/parallel/cross.ts';
 import { resolveMethod } from '../../../packages/solver/src/critical.ts';
 import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
@@ -157,6 +159,7 @@ export interface PersistedSettings {
   /** サーバ側の探索の宛先。空なら無し（ブラウザで回す）。 */
   readonly searchEndpoint?: string;
   readonly searchTarget?: SearchTarget;
+  readonly cross?: CrossSetting;
 }
 
 /**
@@ -275,6 +278,57 @@ export interface MultiDetail {
   readonly replay: MultiReplay;
   /** 走らせ直しに掛かった時間 (ms) */
   readonly elapsedMs: number;
+}
+
+/**
+ * コース横断の評価の条件。
+ *
+ * 距離は「ぴったりの値」か「距離帯」のどちらかで選ぶ。1 つの選択欄に
+ * 両方を並べたいので、`d:2000`（ぴったり）と `c:MIDDLE`（帯）の形の
+ * 文字列 1 つで持つ。docs/webapp-design.md 6.5 節を参照。
+ */
+export interface CrossSetting {
+  /** 1=芝 2=ダート */
+  readonly surface: number;
+  readonly distanceKey: string;
+  /** コース 1 本あたりの試行回数 */
+  readonly count: number;
+}
+
+/**
+ * 既定の試行回数は単騎（2000）より少ない。
+ *
+ * コースの本数ぶん掛かるためである。芝の中距離は 26 コースあるので、
+ * 2000 のままだと順位条件ありで数分になる（docs/roadmap.md 3.3 節の実測）。
+ */
+export function defaultCrossSetting(): CrossSetting {
+  return { surface: 1, distanceKey: 'd:2000', count: 500 };
+}
+
+/** コース横断の評価の結果 */
+export interface CrossResult {
+  readonly rows: readonly CrossCourseRow[];
+  /** コース 1 本あたりの試行回数 */
+  readonly trials: number;
+  /** 順位条件を判定したか。結果の読み方が変わるので結果と一緒に持つ。 */
+  readonly useField: boolean;
+  readonly elapsedMs: number;
+  readonly cancelled: boolean;
+}
+
+/**
+ * 条件に当たるコース。
+ *
+ * **呼ぶ側は `useMemo` で包むこと。** 毎回新しい配列が返るので、
+ * `useStore` のセレクタの中で呼ぶと描画が止まる。
+ */
+export function crossCourses(cross: CrossSetting): CourseMatch[] {
+  const [kind, value] = cross.distanceKey.split(':');
+  return matchCourses(gameData.trackData, {
+    surface: cross.surface,
+    distance: kind === 'd' ? Number(value) : undefined,
+    distanceCategory: kind === 'c' ? (value as Distance) : undefined,
+  });
 }
 
 export type Theme = 'light' | 'dark';
@@ -424,6 +478,13 @@ interface AppState {
   /** 勝率の面から開いた 1 本。開いていなければ null。 */
   multiDetail: MultiDetail | null;
 
+  /** コース横断の評価の条件 */
+  cross: CrossSetting;
+  crossResult: CrossResult | null;
+  crossRunning: boolean;
+  /** 走り終えたコースの本数 */
+  crossProgress: number;
+
   optimizeBudget: number;
   optimizeResult: OptimizeResult | null;
   optimizeLog: string[];
@@ -490,6 +551,9 @@ interface AppState {
   runMulti: () => Promise<void>;
   /** 勝率の 1 試行を同じ種で走らせ直して開く。null を渡すと閉じる。 */
   showMultiTrial: (trial: number | null) => void;
+  setCross: (patch: Partial<CrossSetting>) => void;
+  /** 条件に当たる全コースを順に走らせる。 */
+  runCross: () => Promise<void>;
   setOptimizeBudget: (budget: number) => void;
   setSearchEndpoint: (endpoint: string) => void;
   setSearchTarget: (target: SearchTarget) => void;
@@ -664,6 +728,11 @@ export const useStore = create<AppState>((set, get) => ({
   multiResult: null,
   multiProgress: 0,
   multiDetail: null,
+
+  cross: defaultCrossSetting(),
+  crossResult: null,
+  crossRunning: false,
+  crossProgress: 0,
 
   optimizeBudget: 600,
   // 宛先は既定で空にしてある。空なら今までどおりブラウザで回す。
@@ -886,6 +955,79 @@ export const useStore = create<AppState>((set, get) => ({
       { seed: result.seed, trial, focus: 0 },
     );
     set({ multiDetail: { trial, replay, elapsedMs: performance.now() - started } });
+  },
+
+  setCross: (patch) => set((s) => ({ cross: { ...s.cross, ...patch } })),
+
+  /**
+   * 条件に当たる全コースを順に走らせる。
+   *
+   * 順位条件の扱いは単騎の実行と同じ設定（`useField`）に従う。ここだけ別の
+   * 回し方にすると、結果の面の数字とコース横断の表の数字が別の意味を持つことに
+   * なり、並べて読めない。判定したかどうかは結果に添えて画面に出す。
+   *
+   * 束はコースごとに作り直す（相手の走りがコースに依る）。鍵から決まるので
+   * 同じ指定なら同じ束になり、走らせ直しても行は動かない。
+   */
+  runCross: async () => {
+    const state = get();
+    if (state.running || state.multiRunning || state.optimizeRunning || state.crossRunning) return;
+    const courses = crossCourses(state.cross);
+    if (courses.length === 0) {
+      set({ notice: 'この距離とバ場に当たるコースがありません。' });
+      return;
+    }
+    controller = new AbortController();
+    set({ crossRunning: true, crossProgress: 0, error: null, crossResult: null });
+    const started = performance.now();
+    try {
+      const spec = fieldSpec(state);
+      const { rows, cancelled } = await runCrossCourse(
+        getPool(),
+        toSerializable(buildSetting(state)),
+        system,
+        courses,
+        {
+          count: state.cross.count,
+          seed: state.seed,
+          signal: controller.signal,
+          onCourse: (done) => set({ crossProgress: done }),
+          // コースごとに差し替えるので、ここではコースを渡さない。
+          field: spec === null ? null : { profile: spec.profile, seed: spec.seed, samples: spec.samples },
+        },
+      );
+      if (rows.length === 0) {
+        set({ notice: '中断しました。1 コースも走り終えていません。' });
+        return;
+      }
+      const elapsedMs = performance.now() - started;
+      set({
+        crossResult: {
+          rows,
+          trials: state.cross.count,
+          useField: state.useField,
+          elapsedMs,
+          cancelled,
+        },
+        // 見積もりはコース 1 本あたりで持つ。本数は条件で変わるので、
+        // 覚えるのは「1 本にいくらかかったか」のほうである。
+        pace: recordPace(state.pace, crossPaceKey(state.useField), {
+          count: state.cross.count,
+          ms: elapsedMs / rows.length,
+        }),
+        notice: cancelled
+          ? `${courses.length} コースのうち ${rows.length} コースで中断しました。ここまでの結果を出しています。`
+          : null,
+        tab: 'compare',
+      });
+    } catch (error) {
+      if (!(error instanceof SimulationCancelled)) {
+        set({ error: error instanceof Error ? error.message : String(error) });
+      }
+    } finally {
+      set({ crossRunning: false, crossProgress: 0 });
+      controller = null;
+    }
   },
 
   setOptimizeBudget: (optimizeBudget) => set({ optimizeBudget }),
@@ -1273,6 +1415,7 @@ export const useStore = create<AppState>((set, get) => ({
         plan: restorePlan(settings.plan),
         searchEndpoint: settings.searchEndpoint ?? '',
         searchTarget: settings.searchTarget ?? 'browser',
+        cross: { ...defaultCrossSetting(), ...settings.cross },
       });
     }
     if (snapshots !== null) set({ snapshots });
@@ -1403,6 +1546,18 @@ const FALLBACK_PACE = {
   field: { fixedMs: 2700, perTrialMs: 0.64 },
   /** 全頭同時は 1 試行のぶんが頭数にほぼ比例する。9 頭 4.43 ms を割ったもの。 */
   multi: { fixedMs: 600, perTrialMsPerHorse: 4.43 / 9 },
+  /**
+   * コース横断は**コース 1 本あたり**の目安である。全体はこれに本数を掛ける。
+   *
+   * 1 試行あたりは単騎と同じで、固定のぶんだけが違う。Worker を立てる手間は
+   * 最初の 1 本にしか掛からないかわりに、順位条件ありでは**コースごとに束を
+   * 作り直す**（相手の走りがコースに依る）ぶんが毎回乗る。これが順位条件ありの
+   * 大半を占める。docs/roadmap.md 3.3 節の実測を参照。
+   */
+  cross: {
+    solo: { fixedMs: 200, perTrialMs: 0.24 },
+    field: { fixedMs: 1000, perTrialMs: 0.64 },
+  },
 } as const;
 
 /** 実測の 1 点。回数と、そのときかかった実時間。 */
@@ -1450,6 +1605,11 @@ export function multiPaceKey(gateCount: number): string {
   return `multi:${gateCount}`;
 }
 
+/** コース横断は 1 本あたりで覚える。本数は条件で変わるので鍵に混ぜない。 */
+export function crossPaceKey(useField: boolean): string {
+  return useField ? 'cross:field' : 'cross:solo';
+}
+
 export interface Estimate {
   readonly ms: number;
   /** 直前の実測に基づくか。false なら作り付けの目安である。 */
@@ -1495,6 +1655,32 @@ export function estimateMulti(state: {
     },
     state.multiTrials,
   );
+}
+
+/**
+ * コース横断の実行にかかる時間。
+ *
+ * 本数を掛けるので、単騎の何十倍にもなる。押す前にこれが出ていないと、
+ * 数分かかる条件を作ってから初めて気付くことになる。
+ */
+export function estimateCross(state: {
+  pace: Record<string, readonly PaceSample[]>;
+  useField: boolean;
+  count: number;
+  courses: number;
+}): Estimate {
+  const one = estimateWith(
+    state.pace,
+    crossPaceKey(state.useField),
+    state.useField ? FALLBACK_PACE.cross.field : FALLBACK_PACE.cross.solo,
+    state.count,
+  );
+  return { ms: one.ms * state.courses, measured: one.measured };
+}
+
+/** バ場ごとの距離の一覧。選択欄を作るのに使う。 */
+export function distancesOf(surface: number): number[] {
+  return courseDistances(gameData.trackData, surface);
 }
 
 function buildSetting(state: AppState): RaceSetting {
@@ -1614,6 +1800,7 @@ function settingsOf(state: AppState): PersistedSettings {
     plan: state.plan,
     searchEndpoint: state.searchEndpoint,
     searchTarget: state.searchTarget,
+    cross: state.cross,
   };
 }
 
@@ -1631,6 +1818,7 @@ const SETTING_KEYS = [
   'plan',
   'searchEndpoint',
   'searchTarget',
+  'cross',
 ] as const;
 
 useStore.subscribe((state, previous) => {

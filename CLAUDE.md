@@ -13,7 +13,7 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 ```
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
-pnpm test                      # vitest run。30 ファイル 299 件
+pnpm test                      # vitest run。31 ファイル 314 件
 pnpm test packages/sim/test/plan.test.ts    # ファイルを絞る
 pnpm exec vitest run packages/sim/test/optimize.test.ts -t '予算を超える構成は返さない'  # テスト名で絞る
 pnpm dev                       # UI の開発サーバ
@@ -34,6 +34,7 @@ pnpm sensitivity --trials 600     # 近似確率を半分と倍に振ったと�
 pnpm plan --chara スペシャルウィーク --budget 600
 pnpm run multi --trials 500    # 全頭同時（multi は pnpm の下位コマンドと衝突するので run を挟む）
 pnpm order-field --trials 200  # 順位条件の判定が相手の作り方でどう変わるか
+pnpm cross --surface 1 --category MIDDLE --count 500   # コース横断（--distance 2000 でぴったりの距離、--field で順位条件あり）
 ```
 
 テスト名で絞るときは `pnpm exec vitest` を直に呼ぶ。`pnpm test -t '...'` は `-t` が転送されず、**黙って全件走る**。
@@ -43,7 +44,7 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 
 ### テストの前提
 
-299 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
+314 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
 
 - 読み取りの 7 件：`.tessdata/jpn.traineddata`（`pnpm fetch-tessdata`）が必要。
 - ステータス読み取りの 6 件：`RACEEMU_REAL_SCREENSHOT_DIR` に実機の写真を置いた場所を指す。写真はゲームの著作物なのでリポジトリに無い。

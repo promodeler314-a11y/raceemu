@@ -10,6 +10,7 @@ import {
 import { SummaryOutput } from './components/Summary.tsx';
 import { FrameCharts } from './components/Charts.tsx';
 import { CompareOutput } from './components/Compare.tsx';
+import { CrossPanel } from './components/Cross.tsx';
 import { InversePanel } from './components/Inverse.tsx';
 import { OptimizePanel } from './components/Optimize.tsx';
 import { FieldPanel } from './components/Field.tsx';
@@ -86,7 +87,13 @@ export default function App() {
           <div className="flex flex-col gap-4 p-5">
             {tab === 'settings' && <EmptyOrSummary />}
             {tab === 'summary' && <SummaryOutput />}
-            {tab === 'compare' && <CompareOutput />}
+            {tab === 'compare' && (
+              <>
+                <CompareOutput />
+                {/* コース横断は設定どうしではなくコースどうしの比較。同じ面に置く */}
+                <CrossPanel />
+              </>
+            )}
             {tab === 'detail' && <FrameCharts />}
             {tab === 'field' && <FieldPanel />}
             {tab === 'solve' && (

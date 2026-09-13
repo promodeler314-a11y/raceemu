@@ -8,6 +8,7 @@
     "typecheck": "tsc -b",
     "sim": "tsx packages/sim/src/cli.ts",
     "bench": "tsx packages/sim/src/parallel/bench.ts",
+    "cross": "tsx packages/sim/src/parallel/cross-cli.ts",
     "dev": "vite --config apps/web/vite.config.ts apps/web",
     "build": "vite build --config apps/web/vite.config.ts apps/web",
     "e2e": "node apps/web/e2e/smoke.mjs",
