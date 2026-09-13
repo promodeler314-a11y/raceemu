@@ -141,6 +141,15 @@ export interface RaceSetting {
   readonly debuffCounts: Readonly<Record<string, number>>;
   readonly positionKeepMode: PositionKeepMode;
   readonly positionKeepRate: number;
+  /**
+   * 近似条件の確率に掛ける倍率。省くと 1.0 で、そのときの挙動は今までと 1 ビットも変わらない。
+   *
+   * 他のウマ娘との接触や追い抜きは固定の確率で近似してある（`skill/approximate.ts`）。
+   * その確率をどれだけ信じてよいかは分かっていないので、上下に振って結果の幅を見る。
+   * 数値 1 つなので、そのまま Worker 境界を越えられる（`parallel/protocol.ts`）。
+   * docs/solver-design.md 4 節と docs/roadmap.md 3.7 節を参照。
+   */
+  readonly approximateRateScale?: number;
   readonly virtualLeader?: UmaStatus;
   readonly virtualLeaderSkills?: readonly SkillData[];
 }
@@ -185,6 +194,8 @@ export class DerivedSetting {
   readonly runningStyle: Style;
   readonly basicRunningStyle: Style;
   readonly fixRandom: boolean;
+  /** 近似条件の確率に掛ける倍率。負の指定は 0 に丸める。 */
+  readonly approximateRateScale: number;
 
   readonly phase0Half: number;
   readonly phase1Start: number;
@@ -250,6 +261,8 @@ export class DerivedSetting {
     this.skillActivateRate = Math.max(100.0 - 9000.0 / uma.wisdom, 20.0);
     this.timeCoef = track.distance / 1000.0;
     this.fixRandom = base.skillActivateAdjustment === 'ALL';
+    // 倍率は確率に掛けるので負にはできない。未指定は 1.0 で、掛けても値が変わらない。
+    this.approximateRateScale = Math.max(0, base.approximateRateScale ?? 1.0);
     this.oonige =
       uma.style === 'NIGE' && base.skills.some((skill) => skill.invokes.some((inv) => inv.oonige));
     this.runningStyle = this.oonige ? 'OONIGE' : uma.style;
