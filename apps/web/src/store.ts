@@ -21,6 +21,7 @@ import {
   type TrackRef,
   type UmaStatus,
 } from '../../../packages/sim/src/setting.ts';
+import { classifySkills, type SkillFidelity } from '../../../packages/sim/src/skill/classify.ts';
 import { summarize, type SimulationSummary } from '../../../packages/sim/src/summary.ts';
 import { buildFieldBundle, defaultFieldProfile } from '../../../packages/sim/src/field/field.ts';
 import { opponentSkillPool } from '../../../packages/sim/src/field/opponent-skills.ts';
@@ -1315,6 +1316,38 @@ function getDetailField(state: AppState) {
     detailFieldKey = key;
   }
   return detailField;
+}
+
+/**
+ * スキルごとの再現度（近似の印）。
+ *
+ * 分類はレースを回さなくても条件式から決まるので、結果にも Worker 境界にも
+ * 載せず、ここで解く。相手の強さの幅（`runBand`）と違って走らせる必要が無い。
+ * docs/roadmap.md 4.3 節を参照。
+ *
+ * 呼ぶ側は `useMemo` で包むこと。毎回新しい Map が返るので、
+ * `useStore` のセレクタの中で呼ぶと描画が止まる。
+ */
+export function skillFidelities(
+  state: {
+    uma: UmaStatus;
+    track: TrackRef;
+    skillIds: readonly string[];
+    options: RunOptions;
+    debuffCounts: Readonly<Record<string, number>>;
+    useField: boolean;
+  },
+  skillIds: readonly string[],
+): Map<string, SkillFidelity> {
+  const derived = new DerivedSetting(
+    { ...buildSetting(state as AppState), skills: [] },
+    emptyPassiveBonus(),
+    gameData.trackData,
+  );
+  const skills = skillIds
+    .map((id) => gameData.skillsById.get(id))
+    .filter((skill): skill is NonNullable<typeof skill> => skill !== undefined);
+  return classifySkills(skills, derived, { hasField: state.useField });
 }
 
 /**

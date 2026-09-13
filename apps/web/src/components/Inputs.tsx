@@ -9,8 +9,10 @@ import {
   gameData,
   modifiedStatus,
   skillChoices,
+  skillFidelities,
   useStore,
 } from '../store.ts';
+import { FidelityLegend, FidelityMark } from './Fidelity.tsx';
 import { formatDuration } from '../format.ts';
 import { NO_CHARA, skillIndex } from '../skills.ts';
 import type { SkillData } from '../../../../packages/sim/src/skill/types.ts';
@@ -512,6 +514,19 @@ export function SkillInput() {
   const [query, setQuery] = useState('');
   const costModel = useMemo(() => costModelFor(hintLevels), [hintLevels]);
 
+  // 近似の印。走らせなくても条件式から決まるので、実行前から出る。
+  // 値は個別に選び、組み立ては useMemo で行う（セレクタの中で組み立てない）。
+  const uma = useStore((s) => s.uma);
+  const track = useStore((s) => s.track);
+  const options = useStore((s) => s.options);
+  const debuffCounts = useStore((s) => s.debuffCounts);
+  const useField = useStore((s) => s.useField);
+  const fidelities = useMemo(
+    () => skillFidelities({ uma, track, skillIds, options, debuffCounts, useField }, skillIds),
+    [uma, track, skillIds, options, debuffCounts, useField],
+  );
+  const marked = skillIds.some((id) => (fidelities.get(id)?.fidelity ?? 'exact') !== 'exact');
+
   const matched = useMemo(() => {
     if (query.trim() === '') return [];
     return skillChoices.filter((skill) => skill.name.includes(query.trim())).slice(0, 40);
@@ -568,6 +583,7 @@ export function SkillInput() {
                   >
                     <th scope="row" className="py-1 text-left font-normal">
                       {skill.name}
+                      <FidelityMark fidelity={fidelities.get(skill.id)} />
                       {skill.holder !== null && (
                         <span className="ml-1 text-[11px] text-ink3">
                           {skill.rarity === 'unique' ? '固有' : '進化'}
@@ -619,6 +635,12 @@ export function SkillInput() {
               すべて外す
             </button>
           </div>
+          {/* 印の意味は、印が出ているときだけ添える。 */}
+          {marked && (
+            <div className="mt-1">
+              <FidelityLegend useField={useField} />
+            </div>
+          )}
         </>
       )}
     </Panel>

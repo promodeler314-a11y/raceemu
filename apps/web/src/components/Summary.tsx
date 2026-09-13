@@ -1,14 +1,15 @@
-import { approximateTypeToState } from '../../../../packages/sim/src/skill/approximate.ts';
-import type { SkillData } from '../../../../packages/sim/src/skill/types.ts';
+import { useMemo } from 'react';
 import { formatTime, percentile } from '../format.ts';
 import {
   currentTrackDetail,
   gameData,
+  skillFidelities,
   useStore,
   type Snapshot,
   type TriggerBand,
 } from '../store.ts';
 import { TimeHistogram } from './Charts.tsx';
+import { FidelityLegend, FidelityMark } from './Fidelity.tsx';
 import { Panel } from './Inputs.tsx';
 
 function percent(value: number): string {
@@ -18,13 +19,6 @@ function percent(value: number): string {
 function signed(value: number, digits = 3): string {
   if (!Number.isFinite(value)) return '-';
   return `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toFixed(digits)}`;
-}
-
-/** そのスキルの発動条件に、他馬の位置などを確率で近似している判定が含まれるか。 */
-function hasApproximateCondition(skill: SkillData): boolean {
-  return skill.invokes.some((invoke) =>
-    invoke.conditions.some((group) => group.some((c) => c.type in approximateTypeToState)),
-  );
 }
 
 const PHASE_LABELS = ['序盤', '中盤', '終盤', 'ラスト'];
@@ -67,6 +61,18 @@ export function SummaryOutput() {
   const running = useStore((s) => s.running);
   const useField = useStore((s) => s.useField);
   const detail = currentTrackDetail(track);
+
+  // 近似の印。値は個別に選び、組み立ては useMemo で行う。
+  // セレクタの中で組み立てると毎回新しい参照が返り、描画が止まる。
+  const uma = useStore((s) => s.uma);
+  const options = useStore((s) => s.options);
+  const debuffCounts = useStore((s) => s.debuffCounts);
+  const skillIds = useStore((s) => s.skillIds);
+  const shownIds = useMemo(() => skillSummaries.map((s) => s.skillId), [skillSummaries]);
+  const fidelities = useMemo(
+    () => skillFidelities({ uma, track, skillIds, options, debuffCounts, useField }, shownIds),
+    [uma, track, skillIds, options, debuffCounts, useField, shownIds],
+  );
 
   if (summary === null) {
     return (
@@ -201,7 +207,7 @@ export function SummaryOutput() {
           <div className="flex items-baseline gap-2">
             <h3 className="text-sm font-medium">スキル別の発動状況</h3>
             <span className="text-xs text-ink3">
-              △ 発動条件に近似が含まれるスキル ・ 数値は {summary.all.count.toLocaleString('ja-JP')} 試行の平均
+              数値は {summary.all.count.toLocaleString('ja-JP')} 試行の平均
             </span>
             {/*
               発動率は相手の想定に依る。1 つの数字だけを出すと、そのことが見えない。
@@ -245,17 +251,12 @@ export function SummaryOutput() {
               <tbody>
                 {skillSummaries.map((skill) => {
                   const data = gameData.skillsById.get(skill.skillId);
-                  const approximate = data !== undefined && hasApproximateCondition(data);
                   const peak = Math.max(...skill.phaseRates, 0.0001);
                   return (
                     <tr key={skill.skillId} className="border-b border-rule last:border-0">
                       <th scope="row" className="py-1.5 pr-3 text-left font-normal">
                         {data?.name ?? skill.skillId}
-                        {approximate && (
-                          <span className="ml-1 text-ink3" title="発動条件に近似が含まれる">
-                            △
-                          </span>
-                        )}
+                        <FidelityMark fidelity={fidelities.get(skill.skillId)} />
                       </th>
                       <td className="py-1.5 pr-3 text-right tabular-nums">
                         <div className="flex items-center justify-end gap-2">
@@ -307,6 +308,10 @@ export function SummaryOutput() {
                 })}
               </tbody>
             </table>
+          </div>
+          {/* 印の意味。発動率をどこまで信じてよいかの話なので、表のすぐ下に置く。 */}
+          <div className="mt-2">
+            <FidelityLegend useField={useField} />
           </div>
         </div>
       )}

@@ -209,6 +209,11 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 4. **ポッドの中で並列数がどう決まるかを実測する**（[#48](https://github.com/promodeler314-a11y/raceemu/issues/48)）**。** 4.1 の前提の確認である。`GET /api/health` が `concurrencySource` を返すので、`cgroup` と出ていれば読めている。
 5. アプリ側に宛先の設定と、投げ先を選ぶ口を足す（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)）。宛先が無ければ今までどおりブラウザで回す。
 6. コミットの SHA をフッタに出す（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)）。
-7. 全スキルを候補にできるようにする（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)、先に [#58](https://github.com/promodeler314-a11y/raceemu/issues/58) が要る）。**ここまで来て初めて 1 節の目的が果たされる。**
+7. 全スキルを候補にできるようにする（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)）。**ここまで来て初めて 1 節の目的が果たされる。**
+   前に置いていた [#58](https://github.com/promodeler314-a11y/raceemu/issues/58)（近似の印）は入った。
+   スキルごとの分類は `packages/sim/src/skill/classify.ts` にあり、**レースを回さずに条件式から決まる**。
+   そのため口の返す形（4 節のジョブの結果）に印を足す必要は無く、画面が返ってきたスキル ID から自力で解ける。
+   候補を数百に広げても、近似で過大評価されているものが上位に並んでいれば表の上で見分けられる。
+   理由は[ロードマップ](roadmap.md) 4.3 節にある。
 
 途中で止めてもアプリは壊れない。2 節の前提がそれを保証する。
