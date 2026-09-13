@@ -31,6 +31,7 @@ import { resolveMethod } from '../../../packages/solver/src/critical.ts';
 import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
 import {
+  buildAllSkillCandidates,
   buildPlanCandidates,
   type PlanCandidates,
 } from '../../../packages/solver/src/candidates.ts';
@@ -38,6 +39,7 @@ import type { DeckData } from '../../../packages/data/src/deck.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
 import { decodeShareState, encodeShareState, hashWithTab, readTabFromHash } from './share.ts';
 import type { Individual } from './individualsApi.ts';
+import { hasEndpoint, runServerSearch, ServerSearchUnavailable } from './searchApi.ts';
 import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
 import { resolveSkillIds, type Preset } from './presets.ts';
 import { gameData, skillChoices, skillIndex, NO_CHARA } from './skills.ts';
@@ -150,8 +152,31 @@ export interface PersistedSettings {
   readonly hintLevels: Readonly<Record<string, number>>;
   readonly useField: boolean;
   readonly field?: FieldSetting;
-  readonly plan?: PlanSetting;
+  readonly plan?: PlanSetting & { readonly enabled?: boolean };
+  /** サーバ側の探索の宛先。空なら無し（ブラウザで回す）。 */
+  readonly searchEndpoint?: string;
+  readonly searchTarget?: SearchTarget;
 }
+
+/**
+ * 探索をどこで回すか。
+ *
+ * 宛先が無ければ常にブラウザである。サーバは加速装置であって依存先ではない
+ * （docs/server-design.md 2 節）。サーバを選んでいても、応答が JSON でなければ
+ * ブラウザに落ちる。
+ */
+export type SearchTarget = 'browser' | 'server';
+
+/**
+ * 探索の候補をどこから作るか。
+ *
+ * - `selected`：いま選んでいるスキル。育て終わった馬の買い物に答える。
+ * - `plan`：育成ウマ娘とデッキと継承から。何を狙って育てるかに答える（docs/solver-design.md 7 節）。
+ * - `all`：買えるスキル全体から。入手経路を問わず「取れるとしたら何が効くか」に答える。
+ *   候補が数百になるのでブラウザでは回しきれず、サーバ側の探索が要る
+ *   （docs/server-design.md 1 節）。
+ */
+export type CandidateSource = 'selected' | 'plan' | 'all';
 
 /**
  * 育成計画の入力。
@@ -160,24 +185,36 @@ export interface PersistedSettings {
  * docs/solver-design.md 7 節を参照。共有 URL には載せない。
  */
 export interface PlanSetting {
-  readonly enabled: boolean;
+  readonly source: CandidateSource;
   readonly charaId: number | null;
   readonly charaRank: number;
   readonly cardIds: readonly number[];
   readonly openWhites: boolean;
   readonly openInheritedUniques: boolean;
+  /** 全スキルのときだけ効く。金（レア）を候補に入れるか。 */
+  readonly openGolds: boolean;
   /** 無視している条件しか持たないスキルを候補に入れるか */
   readonly includeIgnoredOnly: boolean;
+  /**
+   * 条件を落としている（▲）スキルを候補から外すか。
+   *
+   * 既定で外す。落とした条件は満たしている扱いになるため発動率が高く出る。
+   * 候補を数百に広げると、印が付いていても上位が ▲ で埋まって読めなくなる。
+   * docs/server-design.md 8 節の 7 を参照。
+   */
+  readonly excludeDropped: boolean;
 }
 
 export const DEFAULT_PLAN: PlanSetting = {
-  enabled: false,
+  source: 'selected',
   charaId: null,
   charaRank: 5,
   cardIds: [],
   openWhites: true,
   openInheritedUniques: true,
+  openGolds: true,
   includeIgnoredOnly: false,
+  excludeDropped: true,
 };
 
 /** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
@@ -354,6 +391,12 @@ interface AppState {
   optimizeResult: OptimizeResult | null;
   optimizeLog: string[];
   optimizeRunning: boolean;
+  /** サーバ側の探索の宛先。空なら無し。 */
+  searchEndpoint: string;
+  /** 投げ先。宛先が無ければブラウザとして扱う。 */
+  searchTarget: SearchTarget;
+  /** 直前の探索をどこで回したか。結果がどちらのものかを画面に出す。 */
+  ranOnServer: boolean;
   plan: PlanSetting;
   /** サポートカードと育成ウマ娘。読み込むまでは null。 */
   deck: DeckData | null;
@@ -409,6 +452,8 @@ interface AppState {
   setMultiTrials: (trials: number) => void;
   runMulti: () => Promise<void>;
   setOptimizeBudget: (budget: number) => void;
+  setSearchEndpoint: (endpoint: string) => void;
+  setSearchTarget: (target: SearchTarget) => void;
   setPlan: (patch: Partial<PlanSetting>) => void;
   /** サポートカードと育成ウマ娘を読み込む。すでに読んであれば何もしない。 */
   loadDeck: () => Promise<void>;
@@ -440,12 +485,29 @@ function withChara(uma: UmaStatus, skillIds: readonly string[]): UmaStatus {
  * コースや脚質を変えると候補も変わる。
  */
 export function planCandidatesOf(state: AppState): PlanCandidates | null {
-  if (state.deck === null) return null;
+  if (state.plan.source === 'selected') return null;
   const derived = new DerivedSetting(
     { ...buildSetting(state), skills: [] },
     emptyPassiveBonus(),
     gameData.trackData,
   );
+  // 落とす判定は 2 つの出どころで共通である。印（▲）は順位条件を判定するか
+  // どうかで動くので、いまの設定を必ず添える（classify.ts）。
+  const screening = {
+    openWhites: state.plan.openWhites,
+    openInheritedUniques: state.plan.openInheritedUniques,
+    includeIgnoredOnly: state.plan.includeIgnoredOnly,
+    excludeDropped: state.plan.excludeDropped,
+    hasField: state.useField,
+  };
+  if (state.plan.source === 'all') {
+    // 全スキルは入手経路を問わないので、デッキのデータを読み込まなくてよい。
+    return buildAllSkillCandidates(gameData.skills, derived, {
+      ...screening,
+      openGolds: state.plan.openGolds,
+    });
+  }
+  if (state.deck === null) return null;
   return buildPlanCandidates(
     gameData.skills,
     gameData.skillsByName,
@@ -456,12 +518,31 @@ export function planCandidatesOf(state: AppState): PlanCandidates | null {
       charaRank: state.plan.charaRank,
       cards: state.plan.cardIds.map((id) => ({ id })),
     },
-    {
-      openWhites: state.plan.openWhites,
-      openInheritedUniques: state.plan.openInheritedUniques,
-      includeIgnoredOnly: state.plan.includeIgnoredOnly,
-    },
+    screening,
   );
+}
+
+/**
+ * 保存してあった育成計画を読み直す。
+ *
+ * 候補の出どころが 2 通り（真偽値の `enabled`）から 3 通り（`source`）になった。
+ * 古い保存には `enabled` しか無いので、立っていれば育成計画として読む。
+ * 黙って「いま選んでいるスキル」に戻すと、次に探索したとき候補が変わる。
+ */
+export function restorePlan(saved: (PlanSetting & { enabled?: boolean }) | undefined): PlanSetting {
+  const merged = { ...DEFAULT_PLAN, ...saved };
+  if (saved?.source === undefined && saved?.enabled === true) merged.source = 'plan';
+  return {
+    source: merged.source,
+    charaId: merged.charaId,
+    charaRank: merged.charaRank,
+    cardIds: merged.cardIds,
+    openWhites: merged.openWhites,
+    openInheritedUniques: merged.openInheritedUniques,
+    openGolds: merged.openGolds,
+    includeIgnoredOnly: merged.includeIgnoredOnly,
+    excludeDropped: merged.excludeDropped,
+  };
 }
 
 const saveSettings = debounceSave<PersistedSettings>('settings');
@@ -545,6 +626,11 @@ export const useStore = create<AppState>((set, get) => ({
   multiProgress: 0,
 
   optimizeBudget: 600,
+  // 宛先は既定で空にしてある。空なら今までどおりブラウザで回す。
+  // 同一オリジンを既定にすると、静的配信だけの版が毎回 1 往復むだに叩く。
+  searchEndpoint: '',
+  searchTarget: 'browser',
+  ranOnServer: false,
   plan: DEFAULT_PLAN,
   deck: null,
   planCandidates: null,
@@ -732,9 +818,12 @@ export const useStore = create<AppState>((set, get) => ({
   },
 
   setOptimizeBudget: (optimizeBudget) => set({ optimizeBudget }),
+  setSearchEndpoint: (searchEndpoint) => set({ searchEndpoint }),
+  setSearchTarget: (searchTarget) => set({ searchTarget }),
   setPlan: (patch) => {
     set((s) => ({ plan: { ...s.plan, ...patch } }));
-    if (patch.enabled === true) void get().loadDeck();
+    // デッキのデータは育成計画のときにしか要らない。全スキルは経路を問わない。
+    if (patch.source === 'plan') void get().loadDeck();
   },
   loadDeck: async () => {
     if (get().deck !== null) return;
@@ -956,12 +1045,12 @@ export const useStore = create<AppState>((set, get) => ({
    */
   runOptimize: async () => {
     if (get().running || get().optimizeRunning) return;
-    if (get().plan.enabled) await get().loadDeck();
+    if (get().plan.source === 'plan') await get().loadDeck();
     const state = get();
 
-    // 育成計画からのときは、候補を手持ちではなく入手経路から作る。
-    // docs/solver-design.md 7 節を参照。
-    const plan = state.plan.enabled ? planCandidatesOf(state) : null;
+    // 育成計画と全スキルのときは、候補を手持ちではなく入手経路から作る。
+    // docs/solver-design.md 7 節と docs/server-design.md 1 節を参照。
+    const plan = planCandidatesOf(state);
     const candidates = plan === null ? [...state.skillIds] : [...plan.skillIds];
     const hintLevels = plan === null ? state.hintLevels : plan.hintLevels;
     const always =
@@ -976,36 +1065,86 @@ export const useStore = create<AppState>((set, get) => ({
         error:
           plan === null
             ? '候補にするスキルを 2 つ以上選ぶ'
-            : '候補が集まらない。育成ウマ娘かサポートカードを選ぶか、白と固有の継承版を開く',
+            : state.plan.source === 'all'
+              ? '候補が集まらない。白・金・固有の継承版のどれかを開く'
+              : '候補が集まらない。育成ウマ娘かサポートカードを選ぶか、白と固有の継承版を開く',
       });
       return;
     }
     controller = new AbortController();
+    const signal = controller.signal;
+    const base = toSerializable({ ...buildSetting(state), skills: always });
+    const field = fieldSpec(state);
     set({
       optimizeRunning: true,
       error: null,
       optimizeResult: null,
       optimizeLog: [],
       planCandidates: plan,
+      ranOnServer: false,
     });
     try {
-      const result = await optimizeSkills(
-        {
-          pool: getPool(),
-          system,
-          base: toSerializable({ ...buildSetting(state), skills: always }),
-          cost: costModelFor(hintLevels),
-          seed: state.seed,
-          field: fieldSpec(state),
-        },
-        {
-          candidates,
-          budget: state.optimizeBudget,
-          selfConsistent: state.optimizeSelfConsistent,
-          signal: controller.signal,
-          onProgress: (message) => set((s) => ({ optimizeLog: [...s.optimizeLog, message] })),
-        },
-      );
+      let result: OptimizeResult | null = null;
+
+      // 宛先があってサーバを選んでいれば、まずそちらに投げる。
+      // 落ちたらブラウザで回す。サーバは加速装置であって依存先ではない
+      // （docs/server-design.md 2 節）ので、ここで倒れてはならない。
+      if (hasEndpoint(state.searchEndpoint) && state.searchTarget === 'server') {
+        try {
+          set({ optimizeLog: ['サーバに投げた。順番待ちがあれば待つ。'], ranOnServer: true });
+          result = await runServerSearch(
+            state.searchEndpoint,
+            {
+              base,
+              candidates,
+              budget: state.optimizeBudget,
+              seed: state.seed,
+              // 相手の中身はサーバ側が既定で作る。頭数だけを渡す（同 7 節）。
+              field: field === null ? null : { gateCount: state.track.gateCount },
+              hintLevels,
+            },
+            {
+              signal,
+              onProgress: (lines, races) =>
+                set({
+                  optimizeLog: [
+                    `サーバで実行中（レース ${races.toLocaleString()} 本）`,
+                    ...lines,
+                  ],
+                }),
+            },
+          );
+        } catch (error) {
+          // サーバが居ないときだけ落とす。断られたとき（候補が多すぎる、混んでいる、
+          // レース数の上限を超えた）は落とさない。サーバに投げるほど重い探索を
+          // 黙ってブラウザに回すと、数十分固まるためである。
+          if (!(error instanceof ServerSearchUnavailable)) throw error;
+          set({
+            ranOnServer: false,
+            optimizeLog: [`サーバが居なかった: ${error.message}`, 'ブラウザで回す。'],
+          });
+        }
+      }
+
+      if (result === null) {
+        result = await optimizeSkills(
+          {
+            pool: getPool(),
+            system,
+            base,
+            cost: costModelFor(hintLevels),
+            seed: state.seed,
+            field,
+          },
+          {
+            candidates,
+            budget: state.optimizeBudget,
+            selfConsistent: state.optimizeSelfConsistent,
+            signal,
+            onProgress: (message) => set((s) => ({ optimizeLog: [...s.optimizeLog, message] })),
+          },
+        );
+      }
       set({ optimizeResult: result });
     } catch (error) {
       if (!(error instanceof SimulationCancelled)) {
@@ -1060,7 +1199,9 @@ export const useStore = create<AppState>((set, get) => ({
         useField: settings.useField,
         // 相手の想定と育成計画は後から足した項目なので、古い保存には入っていない。
         field: { ...defaultFieldSetting(), ...settings.field },
-        plan: { ...DEFAULT_PLAN, ...settings.plan },
+        plan: restorePlan(settings.plan),
+        searchEndpoint: settings.searchEndpoint ?? '',
+        searchTarget: settings.searchTarget ?? 'browser',
       });
     }
     if (snapshots !== null) set({ snapshots });
@@ -1400,6 +1541,8 @@ function settingsOf(state: AppState): PersistedSettings {
     useField: state.useField,
     field: state.field,
     plan: state.plan,
+    searchEndpoint: state.searchEndpoint,
+    searchTarget: state.searchTarget,
   };
 }
 
@@ -1415,6 +1558,8 @@ const SETTING_KEYS = [
   'useField',
   'field',
   'plan',
+  'searchEndpoint',
+  'searchTarget',
 ] as const;
 
 useStore.subscribe((state, previous) => {

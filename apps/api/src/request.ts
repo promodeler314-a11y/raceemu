@@ -126,7 +126,12 @@ export function checkRequest(raw: unknown, data: GameData): ResolvedRequest {
   const candidates = raw['candidates'];
   if (!Array.isArray(candidates)) fail('candidates は配列で指定する');
   if (candidates.length === 0) fail('candidates が空である');
-  if (candidates.length > 400) fail(`candidates が多すぎる: ${candidates.length}`);
+  // 買えるスキル全体はコースによって 600 個近くになる（東京 芝2400m で 579）。
+  // 400 で切ると、画面の「全スキル」がそのまま弾かれて口の目的を果たさない
+  // （docs/server-design.md 8 節の 7）。**枠を守るのは実際に走ったレース数の
+  // 見張り**（RACEEMU_MAX_RACES）であって、この数ではない。ここは桁違いの
+  // 要求を落とすためだけに残す。
+  if (candidates.length > 1200) fail(`candidates が多すぎる: ${candidates.length}`);
   for (const id of candidates) {
     if (typeof id !== 'string' || !data.skillsById.has(id)) fail(`知らないスキル: ${String(id)}`);
   }
