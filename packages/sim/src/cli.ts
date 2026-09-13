@@ -3,8 +3,14 @@
  *   node --experimental-strip-types packages/sim/src/cli.ts [--count 1000] [--course 10101]
  */
 import { loadGameData } from '../../data/src/node.ts';
-import { defaultSystemSetting, type RaceSetting } from './setting.ts';
+import {
+  DerivedSetting,
+  defaultSystemSetting,
+  emptyPassiveBonus,
+  type RaceSetting,
+} from './setting.ts';
 import { runSimulations } from './summary.ts';
+import { classifySkill, FIDELITY_LABEL, FIDELITY_MARK } from './skill/classify.ts';
 import { unsupportedConditions } from './skill/condition.ts';
 
 function arg(name: string, fallback: string): string {
@@ -74,6 +80,31 @@ console.log('');
 console.log(
   `所要時間: ${summary.elapsedMs.toFixed(0)} ms (1試行あたり ${(summary.elapsedMs / count).toFixed(3)} ms)`,
 );
+
+/**
+ * スキルごとの再現度。
+ *
+ * `unsupportedConditions` は実行中に貯まる集合で、どのスキルが落としたのかを
+ * 持っていない。こちらは条件式から決まるので、走らせる前から同じ答えになる。
+ * この CLI は単騎（フィールドを渡さない）なので、順位条件は落ちる側に入る。
+ */
+if (skills.length > 0) {
+  const derived = new DerivedSetting(setting, emptyPassiveBonus(), data.trackData);
+  console.log('');
+  console.log(
+    `スキルの再現度（${FIDELITY_MARK.approximate} 近似、${FIDELITY_MARK.dropped} 条件を落としている）:`,
+  );
+  for (const skill of skills) {
+    const fidelity = classifySkill(skill, derived, { hasField: false });
+    const mark = FIDELITY_MARK[fidelity.fidelity];
+    console.log(`  ${mark === '' ? ' ' : mark} ${skill.name}: ${FIDELITY_LABEL[fidelity.fidelity]}`);
+    for (const note of fidelity.notes) {
+      console.log(`      ${FIDELITY_MARK[note.fidelity]} ${note.type}: ${note.reason}`);
+    }
+  }
+}
+
 if (unsupportedConditions.size > 0) {
+  console.log('');
   console.log(`未対応の条件: ${[...unsupportedConditions].join(', ')}`);
 }

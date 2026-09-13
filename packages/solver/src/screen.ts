@@ -56,6 +56,11 @@ export function screenSkills(
  * 判定に要る情報をモデルが持っていない以上、正しく判定することはできない。
  * できるのは、どれがそうなのかを示して、外す口を用意することである。
  * docs/solver-design.md 4 節と 8 節を参照。
+ *
+ * スキルごとの印（`packages/sim/src/skill/classify.ts`）とは別物である。
+ * こちらは**すべての条件が無視されている**ものを候補から外すための判定で、
+ * あちらは**どれか 1 つでも近似か切り落としがある**ものに印を出す。
+ * 候補に残ったスキルにも印は付く。
  */
 export function dependsOnlyOnIgnored(skill: SkillData, setting: DerivedSetting): boolean {
   const groups = skill.invokes.flatMap((invoke) => [...invoke.preConditions, ...invoke.conditions]);

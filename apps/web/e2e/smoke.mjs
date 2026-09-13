@@ -183,7 +183,8 @@ const runOnce = async () => {
   await page.waitForTimeout(200);
   await goTab('結果');
   const rows = await readTestTable('skill-table');
-  const row = rows.find((r) => r[0] === '真骨頂');
+  // スキル名のうしろに再現度の印（△ や ▲）が付くので、前方一致で引く。
+  const row = rows.find((r) => (r[0] ?? '').startsWith('真骨頂'));
   return row === undefined ? NaN : Number.parseFloat(row[1]);
 };
 // 既定で入っているので、まず外して「順位を無視した」側を測る。

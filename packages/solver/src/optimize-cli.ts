@@ -8,7 +8,13 @@ import { defaultFieldProfile } from '../../sim/src/field/field.ts';
 import { nodeWorkerFactory } from '../../sim/src/parallel/node.ts';
 import { WorkerPool } from '../../sim/src/parallel/pool.ts';
 import { toSerializable } from '../../sim/src/parallel/protocol.ts';
-import { defaultSystemSetting, type RaceSetting } from '../../sim/src/setting.ts';
+import {
+  DerivedSetting,
+  defaultSystemSetting,
+  emptyPassiveBonus,
+  type RaceSetting,
+} from '../../sim/src/setting.ts';
+import { classifySkills, FIDELITY_MARK } from '../../sim/src/skill/classify.ts';
 import { createCostModel } from './cost.ts';
 import { optimizeSkills, pairedDiff, Evaluator, type OptimizeContext } from './optimize.ts';
 
@@ -70,6 +76,20 @@ const context: OptimizeContext = {
 };
 const name = (id: string) => data.skillsById.get(id)?.name ?? id;
 
+/**
+ * 近似の印。走らせずに条件式から決まるので、探索の前に解いておく。
+ * 順位条件を判定しない指定（`--field off`）では、順位と距離差の族が落ちる側に入る。
+ */
+const fidelities = classifySkills(
+  candidates,
+  new DerivedSetting({ ...setting, skills: [] }, emptyPassiveBonus(), data.trackData),
+  { hasField: useField },
+);
+const marked = (id: string) => {
+  const fidelity = fidelities.get(id);
+  return name(id) + (fidelity === undefined ? '' : FIDELITY_MARK[fidelity.fidelity]);
+};
+
 console.log(`東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'} / 相手 ${opponentOffset >= 0 ? '+' : ''}${opponentOffset} / 自己整合 ${selfConsistent ? 'あり' : 'なし'}`);
 console.log(`候補 ${candidates.length} 個: ` + candidates.map((s) => `${s.name}(${s.sp})`).join(', '));
 console.log('');
@@ -99,10 +119,13 @@ const result = await optimizeSkills(context, {
 });
 
 console.log('');
-console.log('単体で足したときの効き（200 試行）:');
+console.log(
+  `単体で足したときの効き（200 試行、${FIDELITY_MARK.approximate} 近似、` +
+    `${FIDELITY_MARK.dropped} 条件を落としている）:`,
+);
 for (const single of result.singles) {
   console.log(
-    `  ${name(single.skillId).padEnd(12, '　')} ${single.diff.mean.toFixed(4)} 秒 / ${single.cost} pt` +
+    `  ${marked(single.skillId).padEnd(12, '　')} ${single.diff.mean.toFixed(4)} 秒 / ${single.cost} pt` +
       ` = ${(1000 * single.efficiency).toFixed(3)} ミリ秒/pt`,
   );
 }
@@ -119,7 +142,7 @@ if (result.positionCompetition !== null) {
 
 console.log('');
 console.log(`最良の構成（${result.cost} pt / 予算 ${budget} pt）:`);
-for (const id of result.best) console.log(`  ${name(id)} (${cost.cost(id)} pt)`);
+for (const id of result.best) console.log(`  ${marked(id)} (${cost.cost(id)} pt)`);
 console.log(
   `  短縮 ${result.bestDiff.mean.toFixed(4)} 秒 ± ${(2 * result.bestDiff.stdError).toFixed(4)}` +
     `（最大スパート ${(100 * result.bestDiff.spurtRateDelta).toFixed(2)} ポイント、入れ替わり ${result.bestDiff.spurtFlips} 本）`,
@@ -129,7 +152,7 @@ console.log('上位の構成:');
 for (const entry of result.top.slice(0, 6)) {
   console.log(
     `  ${entry.diff.mean.toFixed(4)} ± ${(2 * entry.diff.stdError).toFixed(4)} 秒 (${String(entry.cost).padStart(3)} pt) ` +
-      entry.skillIds.map(name).join(', '),
+      entry.skillIds.map(marked).join(', '),
   );
 }
 console.log('');

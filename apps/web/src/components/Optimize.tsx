@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { costModelFor, gameData, useStore } from '../store.ts';
+import { costModelFor, gameData, skillFidelities, useStore } from '../store.ts';
+import { countFidelity, FidelityLegend, SkillNameWithMark } from './Fidelity.tsx';
 import { Panel } from './Inputs.tsx';
 import { PlanInput, ROUTE_LABEL } from './Plan.tsx';
 
@@ -27,6 +28,27 @@ export function OptimizePanel() {
 
   const plan = useStore((s) => s.plan);
   const planCandidates = useStore((s) => s.planCandidates);
+
+  // 近似の印。値は個別に選び、組み立ては useMemo で行う。
+  // セレクタの中で組み立てると毎回新しい参照が返り、描画が止まる。
+  const uma = useStore((s) => s.uma);
+  const track = useStore((s) => s.track);
+  const options = useStore((s) => s.options);
+  const debuffCounts = useStore((s) => s.debuffCounts);
+  const shownIds = useMemo(() => {
+    const ids = new Set<string>(skillIds);
+    if (result !== null) {
+      for (const id of result.best) ids.add(id);
+      for (const entry of result.top) for (const id of entry.skillIds) ids.add(id);
+      for (const single of result.singles) ids.add(single.skillId);
+    }
+    return [...ids];
+  }, [skillIds, result]);
+  const fidelities = useMemo(
+    () => skillFidelities({ uma, track, skillIds, options, debuffCounts, useField }, shownIds),
+    [uma, track, skillIds, options, debuffCounts, useField, shownIds],
+  );
+  const bestFidelity = result === null ? null : countFidelity(result.best, fidelities);
 
   // 結果の表示に使う費用は、育成計画のときはヒントの割引を含む。
   const levels = plan.enabled && planCandidates !== null ? planCandidates.hintLevels : hintLevels;
@@ -151,7 +173,8 @@ export function OptimizePanel() {
                   key={id}
                   className="rounded-full border border-rule2 px-2 py-0.5 text-xs"
                 >
-                  {name(id)} <span className="text-ink3">{costModel.cost(id)} pt</span>
+                  <SkillNameWithMark name={name(id)} fidelity={fidelities.get(id)} />{' '}
+                  <span className="text-ink3">{costModel.cost(id)} pt</span>
                   {routeOf(id) !== null && (
                     <span className="text-ink3">・{ROUTE_LABEL[routeOf(id)!]}</span>
                   )}
@@ -168,7 +191,20 @@ export function OptimizePanel() {
                 この差は一部の試行が大きく動かしている。
               </p>
             )}
+            {/*
+              近似の印。探索はモデルが高く評価している箇所を選び出すので、
+              解がどれだけそこに乗っているかを数で出す。docs/solver-design.md 4 節を参照。
+            */}
+            {bestFidelity !== null && (bestFidelity.approximate > 0 || bestFidelity.dropped > 0) && (
+              <p className="mt-1 text-xs text-ink3">
+                この構成の {result.best.length} 個のうち、{bestFidelity.approximate} 個は発動条件に
+                近似を含み、{bestFidelity.dropped} 個は条件を落としている。
+                落としているものが多いほど、短縮量は本来より大きく出ている。
+              </p>
+            )}
           </div>
+
+          <FidelityLegend useField={useField} />
 
           <div className="overflow-x-auto">
             <h3 className="text-xs font-semibold">最終段まで残った構成</h3>
@@ -205,7 +241,14 @@ export function OptimizePanel() {
                         <span className="text-ink3"> ± {(2 * entry.diff.stdError).toFixed(3)}</span>
                       </td>
                       <td className="text-right tabular-nums">{entry.cost}</td>
-                      <td className="pl-3">{entry.skillIds.map(name).join('、')}</td>
+                      <td className="pl-3">
+                        {entry.skillIds.map((id, i) => (
+                          <span key={id}>
+                            {i > 0 && '、'}
+                            <SkillNameWithMark name={name(id)} fidelity={fidelities.get(id)} />
+                          </span>
+                        ))}
+                      </td>
                     </tr>
                   );
                 })}
@@ -258,7 +301,12 @@ export function OptimizePanel() {
                     key={single.skillId}
                     className="border-t border-rule"
                   >
-                    <td className="py-1">{name(single.skillId)}</td>
+                    <td className="py-1">
+                      <SkillNameWithMark
+                        name={name(single.skillId)}
+                        fidelity={fidelities.get(single.skillId)}
+                      />
+                    </td>
                     <td className="text-right tabular-nums">{single.diff.mean.toFixed(4)}</td>
                     <td className="text-right tabular-nums">
                       {marginalOf(single.skillId) === null ? (
