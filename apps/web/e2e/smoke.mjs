@@ -298,6 +298,10 @@ await page.click('button:has-text("すべて外す")');
 // 脚質は前の段で変えてあるので、ここで決め直してから測る
 await goTab('設定');
 await page.click('[role=radiogroup][aria-label="脚質"] button:has-text("先行")');
+// 1 本を開いたときに図へスキルの発動位置が乗ることを見たいので、1 つだけ持たせる
+await page.fill('input[placeholder="スキル名で検索"]', '円弧のマエストロ');
+await page.click('button:has-text("円弧のマエストロ")');
+await page.fill('input[placeholder="スキル名で検索"]', '');
 await goTab('勝率');
 await page.waitForTimeout(300);
 await page.fill('input[type=number][max="50000"]', '200');
@@ -326,6 +330,51 @@ for (const r of cells) {
 // 自分は相手より強くしてあるので、勝率は 1/9 より高い
 if (!(cells[0][1] > 11.1)) fail(`自分の勝率が低すぎる: ${cells[0][1]}`);
 await page.locator('section:has(h2:text("相手"))').screenshot({ path: 'docs/images/m9-field.png' });
+
+// 勝率の面から 1 レースを開く（#57）。
+// フレーム列は持ち回っていないので、押すたびに同じ種で走らせ直している。
+// 開いた中身が集計と食い違わないことは packages/sim/test/multi.test.ts が固定する。
+// ここで見るのは「押すと出るか」「全頭ぶん出るか」「横にあふれないか」である。
+const openButtons = await page.$$('button[data-testid^="open-order-"]');
+if (openButtons.length === 0) fail('着順から 1 本を開くボタンが無い');
+await openButtons[0].click();
+await page.waitForSelector('[data-testid=multi-detail-head]', { timeout: 30000 });
+await page.waitForTimeout(300);
+console.log('--- 1 本を開く:', (await page.textContent('[data-testid=multi-detail-head]')).replace(/\s+/g, ' ').trim());
+const detailRows = await readTestTable('multi-detail-table');
+if (detailRows.length !== 9) fail(`開いた 1 本の着順表が 9 行でない: ${detailRows.length}`);
+const detailOrders = detailRows.map((r) => Number(r[0]));
+if ([...detailOrders].sort((a, b) => a - b).join(',') !== '1,2,3,4,5,6,7,8,9') {
+  fail(`開いた 1 本の着順が 1 から 9 まで揃っていない: ${detailOrders.join(',')}`);
+}
+// 自分のスキルの発動位置が図に乗っていること（印があるときだけ出る注記で見る）
+const detailText = await page.textContent('section:has([data-testid=multi-detail-head])');
+if (!detailText.includes('三角の印')) fail('1 本の図にスキルの発動位置が乗っていない');
+// 位置と速度の 2 枚が描けていること（uPlot は canvas に描く）
+const detailCanvases = await page.locator('section:has([data-testid=multi-detail-head]) canvas').count();
+console.log('--- 1 本の図:', detailCanvases, '枚');
+if (detailCanvases < 2) fail(`位置と速度の図が揃っていない: ${detailCanvases} 枚`);
+// 前後に移れること
+const headBefore = await page.textContent('[data-testid=multi-detail-head]');
+await page.click('button[aria-label="次の試行"]');
+await page.waitForTimeout(400);
+if ((await page.textContent('[data-testid=multi-detail-head]')) === headBefore) {
+  fail('「次 →」で別の試行に移らない');
+}
+// 全頭ぶんの線を引く図は横にあふれやすいので、狭い幅でも見ておく
+await page.setViewportSize({ width: 390, height: 900 });
+await page.waitForTimeout(400);
+const detailOverflow = await page.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+);
+console.log('--- 1 本の中身を開いたまま幅 390:', detailOverflow, 'px');
+if (detailOverflow > 0) fail('1 本の中身を開くと小さい画面で横にあふれる');
+await page.setViewportSize({ width: 1280, height: 1600 });
+await page.waitForTimeout(400);
+await page
+  .locator('section:has([data-testid=multi-detail-head])')
+  .screenshot({ path: 'docs/images/multi-race-detail.png' });
+
 // 相手の入力欄もステータスと同じ上限を持つので、設定に戻してから次へ進む
 await goTab('設定');
 

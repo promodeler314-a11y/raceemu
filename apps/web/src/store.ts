@@ -26,6 +26,7 @@ import { summarize, type SimulationSummary } from '../../../packages/sim/src/sum
 import { buildFieldBundle, defaultFieldProfile } from '../../../packages/sim/src/field/field.ts';
 import { opponentSkillPool } from '../../../packages/sim/src/field/opponent-skills.ts';
 import { OrderTally, type OrderSummary } from '../../../packages/sim/src/multi/summary.ts';
+import { replayMultiRace, type MultiReplay } from '../../../packages/sim/src/multi/replay.ts';
 import type { Style } from '../../../packages/sim/src/data/constants.ts';
 import { resolveMethod } from '../../../packages/solver/src/critical.ts';
 import { createCostModel } from '../../../packages/solver/src/cost.ts';
@@ -196,6 +197,13 @@ export interface Opponent {
   readonly skillIds: readonly string[];
 }
 
+/** 全頭同時の 1 試行ぶんの、自分の成績。走らせ直すのに試行番号が要る。 */
+export interface MultiTrialRecord {
+  readonly trial: number;
+  readonly order: number;
+  readonly raceTime: number;
+}
+
 /** 全頭同時に走らせた結果 */
 export interface MultiResult {
   /** 出走順ごとの着順の集計。0 番が自分。 */
@@ -203,6 +211,33 @@ export interface MultiResult {
   readonly trials: number;
   readonly elapsedMs: number;
   readonly cancelled: boolean;
+  /**
+   * 試行ごとの自分の着順とタイム。着順の分布のどこを開くかを選ぶのに使う。
+   * 1 試行あたり数値 3 つなので、フレーム列と違って持ち回れる。
+   */
+  readonly selfTrials: readonly MultiTrialRecord[];
+  /**
+   * この結果を出したときの出走設定と種。
+   *
+   * 1 試行を開くときは、これと試行番号から同じレースを走らせ直す
+   * （`showMultiTrial`）。走らせたあとに相手を触られても、結果と
+   * 図が食い違わないようにするために、そのときの設定を持っておく。
+   */
+  readonly entries: readonly RaceSetting[];
+  readonly seed: number;
+}
+
+/**
+ * 勝率の面から開いた 1 本。
+ *
+ * 保持しているのは「いま開いている 1 本」だけで、走らせ直すたびに入れ替わる。
+ * docs/multi-horse-design.md 7 節を参照。
+ */
+export interface MultiDetail {
+  readonly trial: number;
+  readonly replay: MultiReplay;
+  /** 走らせ直しに掛かった時間 (ms) */
+  readonly elapsedMs: number;
 }
 
 export type Theme = 'light' | 'dark';
@@ -349,6 +384,8 @@ interface AppState {
   multiRunning: boolean;
   multiResult: MultiResult | null;
   multiProgress: number;
+  /** 勝率の面から開いた 1 本。開いていなければ null。 */
+  multiDetail: MultiDetail | null;
 
   optimizeBudget: number;
   optimizeResult: OptimizeResult | null;
@@ -408,6 +445,8 @@ interface AppState {
   resetOpponents: () => void;
   setMultiTrials: (trials: number) => void;
   runMulti: () => Promise<void>;
+  /** 勝率の 1 試行を同じ種で走らせ直して開く。null を渡すと閉じる。 */
+  showMultiTrial: (trial: number | null) => void;
   setOptimizeBudget: (budget: number) => void;
   setPlan: (patch: Partial<PlanSetting>) => void;
   /** サポートカードと育成ウマ娘を読み込む。すでに読んであれば何もしない。 */
@@ -543,6 +582,7 @@ export const useStore = create<AppState>((set, get) => ({
   multiRunning: false,
   multiResult: null,
   multiProgress: 0,
+  multiDetail: null,
 
   optimizeBudget: 600,
   plan: DEFAULT_PLAN,
@@ -672,20 +712,20 @@ export const useStore = create<AppState>((set, get) => ({
     const opponents = state.opponents.length > 0 ? state.opponents : defaultOpponents(state.track.gateCount);
     if (state.opponents.length === 0) set({ opponents });
     controller = new AbortController();
-    set({ multiRunning: true, multiProgress: 0, error: null, multiResult: null });
+    set({ multiRunning: true, multiProgress: 0, error: null, multiResult: null, multiDetail: null });
     const started = performance.now();
     try {
-      const entries = [
-        toSerializable(buildSetting(state)),
-        ...opponents.map((opponent) =>
-          toSerializable({
-            ...buildSetting(state),
-            uma: opponent.uma,
-            skills: opponent.skillIds.map((id) => gameData.skillsById.get(id)!).filter(Boolean),
-          }),
-        ),
+      // 1 試行を開くときに同じレースを走らせ直せるよう、走らせた設定をそのまま取っておく。
+      const settings: RaceSetting[] = [
+        buildSetting(state),
+        ...opponents.map((opponent) => ({
+          ...buildSetting(state),
+          uma: opponent.uma,
+          skills: opponent.skillIds.map((id) => gameData.skillsById.get(id)!).filter(Boolean),
+        })),
       ];
-      const { packed, entries: width, cancelled } = await getPool().runMulti(entries, system, {
+      const entries = settings.map((setting) => toSerializable(setting));
+      const { packed, entries: width, cancelled, trialIndices } = await getPool().runMulti(entries, system, {
         count: state.multiTrials,
         seed: state.seed,
         onProgress: (done) => set({ multiProgress: done }),
@@ -694,15 +734,17 @@ export const useStore = create<AppState>((set, get) => ({
       });
       const tally = new OrderTally(width);
       const trials = width === 0 ? 0 : packed.length / (width * MULTI_FIELDS);
+      const selfTrials: MultiTrialRecord[] = [];
       for (let t = 0; t < trials; t++) {
-        tally.add({
-          entries: [...Array(width).keys()].map((index) => ({
-            index,
-            ...unpackMultiEntry(packed, (t * width + index) * MULTI_FIELDS),
-          })),
-          states: [],
-          frames: 0,
-        });
+        const entryResults = [...Array(width).keys()].map((index) => ({
+          index,
+          ...unpackMultiEntry(packed, (t * width + index) * MULTI_FIELDS),
+        }));
+        // 中断したときは詰め直しで並びと試行番号がずれるので、番号のほうを見る。
+        const trial = trialIndices?.[t] ?? t;
+        const self = entryResults[0]!;
+        selfTrials.push({ trial, order: self.order, raceTime: self.result.raceTime });
+        tally.add({ entries: entryResults, states: [], frames: 0 });
       }
       const multiElapsedMs = performance.now() - started;
       set({
@@ -711,6 +753,9 @@ export const useStore = create<AppState>((set, get) => ({
           trials,
           elapsedMs: multiElapsedMs,
           cancelled: cancelled === true,
+          selfTrials,
+          entries: settings,
+          seed: state.seed,
         },
         pace:
           trials === 0
@@ -729,6 +774,32 @@ export const useStore = create<AppState>((set, get) => ({
       set({ multiRunning: false, multiProgress: 0 });
       controller = null;
     }
+  },
+
+  /**
+   * 勝率の 1 試行を開く。
+   *
+   * フレーム列は持っていないので、そのときの設定と種で同じ試行を走らせ直す。
+   * 乱数は `(baseSeed, trial, streamKey)` から決まるので、走らせ直しても
+   * 着順もタイムも元の実行と同じになる（`packages/sim/test/multi.test.ts`）。
+   * 9 頭で数十 ms なので、押してから出るまでの間に合う。
+   */
+  showMultiTrial: (trial) => {
+    if (trial === null) {
+      set({ multiDetail: null });
+      return;
+    }
+    const state = get();
+    const result = state.multiResult;
+    if (result === null || result.entries.length === 0) return;
+    const calculator = new RaceCalculator(system, gameData.trackData);
+    const started = performance.now();
+    const replay = replayMultiRace(
+      calculator,
+      result.entries.map((setting) => ({ setting })),
+      { seed: result.seed, trial, focus: 0 },
+    );
+    set({ multiDetail: { trial, replay, elapsedMs: performance.now() - started } });
   },
 
   setOptimizeBudget: (optimizeBudget) => set({ optimizeBudget }),
