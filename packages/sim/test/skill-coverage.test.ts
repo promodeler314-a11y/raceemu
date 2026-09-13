@@ -5,6 +5,7 @@ import { RngSet } from '../src/rng.ts';
 import { DerivedSetting, emptyPassiveBonus, type RaceSetting } from '../src/setting.ts';
 import { compileConditions, newSkillScratch, unsupportedConditions } from '../src/skill/condition.ts';
 import { ignoreConditions, approximateTypeToState } from '../src/skill/approximate.ts';
+import { knownUnsupportedTypes } from '../src/skill/classify.ts';
 
 const data = loadGameData();
 
@@ -38,8 +39,12 @@ describe('スキル条件の網羅', () => {
   /**
    * 本家も未対応のまま条件を落としている型。移植版も同じ扱いにする。
    * 新しい型が増えたらこのテストが落ちるので、実装漏れに気付ける。
+   *
+   * 期待値は変えていないが、置き場を `classify.ts` に移した。
+   * スキルごとの近似の印（#58）は、走らせる前に「この型は落ちる」と言えなければ
+   * ならず、同じ一覧を実装側と試験側の 2 か所に持つとずれるためである。
    */
-  const knownUnsupported = ['succession_skill_count'];
+  const knownUnsupported = [...knownUnsupportedTypes];
 
   it('未対応の条件が既知のものだけである', () => {
     unsupportedConditions.clear();

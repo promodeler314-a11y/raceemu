@@ -1,0 +1,21 @@
+{
+  "repository": "mee1080/umasim",
+  "ref": "main",
+  "generatedBy": "scripts/check-race-model.py",
+  "fingerprint": "git-blob-sha1",
+  "files": {
+    "race/build.gradle.kts": "fafb66eb76d016522a13754b5ce83eb0505893f4",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/Main.kt": "fe59a029761d5c7637ba0d85ff78b52ada70b4bd",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/calc2/RaceCalculator.kt": "150f7c858bcf59c4449fea1b6028d700317ad807",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/calc2/RaceState.kt": "cb0b4892a1570ad216bbdc5484331cdd43f87fed",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/calc2/SkillChecker.kt": "8176f85ba59c25befb8bcd8117ea02820d1f9dc2",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/data/constants.kt": "50dc419f5c6b912d4176ab52f1983e9fdca0dcc2",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/data/rawData.kt": "8f5fc8803ca77a94507b2494658b9f12c787cfc1",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/data/trackData.kt": "ef7de60b3284cb13997e796ea6076260bb0a2ed6",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/data2/SkillData.kt": "4a4d7dc5f9040286223be1af570bd466d5748db7",
+    "race/src/commonMain/kotlin/io/github/mee1080/umasim/race/test/testCalc2.kt": "3dfc5fe905adde8bbc397147f89d229be457c85e",
+    "race/src/commonTest/kotlin/io/github/mee1080/umasim/race/calc2/RaceCalculatorTest.kt": "f864a2a6884cfc7ae8b22db45d7e7a4dcc1c2025",
+    "race/src/jvmMain/java/io/github/mee1080/umasim/race/data2/SkillData.jvm.kt": "2a481ceebd36b895b7983a571fd4d0a0a7b90a1a",
+    "race/src/wasmJsMain/kotlin/io/github/mee1080/umasim/race/data2/SkillData.wasmJs.kt": "c9435ab20ca7cfcf6187044251532972e547be6d"
+  }
+}

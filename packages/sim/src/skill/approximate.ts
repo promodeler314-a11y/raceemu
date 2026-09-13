@@ -4,12 +4,32 @@ import type { RaceState } from '../state.ts';
 /**
  * 他のウマ娘の位置や接触にまつわる条件の確率近似。
  * 1秒ごとに状態を更新する。mee1080/umasim の approximateConditions からの移植。
+ *
+ * ここに並ぶ確率は本家から写したものだが、ゲームと突き合わせて確かめたものではない。
+ * どれだけ不確かかを数字にするため、設定の `approximateRateScale`（既定 1.0）で
+ * 全体に倍率を掛けられるようにしてある。docs/solver-design.md 4 節を参照。
  */
 export interface ApproximateCondition {
   readonly displayName: string;
   readonly description: string;
   readonly valueOnStart: number;
   update(state: RaceState, value: number): number;
+}
+
+/**
+ * 近似確率に倍率を掛ける。
+ *
+ * 確率なので 1.0 を超えられない。超えた分は 1.0 で頭打ちにして捨てる
+ * （倍率 2 なら 0.6 は 1.0 になり、それ以上は動かない）。下は 0 に近づくだけなので
+ * 下限の心配は要らない（負の倍率は `DerivedSetting` が 0 に丸めている）。
+ * 頭打ちのせいで、もともと確率の高い条件ほど倍率を上げたときの動きが鈍くなる。
+ * 幅を読むときは「上に振っても動かない＝既に飽和している」ことがある点に注意する。
+ *
+ * 倍率 1.0 のとき `rate * 1.0` は `rate` と厳密に等しく、`Math.min` も素通りするので、
+ * 既定の挙動は 1 ビットも変わらない。
+ */
+function scaleRate(rate: number, scale: number): number {
+  return Math.min(1.0, rate * scale);
 }
 
 /** 開始確率と継続確率で状態を更新する */
@@ -24,9 +44,13 @@ class StartContinue implements ApproximateCondition {
     this.description = `${(start * 100).toFixed(1)}% の確率で開始、${(continuation * 100).toFixed(1)}% の確率で継続`;
   }
   update(state: RaceState, value: number): number {
+    const scale = state.setting.approximateRateScale;
     const rng = state.rng.stream('approx', this.displayName);
-    if (value === 0) return rng.nextDouble() < this.start ? 1 : 0;
-    return rng.nextDouble() < this.continuation ? value + 1 : 0;
+    // 引くのは倍率によらず必ず 1 回。倍率は比べる相手だけを動かす。
+    // 消費の回数と順番が変わらないので、倍率をまたいでも共通乱数のペア比較が成り立つ。
+    const draw = rng.nextDouble();
+    if (value === 0) return draw < scaleRate(this.start, scale) ? 1 : 0;
+    return draw < scaleRate(this.continuation, scale) ? value + 1 : 0;
   }
 }
 
@@ -42,10 +66,14 @@ class RandomRates implements ApproximateCondition {
       rates.map(([v, r]) => `${(r * 100).toFixed(1)}% の確率で ${v}`).join('、') + '、残りは 0';
   }
   update(state: RaceState): number {
+    const scale = state.setting.approximateRateScale;
+    // 引くのは 1 回だけ。倍率は累積の境目を動かすだけで、消費の回数と順番は変えない。
     const check = state.rng.stream('approx', this.displayName).nextDouble();
     let total = 0;
     for (const [value, rate] of this.rates) {
-      total += rate;
+      // 累積も 1.0 で頭打ちにする。確率の合計が 1 を超える分布は作れないので、
+      // 前から順に埋めて、あふれた後ろの値は選ばれなくなる。
+      total = Math.min(1.0, total + rate * scale);
       if (check < total) return value;
     }
     return 0;
@@ -63,7 +91,10 @@ class CountUp implements ApproximateCondition {
     this.description = `${(rate * 100).toFixed(1)}% の確率で +1`;
   }
   update(state: RaceState, value: number): number {
-    return value + (state.rng.stream('approx', this.displayName).nextDouble() < this.rate ? 1 : 0);
+    const scale = state.setting.approximateRateScale;
+    // ここも引くのは 1 回だけ。倍率は比べる相手だけを動かす。
+    const draw = state.rng.stream('approx', this.displayName).nextDouble();
+    return value + (draw < scaleRate(this.rate, scale) ? 1 : 0);
   }
 }
 

@@ -37,8 +37,30 @@ export type Predicate = (state: RaceState) => boolean;
 
 const ALWAYS: Predicate = () => true;
 
-/** 未対応の条件を記録する。実装漏れの発見に使う。 */
+/**
+ * 未対応の条件を記録する。実装漏れの発見に使う。
+ *
+ * ここに貯まるのは**走らせてみて初めて分かるもの**だけである。
+ * スキルごとの分類（`classify.ts`）は条件式から決まるので、この集合には依らない。
+ */
 export const unsupportedConditions = new Set<string>();
+
+/**
+ * 継続判定を実装してある順位率の型。
+ *
+ * `compileCondition` と、走らせずに解く分類（`classify.ts`）が同じ表を見る。
+ * ここに無い `order_rate_*_continue` は落ちる側（満たしている前提）になる。
+ */
+export const orderRateContinueTypes: ReadonlySet<string> = new Set([
+  'order_rate_in20_continue',
+  'order_rate_in40_continue',
+  'order_rate_in50_continue',
+  'order_rate_in80_continue',
+  'order_rate_out20_continue',
+  'order_rate_out40_continue',
+  'order_rate_out50_continue',
+  'order_rate_out70_continue',
+]);
 
 export function compileConditions(
   skill: SkillData,
@@ -178,6 +200,22 @@ function compileCondition(
 
   const staticTarget = staticConditionTarget(condition.type, setting);
   if (staticTarget !== null) return preChecked(condition, staticTarget);
+
+  // 順位率を一定のあいだ保ち続ける条件。
+  // switch の case に並べずに表で引くのは、実装してある型の一覧を
+  // 分類（classify.ts）と 1 か所で共有するためである。
+  // 表に無い型（order_rate_in30_continue など）は default に落ち、
+  // 従来どおり満たしている前提になる。
+  if (orderRateContinueTypes.has(condition.type)) {
+    const type = condition.type;
+    if (resolveOrderRateContinue(type, base.track.gateCount) === undefined) {
+      // 対応表に無い頭数。従来どおり満たしている前提にする。
+      unsupportedConditions.add(`${type} (${base.track.gateCount}頭)`);
+      return () => true;
+    }
+    // 状態はフレームごとに calculator が落としていく。1 なら一度も外れていない。
+    return (s) => (s.simulation.specialState[type] ?? 1) > 0;
+  }
 
   switch (condition.type) {
     case 'hp_per':
@@ -464,24 +502,6 @@ function compileCondition(
         if (atMost !== undefined) return order <= atMost;
         return true;
       };
-    }
-
-    case 'order_rate_in20_continue':
-    case 'order_rate_in40_continue':
-    case 'order_rate_in50_continue':
-    case 'order_rate_in80_continue':
-    case 'order_rate_out20_continue':
-    case 'order_rate_out40_continue':
-    case 'order_rate_out50_continue':
-    case 'order_rate_out70_continue': {
-      const type = condition.type;
-      if (resolveOrderRateContinue(type, base.track.gateCount) === undefined) {
-        // 対応表に無い頭数。従来どおり満たしている前提にする。
-        unsupportedConditions.add(`${type} (${base.track.gateCount}頭)`);
-        return () => true;
-      }
-      // 状態はフレームごとに calculator が落としていく。1 なら一度も外れていない。
-      return (s) => (s.simulation.specialState[type] ?? 1) > 0;
     }
 
     /**

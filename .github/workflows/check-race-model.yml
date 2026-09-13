@@ -1,0 +1,122 @@
+# 本家（mee1080/umasim）の race モジュール、つまり計算式そのものが動いたかを見る。
+#
+# sync-game-data.yml が追いかけるのはスキルとコースのデータだけである。本家は
+# 2 週から 4 週ごとに版を出し、そのうち計算側の変更（全開スパート、クールダウン
+# 2 秒、超常体験）は**データの取り直しでは拾えない**。参照値は本家を JVM で回して
+# 作った固定値なので、本家が動いてもこちらのテストは緑のままになる。
+# 古い本家と一致していることを確かめ続ける状態に、誰も気付けない。
+#
+# そこで race モジュールの指紋を packages/sim/upstream/race-manifest.json に固定し、
+# 週次で取り直して突き合わせる。中身は scripts/check-race-model.py 参照。
+#
+# 名前が sync- ではなく check- なのは、**ここで同期されるのは指紋だけ**だからである。
+# 移植の追随と参照値の作り直しは人がやる。出す PR は「読みに行け」と言うだけで、
+# マージするとこちらが追随したことになってしまう（PR 本文にそう書く）。
+#
+# 差分を PR にするところまでで、typecheck/test/build は ci.yml に任せる。
+# GITHUB_TOKEN で作った PR は pull_request のワークフローを起こさないので、
+# SYNC_PAT があればそちらを使う（sync-game-data.yml と同じ）。
+name: check-race-model
+
+on:
+  schedule:
+    - cron: '53 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNC_PAT || github.token }}
+
+      - id: check
+        env:
+          # 認証なしの API は 60 回/時で、Actions のランナーは出口 IP を共有する。
+          # 取れなければ job を赤で落とす（差分なしと読ませない）。
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # tee の終了状態が job の成否になってしまう。pipefail が無いと、
+          # 取得に失敗しても「差分なし」として緑で終わる。
+          set -o pipefail
+          python3 scripts/check-race-model.py | tee /tmp/race-model-summary.txt
+
+      - id: diff
+        run: |
+          if git diff --quiet -- packages/sim/upstream/race-manifest.json; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT || github.token }}
+          HAS_PAT: ${{ secrets.SYNC_PAT != '' }}
+        run: |
+          BRANCH=chore/check-race-model
+
+          {
+            echo "sim: 本家の race モジュールが動いた"
+            echo
+            cat /tmp/race-model-summary.txt
+          } > /tmp/commit-message.txt
+
+          if [ "$HAS_PAT" = "true" ]; then
+            CI_NOTE="SYNC_PAT を設定してあるので、この PR の CI は普段どおり自動で走る。"
+          else
+            CI_NOTE="**この PR の CI は自動では走らない。** GITHUB_TOKEN で作った PR は pull_request のワークフローを起こさない。マージする前に手動で走らせること。"
+          fi
+
+          {
+            echo "本家（mee1080/umasim）の race モジュールの指紋が変わった。"
+            echo
+            cat /tmp/race-model-summary.txt
+            echo
+            echo "## この PR の読み方"
+            echo
+            echo "**指紋は「読みに行け」と言うだけである。** 空白の修正でも指紋は動くので、計算式が変わったかどうかは上のリンクから本家の差分を読んで判断する。"
+            echo
+            echo "**この PR はマニフェストだけを含む。** マージするとこちらが追随したことになり、次の週からは差分が出なくなる。計算側が動いていた場合、追随が済むまでマージしないこと。"
+            echo
+            echo "追随の作業は別のブランチで行う。このブランチは毎週 main の最新から作り直すので、ここへの手動コミットは次回の実行で消える。"
+            echo
+            echo "## 計算側が動いていたときの段取り"
+            echo
+            echo "- [ ] 本家の差分を読み、計算式が変わったかを判断する"
+            echo "- [ ] 変わっていれば packages/sim を追随させる（移植先は上に添えてある）"
+            echo "- [ ] 参照値を作り直す。手順は packages/sim/test/golden/README.md にある。本家を JVM で回すので手作業である"
+            echo "- [ ] pnpm exec vitest run packages/sim/test/reference.test.ts が緑になることを確かめる"
+            echo "- [ ] 上を別ブランチでマージしてから、この PR をマージして指紋を更新する"
+            echo
+            echo "## 変わったのがデータ側だけだったとき"
+            echo
+            echo "rawData.kt はコースデータで、sync-game-data.yml が packages/data/assets/courses.json として取り直している。そちらの PR を見れば中身が分かる。この PR は指紋を合わせるだけなのでそのままマージしてよい。"
+            echo
+            echo "scripts/check-race-model.py が自動で作った。"
+            echo
+            echo "$CI_NOTE"
+          } > /tmp/pr-body.md
+
+          # main から毎回作り直す。積み重ねると、前回の版と今回の版の差分が
+          # 混ざって、どの週に何が動いたのか分からなくなる。
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$BRANCH"
+          git add packages/sim/upstream/race-manifest.json
+          git commit -F /tmp/commit-message.txt
+          git push --force origin "$BRANCH"
+
+          existing=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')
+          if [ -z "$existing" ]; then
+            gh pr create --draft --base main --head "$BRANCH" \
+              --title "sim: 本家の race モジュールが動いた" \
+              --body-file /tmp/pr-body.md
+          else
+            gh pr edit "$existing" --body-file /tmp/pr-body.md
+          fi

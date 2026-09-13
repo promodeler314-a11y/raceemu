@@ -13,7 +13,7 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 ```
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
-pnpm test                      # vitest run。26 ファイル 232 件
+pnpm test                      # vitest run。28 ファイル 264 件
 pnpm test packages/sim/test/plan.test.ts    # ファイルを絞る
 pnpm exec vitest run packages/sim/test/optimize.test.ts -t '予算を超える構成は返さない'  # テスト名で絞る
 pnpm dev                       # UI の開発サーバ
@@ -30,6 +30,7 @@ pnpm sim --count 1000 --location 10006 --course 10606
 pnpm bench --count 10000       # 並列実行の実測
 pnpm monotonicity --trials 60  # 逆算の前提（単調性）の検査
 pnpm optimize --budget 600 --style SEN
+pnpm sensitivity --trials 600     # 近似確率を半分と倍に振ったときの幅
 pnpm plan --chara スペシャルウィーク --budget 600
 pnpm run multi --trials 500    # 全頭同時（multi は pnpm の下位コマンドと衝突するので run を挟む）
 pnpm order-field --trials 200  # 順位条件の判定が相手の作り方でどう変わるか
@@ -42,7 +43,7 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 
 ### テストの前提
 
-232 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
+264 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
 
 - 読み取りの 7 件：`.tessdata/jpn.traineddata`（`pnpm fetch-tessdata`）が必要。
 - ステータス読み取りの 6 件：`RACEEMU_REAL_SCREENSHOT_DIR` に実機の写真を置いた場所を指す。写真はゲームの著作物なのでリポジトリに無い。
@@ -66,6 +67,11 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 **パッケージ間の import は相対パスに `.ts` 拡張子を付けて書く。** `@raceemu/sim` のような名前は `package.json` にあるだけで、どこからも import していない（`tsconfig.json` の `allowImportingTsExtensions`、ビルド段を持たない方針）。既存の書き方に揃えること。
 
 `packages/data/assets/*.json` は週次のワークフローが本家から取り直して下書き PR を出す。手で編集しない。
+
+**データの取り直しでは計算式の変更を拾えない。** 本家の `race` モジュールの指紋を
+`packages/sim/upstream/race-manifest.json` に固定し、週次の `check-race-model.yml` が
+突き合わせている。動いていれば下書き PR が出る（理由は `docs/race-emulator-analysis.md` 12 節）。
+この PR のマージが「移植を追随させた」という宣言になるので、計算側が動いた回は追随が済むまでマージしない。
 
 ## 設計の土台
 
@@ -128,7 +134,7 @@ zustand が変化と見て描画が止まらなくなる（React error #185、�
 
 - `packages/sim/test/reference.test.ts`：本家との突き合わせ。導出値は小数第 9 位まで一致、タイムは平均の差が標準誤差の 4 倍以内。参照値の作り直し手順は `packages/sim/test/golden/README.md`。
 - `packages/sim/test/skill-coverage.test.ts`：未対応・近似扱いの条件型の集合を固定する。データに新しい型が増えるとここが落ちて気付ける。
-- `test/workflows.test.ts`：ワークフローのパイプが `set -o pipefail` で失敗を握り潰していないかを見る。実際に取得失敗を緑にした事故がある。
+- `test/workflows.test.ts`：ワークフローのパイプが `set -o pipefail` で失敗を握り潰していないかを見る。実際に取得失敗を緑にした事故がある。`check-race-model` については、ワークフローが見るパスとスクリプトが書くパスが同じであることも見る（食い違うと毎週「差分なし」で緑になる）。
 
 ## 残課題は issue が持つ。設計書は理由を持つ
 
