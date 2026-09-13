@@ -3,6 +3,8 @@ import { loadGameData } from '../../data/src/node.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { WorkerPool } from '../src/parallel/pool.ts';
 import { toSerializable } from '../src/parallel/protocol.ts';
+import { buildFieldBundle, defaultFieldProfile } from '../src/field/field.ts';
+import { opponentSkillPool } from '../src/field/opponent-skills.ts';
 import { defaultSystemSetting, type RaceSetting } from '../src/setting.ts';
 import {
   achievementCurve,
@@ -163,6 +165,94 @@ describe('逆算', () => {
         { count: 48, seed: 9, chunkSize: 16 },
       );
       expect([...actual.byCount!]).toEqual([...expected.values]);
+    } finally {
+      await pool.dispose();
+    }
+  });
+});
+
+/**
+ * 順位条件を判定する逆算。
+ *
+ * 判定しないと順位条件は満たしている前提になり、スキルが余分に発動して速くなる。
+ * そのぶん必要量が小さく出る。足りない側に外れるので、結果や探索と同じ相手で測る。
+ */
+describe('逆算とフィールド', () => {
+  const track = { location: 10009, course: 10909, condition: 1, gateCount: 9 } as const;
+  /** 順位条件を持つ回復スキルだけを積む。判定の有無で差が出る構成である。 */
+  const names = ['天衣無縫', '昂る鼓動', '十全十美', '烈火の如く', '英姿颯爽', '曙光'];
+  const withOrderSkills: RaceSetting = {
+    ...setting,
+    uma: { ...setting.uma, speed: 1150, power: 900, guts: 700, wisdom: 900, style: 'SASI' },
+    track,
+    skills: names.map((name) => data.skillsByName.get(name)![0]!),
+  };
+  const field = buildFieldBundle(defaultFieldProfile(9), track, system, data.trackData, {
+    samples: 16,
+    seed: 9001,
+    self: withOrderSkills.uma,
+    skillPool: opponentSkillPool(data.skillsById),
+    skillsById: data.skillsById,
+  });
+  const options = {
+    status: 'stamina',
+    goal: { kind: 'maxSpurt' },
+    from: 600,
+    to: 1400,
+    step: 50,
+    method: 'scan',
+  } as const;
+
+  it('判定すると必要量が上がる', () => {
+    const off = criticalDistribution(withOrderSkills, system, data.trackData, options, 7, 0, 40);
+    const on = criticalDistribution(
+      withOrderSkills,
+      system,
+      data.trackData,
+      { ...options, field },
+      7,
+      0,
+      40,
+    );
+    const required = (dist: ReturnType<typeof criticalDistribution>) => requiredValue(dist.values, 0.5);
+    // 素通りさせると必要量が小さく出る。向きが逆になったらこの検査が落ちる。
+    expect(required(on)).toBeGreaterThan(required(off));
+  });
+
+  it('同じ束なら同じ答えを返す', () => {
+    const once = criticalDistribution(withOrderSkills, system, data.trackData, { ...options, field }, 7, 0, 24);
+    const twice = criticalDistribution(withOrderSkills, system, data.trackData, { ...options, field }, 7, 0, 24);
+    expect([...twice.values]).toEqual([...once.values]);
+  });
+
+  it('Worker で求めても単一スレッドと一致する', async () => {
+    // Worker 側は指定から束を組み直す。単一スレッド側と同じ束になっていないと合わない。
+    const spec = { profile: defaultFieldProfile(9), track, seed: 9001, samples: 16 } as const;
+    const expected = criticalDistribution(
+      withOrderSkills,
+      system,
+      data.trackData,
+      { ...options, field },
+      5,
+      0,
+      24,
+    );
+    const pool = new WorkerPool(nodeWorkerFactory, 3);
+    try {
+      const actual = await pool.runCritical(
+        toSerializable(withOrderSkills),
+        system,
+        {
+          status: 'stamina',
+          goalKind: 'maxSpurt',
+          from: options.from,
+          to: options.to,
+          step: options.step,
+          method: 'scan',
+        },
+        { count: 24, seed: 5, chunkSize: 8, field: spec },
+      );
+      expect([...actual.values]).toEqual([...expected.values]);
     } finally {
       await pool.dispose();
     }

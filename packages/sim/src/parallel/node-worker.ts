@@ -19,6 +19,7 @@ port.on('message', (request: WorkerRequest) => {
         request.from,
         request.count,
         request.critical,
+        request.field,
       );
       const transfer: ArrayBuffer[] = [values.buffer as ArrayBuffer];
       if (byCount !== undefined) transfer.push(byCount.buffer as ArrayBuffer);

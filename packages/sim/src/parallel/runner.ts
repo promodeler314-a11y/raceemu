@@ -111,9 +111,18 @@ export function runCriticalChunk(
   from: number,
   count: number,
   spec: CriticalSpec,
+  fieldSpec?: FieldSpec | null,
 ): { values: Float64Array; races: number; byCount?: Float64Array } {
   const resolved = fromSerializable(setting, data);
   const calculator = new RaceCalculator(system, data.trackData);
+  /**
+   * 束は振る前のステータスで 1 度だけ組み、全ての点で使い回す。
+   *
+   * 相手を自分と同格にする指定のときは束が自分のステータスに依るので、
+   * 点ごとに組み直すと、その試行のなかでステータス以外の出目が変わってしまう。
+   * 臨界値はその前提の上に立っているので、崩すと意味を失う。
+   */
+  const field = resolveField(data, system, fieldSpec, resolved.uma);
   const points: number[] = [];
   for (let value = spec.from; value <= spec.to; value += spec.step) points.push(value);
 
@@ -126,7 +135,7 @@ export function runCriticalChunk(
   const simulateAt = (index: number, trial: number): RaceSimulationResult => {
     races++;
     const uma = { ...resolved.uma, [spec.status]: points[index]! };
-    return calculator.simulate({ ...resolved, uma }, { seed, trial }).result;
+    return calculator.simulate({ ...resolved, uma }, { seed, trial, field }).result;
   };
   const achieves = (result: RaceSimulationResult): boolean => {
     switch (spec.goalKind) {

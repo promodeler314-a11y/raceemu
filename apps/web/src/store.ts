@@ -876,6 +876,9 @@ export const useStore = create<AppState>((set, get) => ({
           seed: state.seed,
           onProgress: (done) => set({ progress: done }),
           signal: controller.signal,
+          // 結果や探索と同じ相手で測る。ここだけ順位条件を素通りさせると、
+          // 必要量が小さく出る（足りない側に外れる）。
+          field: fieldSpec(state),
         },
       );
       set({
