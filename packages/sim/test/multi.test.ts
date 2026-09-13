@@ -3,6 +3,7 @@ import { loadGameData } from '../../data/src/node.ts';
 import { RaceCalculator } from '../src/calculator.ts';
 import type { Style } from '../src/data/constants.ts';
 import { runMultiRace, type MultiEntry } from '../src/multi/race.ts';
+import { replayMultiRace } from '../src/multi/replay.ts';
 import { OrderTally } from '../src/multi/summary.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { WorkerPool } from '../src/parallel/pool.ts';
@@ -129,6 +130,87 @@ describe('全頭同時', () => {
       await pool.dispose();
     }
   }, 120000);
+
+  /**
+   * 1 試行を開く機能（#57）の芯。
+   *
+   * 勝率はフレーム列を捨てて集計だけを残す。開きたい 1 本は、そのときの種と
+   * 試行番号でもう一度走らせ直して作る。走らせ直したレースが元と違えば、
+   * 画面に出る図は「その試行の中身」ではなくなり、機能全体が嘘になる。
+   */
+  describe('1 試行の走らせ直し', () => {
+    it('走らせ直しても、元の実行と着順とタイムが厳密に一致する', () => {
+      // 勝率を出すときと同じように、続けて何試行も回す。
+      const batch = [...Array(8).keys()].map((trial) =>
+        runMultiRace(calculator, entries, { seed: 57, trial }),
+      );
+      // そのうちの 1 本だけを、あとから開く。
+      for (const trial of [0, 3, 7]) {
+        const replay = replayMultiRace(calculator, entries, { seed: 57, trial });
+        const expected = batch[trial]!;
+        for (const entry of expected.entries) {
+          const horse = replay.horses.find((h) => h.index === entry.index)!;
+          expect(horse.order).toBe(entry.order);
+          // 小数第 9 位までではなく、ビット単位で同じであることを見る。
+          expect(horse.raceTime).toBe(entry.result.raceTime);
+        }
+      }
+    });
+
+    it('Worker で集計した結果とも、着順とタイムが一致する', async () => {
+      // 画面が通る経路は Worker である。集計は Worker、開くのは主スレッドなので、
+      // 両方で同じレースになっていなければならない。
+      const trials = 12;
+      const serializable = entries.map((e) => toSerializable(e.setting));
+      const pool = new WorkerPool(nodeWorkerFactory, 2);
+      try {
+        const out = await pool.runMulti(serializable, system, { count: trials, seed: 57, chunkSize: 5 });
+        for (const trial of [1, 6, 11]) {
+          const replay = replayMultiRace(calculator, entries, { seed: 57, trial });
+          for (const horse of replay.horses) {
+            const offset = (trial * entries.length + horse.index) * MULTI_FIELDS;
+            const actual = unpackMultiEntry(out.packed, offset);
+            expect(horse.order).toBe(actual.order);
+            expect(horse.raceTime).toBeCloseTo(actual.result.raceTime, 9);
+          }
+        }
+      } finally {
+        await pool.dispose();
+      }
+    }, 120000);
+
+    it('全頭ぶんの位置と速度が揃い、自分のスキルの発動を拾える', () => {
+      const skill = data.skillsByName.get('コーナー加速○')?.[0];
+      expect(skill).toBeDefined();
+      const withSkill: MultiEntry[] = [
+        { setting: { ...make('SEN'), skills: [skill!] } },
+        ...entries.slice(1),
+      ];
+      const replay = replayMultiRace(calculator, withSkill, { seed: 57, trial: 2 });
+
+      expect(replay.horses).toHaveLength(entries.length);
+      expect(replay.times.length).toBe(replay.frames);
+      for (const horse of replay.horses) {
+        expect(horse.positions.length).toBe(horse.speeds.length);
+        expect(horse.positions.length).toBeGreaterThan(0);
+        expect(horse.positions.length).toBeLessThanOrEqual(replay.frames);
+        // 位置は戻らない。
+        for (let i = 1; i < horse.positions.length; i++) {
+          expect(horse.positions[i]!).toBeGreaterThanOrEqual(horse.positions[i - 1]!);
+        }
+        // 記録しているのはフレームの頭の位置なので、最後の 1 フレームぶん
+        // （1/15 秒で 2 m 少々）だけゴール線の手前で終わる。
+        expect(horse.positions[horse.positions.length - 1]!).toBeGreaterThan(
+          replay.courseLength - 4,
+        );
+      }
+      // 自分のフレーム列にスキルの発動が入っている（図の縦線の元になる）
+      const triggered = replay.focusFrames
+        .slice(1)
+        .flatMap((frame) => frame.triggeredSkills.map((t) => t.invoke.skill.name));
+      expect(triggered).toContain('コーナー加速○');
+    });
+  });
 
   it('相互作用があるぶん、単独で走らせたときとは違う結果になる', () => {
     const alone = calculator.simulate(make('SEN'), { seed: 41, trial: 0 });

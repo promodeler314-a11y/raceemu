@@ -170,6 +170,15 @@ export function Header() {
   );
 }
 
+/**
+ * 組んだ版のコミット。`vite.config.ts` が埋める。
+ *
+ * 取れない環境（git の無い所でのビルド）では空文字になる。
+ * 型検査は Vite を通さないので、`declare` が無いと見つからない。
+ */
+declare const __COMMIT_SHA__: string | undefined;
+const COMMIT_SHA = typeof __COMMIT_SHA__ === 'string' ? __COMMIT_SHA__ : '';
+
 export function Footer() {
   const summary = useStore((s) => s.summary);
   const elapsedMs = useStore((s) => s.elapsedMs);
@@ -195,12 +204,29 @@ export function Footer() {
         の移植 ・ AGPL v3 ・{' '}
         <a
           className="text-ink2 underline"
-          href="https://github.com/promodeler314-a11y/raceemu"
+          href={
+            COMMIT_SHA === ''
+              ? 'https://github.com/promodeler314-a11y/raceemu'
+              : `https://github.com/promodeler314-a11y/raceemu/tree/${COMMIT_SHA}`
+          }
           target="_blank"
           rel="noreferrer noopener"
         >
           ソースはこちら
         </a>
+        {/*
+          動かしている版と push してある版がズレると、リンクがあっても
+          「いま動いているもののソース」にはならない（docs/server-design.md 6 節）。
+          組んだコミットを出し、上のリンクもその版に向ける。
+        */}
+        {COMMIT_SHA !== '' && (
+          <>
+            {' ・ '}
+            <span className="num" data-testid="commit-sha">
+              {COMMIT_SHA}
+            </span>
+          </>
+        )}
       </span>
     </footer>
   );

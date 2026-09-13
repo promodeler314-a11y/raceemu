@@ -42,7 +42,9 @@ const server = createServer(async (req, res) => {
 await new Promise((r) => server.listen(4173, r));
 
 // バンドルの大きさ。減らしたものが黙って戻らないように上限を置く。
-// 2026-09 時点で本体 1.44 MB、Worker 1.14 MB。
+// 2026-09 時点で本体 1.57 MB、Worker 1.13 MB。全スキルの候補化（#59）で
+// 本体が 10 kB 増えた。スキルデータは前から本体に入っているので、
+// 候補を広げてもデータは増えない。
 {
   const { readdir, stat } = await import('node:fs/promises');
   const files = await readdir(join(root, 'assets'));
@@ -268,6 +270,36 @@ console.log('  限界貢献度の列:', marginalCells.join(' | '));
 console.log('  参考行:', referenceRow[0], '/', referenceRow[1]);
 await page.locator(optimizeSection).screenshot({ path: 'docs/images/m7-optimize.png' });
 
+// 投げ先: 宛先を入れてサーバを選んでも、口が無ければブラウザに落ちること。
+// この偽サーバは POST に HTML の 405 を返す（静的配信だけの版と同じ）。
+// 状態番号ではなく中身が JSON かどうかで判断していないと、ここで倒れる。
+const statsText = async () => (await page.textContent('[data-testid=optimize-stats]')).trim();
+console.log('--- 投げ先（ブラウザで回したとき）:', await statsText());
+if (!(await statsText()).startsWith('ブラウザ')) fail('既定でブラウザになっていない');
+const targetServer = page.locator('[data-testid=search-target-server]');
+if (await targetServer.isEnabled()) fail('宛先が空なのにサーバを選べる');
+await page.fill('[data-testid=search-endpoint]', '/');
+await targetServer.check();
+await page.click('button:has-text("探索する")');
+await page.waitForFunction(
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('探索中')),
+  null,
+  { timeout: 300000 },
+);
+await page.waitForTimeout(300);
+const fellBack = await statsText();
+console.log('--- 投げ先（サーバを選んだが口が無いとき）:', fellBack);
+if (!fellBack.startsWith('ブラウザ')) fail(`口が無いのにブラウザへ落ちていない: ${fellBack}`);
+const fallbackBest = await page.textContent(`${optimizeSection} h3`);
+if (!/（\d+ pt/.test(fallbackBest)) fail(`落ちたあとに結果が出ていない: ${fallbackBest}`);
+// 疎通の確認も、口が無いことを日本語で言って倒れないこと。
+await page.click('button:has-text("疎通を確かめる")');
+await page.waitForSelector('[data-testid=search-health]', { timeout: 20000 });
+const healthText = (await page.textContent('[data-testid=search-health]')).trim();
+console.log('--- 疎通の確認（サーバ無し）:', healthText);
+if (!healthText.includes('口が無い')) fail(`口が無いことを伝えていない: ${healthText}`);
+if (/JSON|Unexpected token/i.test(healthText)) fail(`生の例外が画面に出ている: ${healthText}`);
+
 // 育成計画: 候補を手持ちではなく入手経路から組み立てる。
 // サポートカードと育成ウマ娘のデータは別の塊に切ってあるので、
 // 切り替えたあとに読み込みを待つ。
@@ -289,6 +321,39 @@ await page.waitForFunction(
   { timeout: 10000 },
 );
 console.log(' ', (await page.textContent('[data-testid=plan-candidates]')).trim());
+
+// 全スキル: 入手経路を問わず、買えるスキル全体を候補にする。
+// デッキのデータは要らないので、読み込みを待たずに数が出る。
+await page.click('label:has-text("全スキル") input[type=radio]');
+await page.waitForTimeout(200);
+// 種類のつまみは育成計画と共有している。前の節で固有の継承版を閉じてあるので、
+// ここで 3 つとも開いてから数える。
+for (const kind of ['白', '金', '固有の継承版']) {
+  await page.check(`label:has-text("${kind}") input[type=checkbox]`);
+}
+await page.waitForTimeout(200);
+const allText = (await page.textContent('[data-testid=plan-candidates]')).trim();
+console.log('--- 全スキル');
+console.log(' ', allText);
+const allCount = Number(/候補 (\d+) 個/.exec(allText)[1]);
+if (!(allCount > 200)) fail(`全スキルの候補が少なすぎる: ${allCount}`);
+if (allCount > 1200) fail(`サーバの上限を超える候補が既定で出ている: ${allCount}`);
+// ▲（条件を落としている）を候補に残すと数が増える。順位条件を判定していない
+// いまの設定では、順位と距離差の族がまるごと ▲ なので大きく変わる。
+await page.uncheck('[data-testid=exclude-dropped]');
+await page.waitForFunction(
+  (before) => {
+    const text = document.querySelector('[data-testid=plan-candidates]')?.textContent ?? '';
+    return Number(/候補 (\d+) 個/.exec(text)?.[1] ?? before) > before;
+  },
+  allCount,
+  { timeout: 10000 },
+);
+const withDropped = Number(
+  /候補 (\d+) 個/.exec(await page.textContent('[data-testid=plan-candidates]'))[1],
+);
+console.log(`  ▲ を外したとき ${allCount} 個 / 入れたとき ${withDropped} 個`);
+await page.check('[data-testid=exclude-dropped]');
 await page.click('label:has-text("いま選んでいるスキル") input[type=radio]');
 
 await goTab('設定');
@@ -298,6 +363,10 @@ await page.click('button:has-text("すべて外す")');
 // 脚質は前の段で変えてあるので、ここで決め直してから測る
 await goTab('設定');
 await page.click('[role=radiogroup][aria-label="脚質"] button:has-text("先行")');
+// 1 本を開いたときに図へスキルの発動位置が乗ることを見たいので、1 つだけ持たせる
+await page.fill('input[placeholder="スキル名で検索"]', '円弧のマエストロ');
+await page.click('button:has-text("円弧のマエストロ")');
+await page.fill('input[placeholder="スキル名で検索"]', '');
 await goTab('勝率');
 await page.waitForTimeout(300);
 await page.fill('input[type=number][max="50000"]', '200');
@@ -326,6 +395,51 @@ for (const r of cells) {
 // 自分は相手より強くしてあるので、勝率は 1/9 より高い
 if (!(cells[0][1] > 11.1)) fail(`自分の勝率が低すぎる: ${cells[0][1]}`);
 await page.locator('section:has(h2:text("相手"))').screenshot({ path: 'docs/images/m9-field.png' });
+
+// 勝率の面から 1 レースを開く（#57）。
+// フレーム列は持ち回っていないので、押すたびに同じ種で走らせ直している。
+// 開いた中身が集計と食い違わないことは packages/sim/test/multi.test.ts が固定する。
+// ここで見るのは「押すと出るか」「全頭ぶん出るか」「横にあふれないか」である。
+const openButtons = await page.$$('button[data-testid^="open-order-"]');
+if (openButtons.length === 0) fail('着順から 1 本を開くボタンが無い');
+await openButtons[0].click();
+await page.waitForSelector('[data-testid=multi-detail-head]', { timeout: 30000 });
+await page.waitForTimeout(300);
+console.log('--- 1 本を開く:', (await page.textContent('[data-testid=multi-detail-head]')).replace(/\s+/g, ' ').trim());
+const detailRows = await readTestTable('multi-detail-table');
+if (detailRows.length !== 9) fail(`開いた 1 本の着順表が 9 行でない: ${detailRows.length}`);
+const detailOrders = detailRows.map((r) => Number(r[0]));
+if ([...detailOrders].sort((a, b) => a - b).join(',') !== '1,2,3,4,5,6,7,8,9') {
+  fail(`開いた 1 本の着順が 1 から 9 まで揃っていない: ${detailOrders.join(',')}`);
+}
+// 自分のスキルの発動位置が図に乗っていること（印があるときだけ出る注記で見る）
+const detailText = await page.textContent('section:has([data-testid=multi-detail-head])');
+if (!detailText.includes('三角の印')) fail('1 本の図にスキルの発動位置が乗っていない');
+// 位置と速度の 2 枚が描けていること（uPlot は canvas に描く）
+const detailCanvases = await page.locator('section:has([data-testid=multi-detail-head]) canvas').count();
+console.log('--- 1 本の図:', detailCanvases, '枚');
+if (detailCanvases < 2) fail(`位置と速度の図が揃っていない: ${detailCanvases} 枚`);
+// 前後に移れること
+const headBefore = await page.textContent('[data-testid=multi-detail-head]');
+await page.click('button[aria-label="次の試行"]');
+await page.waitForTimeout(400);
+if ((await page.textContent('[data-testid=multi-detail-head]')) === headBefore) {
+  fail('「次 →」で別の試行に移らない');
+}
+// 全頭ぶんの線を引く図は横にあふれやすいので、狭い幅でも見ておく
+await page.setViewportSize({ width: 390, height: 900 });
+await page.waitForTimeout(400);
+const detailOverflow = await page.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+);
+console.log('--- 1 本の中身を開いたまま幅 390:', detailOverflow, 'px');
+if (detailOverflow > 0) fail('1 本の中身を開くと小さい画面で横にあふれる');
+await page.setViewportSize({ width: 1280, height: 1600 });
+await page.waitForTimeout(400);
+await page
+  .locator('section:has([data-testid=multi-detail-head])')
+  .screenshot({ path: 'docs/images/multi-race-detail.png' });
+
 // 相手の入力欄もステータスと同じ上限を持つので、設定に戻してから次へ進む
 await goTab('設定');
 
@@ -396,7 +510,10 @@ const keptColumns = await reopened.evaluate(() => {
   );
   return section?.querySelectorAll('thead th').length ?? 0;
 });
-console.log('--- 開き直したときのスピード:', keptSpeed, '/ 比較の列数:', keptColumns);
+await tabOf(reopened, '探索');
+const keptEndpoint = await reopened.inputValue('[data-testid=search-endpoint]');
+console.log('--- 開き直したときのスピード:', keptSpeed, '/ 比較の列数:', keptColumns, '/ 宛先:', keptEndpoint);
+if (keptEndpoint !== '/') fail(`探索の宛先が残っていない: ${keptEndpoint}`);
 if (keptSpeed !== '1400') fail(`設定が残っていない: ${keptSpeed}`);
 if (keptColumns !== 3) fail(`スナップショットが残っていない: 列数 ${keptColumns}`);
 await reopened.close();
@@ -577,6 +694,19 @@ if (unnamed > 0) fail(`読み上げで区別できないボタンが ${unnamed} 
 const sourceLink = await page.locator('footer a[href*="github.com"]').count();
 console.log('--- フッタのソースリンク:', sourceLink, '件');
 if (sourceLink < 2) fail('フッタに移植元とソースへのリンクが揃っていない');
+// 動かしている版と push してある版のズレを見分けられること（AGPL 13 条、
+// docs/server-design.md 6 節）。版が取れない所で組むと空になるので、
+// 出ているときだけ形を見る。
+const commitCount = await page.locator('[data-testid=commit-sha]').count();
+if (commitCount > 0) {
+  const commit = (await page.textContent('[data-testid=commit-sha]')).trim();
+  const commitHref = await page.getAttribute('footer a:has-text("ソースはこちら")', 'href');
+  console.log('--- フッタのコミット:', commit, '/', commitHref);
+  if (!/^[0-9a-f]{7,12}$/.test(commit)) fail(`コミットの形がおかしい: ${commit}`);
+  if (!commitHref.endsWith(commit)) fail(`ソースのリンクがその版を指していない: ${commitHref}`);
+} else {
+  console.log('--- フッタのコミット: 無し（版が取れない所で組んだ）');
+}
 
 await page.click('button:has-text("最遅")');
 await page.waitForTimeout(400);
