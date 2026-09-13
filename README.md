@@ -66,6 +66,7 @@ pnpm api                       # サーバ側の口（apps/api）
 `deploy/` に Dockerfile と Kubernetes のマニフェストを、`design/` に画面モックを置いてある。
 計算モデルは [mee1080/umasim](https://github.com/mee1080/umasim) からの移植であり、本リポジトリも AGPL v3 とする。
 ゲームのデータ（`packages/data/assets/`）は週次の[ワークフロー](.github/workflows/sync-game-data.yml)が本家を追いかけ、新しいウマ娘やスキルが増えていれば下書き PR を出す（[詳細](docs/m1-report.md#7-データを本家に追随させる)）。
+計算式のほうはデータの取り直しでは拾えないので、本家の `race` モジュールの指紋を別の週次の[ワークフロー](.github/workflows/check-race-model.yml)が突き合わせ、動いていれば知らせる（[詳細](docs/race-emulator-analysis.md#12-本家が動いたときに気付く仕組み)）。
 
 ## 設計と解析
 
