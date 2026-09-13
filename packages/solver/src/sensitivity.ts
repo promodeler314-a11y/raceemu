@@ -1,3 +1,5 @@
+import { nearLaneMeters } from '../../sim/src/data/constants.ts';
+import { FIELD_COMPUTED_TYPES } from '../../sim/src/field/conditions.ts';
 import { approximateTypeToState } from '../../sim/src/skill/approximate.ts';
 import type { SerializableRaceSetting } from '../../sim/src/parallel/protocol.ts';
 import { SimulationCancelled } from '../../sim/src/parallel/pool.ts';
@@ -21,6 +23,12 @@ import {
  * 探索の結果に「この差は近似の中に消える」と添えられる。
  * docs/solver-design.md 4 節と docs/roadmap.md 3.7 節を参照。
  *
+ * **振れるのは倍率だけではない。** フィールドを渡すと、追い抜きや前後のウマ娘は
+ * 確率ではなく位置から決まる（`packages/sim/src/field/conditions.ts`）。そのとき
+ * 不確かなのは確率ではなく「近く」を何メートルと置くかのほうなので、軸を `near` に
+ * すると `nearLaneMeters` を振れる。どちらの軸でも出す表は同じで、基準の値からの
+ * 振れ幅を読む。docs/order-field.md 8 節を参照。
+ *
  * **測り方はすべて共通乱数によるペア比較である。** 倍率を掛けても引く乱数の
  * 回数と順番は変わらないので（同ファイルの `scaleRate` の注記）、倍率どうしの
  * 比較も、スキルの有無の比較も、同じ試行番号の引き算で取れる。
@@ -36,8 +44,13 @@ export interface SensitivityOptions {
   readonly candidates: readonly string[];
   /** 倍率 1 つ、構成 1 つあたりの試行数 */
   readonly trials?: number;
-  /** 振る倍率。既定の 1.0 を必ず含めること（幅の基準にする）。 */
+  /**
+   * 振る値。軸の基準値を必ず含めること（幅の基準にする）。
+   * `rate` なら倍率で基準は 1.0、`near` なら距離（メートル）で基準は 1 バ身。
+   */
   readonly scales?: readonly number[];
+  /** 振る軸。省くと近似確率の倍率（`rate`）。 */
+  readonly axis?: SensitivityAxis;
   /**
    * スキルの実体。渡すと、発動条件に近似条件を含むかを結果に添える。
    * Worker には ID しか送らないので、ここでも省ける形にしてある。
@@ -74,7 +87,12 @@ export interface SkillSensitivity {
    * 誤差が 0 のとき（どの試行でも差が厳密に 0）は 0 を返す。
    */
   readonly widthPerError: number;
-  /** 発動条件に近似条件を含むか。含まないのに幅が出たら、間接的な影響である。 */
+  /**
+   * 振っている軸に効く条件を、発動条件に含むか。
+   *
+   * 軸が `rate` なら近似確率を見る条件、`near` なら位置から計算する条件である。
+   * 含まないのに幅が出たら、間接的な影響（走りが変わったこと）を拾っている。
+   */
   readonly approximate: boolean;
 }
 
@@ -91,21 +109,66 @@ export interface SensitivityResult {
  *
  * 条件型の表（`approximateTypeToState`）に載っている型を 1 つでも使っていれば真。
  * 判定を本番の計算と同じ表から引いているのは、表が増えたときに黙ってずれないようにするためである。
+ *
+ * **フィールドを渡すかどうかで答えが変わる。** 位置から計算するようにした 12 の型は、
+ * フィールドがあれば確率を引かないので、倍率を振っても動かない（`field/conditions.ts`）。
+ * `hasField` を渡すと、その型を近似から外して数える。
  */
-export function dependsOnApproximate(skill: SkillData): boolean {
+export function dependsOnApproximate(skill: SkillData, hasField = false): boolean {
   for (const invoke of skill.invokes) {
     for (const group of [...invoke.conditions, ...invoke.preConditions]) {
       for (const condition of group) {
-        if (condition.type in approximateTypeToState) return true;
+        if (!(condition.type in approximateTypeToState)) continue;
+        if (hasField && FIELD_COMPUTED_TYPES.has(condition.type)) continue;
+        return true;
       }
     }
   }
   return false;
 }
 
-/** 倍率ごとの評価器を作る。設定に数値を 1 つ足すだけで Worker まで届く。 */
-function contextForScale(context: OptimizeContext, scale: number): OptimizeContext {
-  const base: SerializableRaceSetting = { ...context.base, approximateRateScale: scale };
+/**
+ * このスキルが「近くの距離」を見ているか。
+ *
+ * 位置から計算する型（`FIELD_COMPUTED_TYPES`）を 1 つでも使っていれば真。
+ * 軸を `near` にしたときは、こちらが「振ると動くはずのスキル」である。
+ */
+export function dependsOnNearDistance(skill: SkillData): boolean {
+  for (const invoke of skill.invokes) {
+    for (const group of [...invoke.conditions, ...invoke.preConditions]) {
+      for (const condition of group) {
+        if (FIELD_COMPUTED_TYPES.has(condition.type)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/**
+ * 振る軸。
+ *
+ * - `rate`：近似確率の倍率（`approximateRateScale`）。既定は 1.0。
+ * - `near`：「近く」と見なす前後の距離（`nearLaneMeters`、メートル）。既定は 1 バ身。
+ *   フィールドを渡したときだけ効く。ここを振ると、位置から計算する型
+ *   （前後のウマ娘、近くの人数、追い抜き）の判定がまとめて動く。
+ */
+export type SensitivityAxis = 'rate' | 'near';
+
+/** 軸ごとの基準値。幅はここからの振れとして読む。 */
+export function baseValueOf(axis: SensitivityAxis): number {
+  return axis === 'near' ? nearLaneMeters : 1.0;
+}
+
+/** 振った値ごとの評価器を作る。設定に数値を 1 つ足すだけで Worker まで届く。 */
+function contextForValue(
+  context: OptimizeContext,
+  value: number,
+  axis: SensitivityAxis,
+): OptimizeContext {
+  const base: SerializableRaceSetting =
+    axis === 'near'
+      ? { ...context.base, nearLaneMeters: value }
+      : { ...context.base, approximateRateScale: value };
   return { ...context, base };
 }
 
@@ -115,10 +178,12 @@ export async function measureSensitivity(
 ): Promise<SensitivityResult> {
   const started = performance.now();
   const trials = options.trials ?? 1000;
+  const axis = options.axis ?? 'rate';
   const scales = options.scales ?? DEFAULT_SCALES;
-  const defaultIndex = scales.findIndex((scale) => scale === 1.0);
+  const baseValue = baseValueOf(axis);
+  const defaultIndex = scales.findIndex((scale) => scale === baseValue);
   if (defaultIndex < 0) {
-    throw new Error('倍率の一覧には既定の 1.0 を含めること（幅の基準にする）');
+    throw new Error(`振る値の一覧には基準の ${baseValue.toFixed(1)} を含めること（幅の基準にする）`);
   }
   const report = options.onProgress ?? (() => {});
   const abort = () => {
@@ -129,13 +194,13 @@ export async function measureSensitivity(
   // 基準は候補を 1 つも取らない構成。既に持っているスキルはそのまま残す。
   const baseIds = context.base.skillIds.filter((id) => !candidates.includes(id));
 
-  const evaluators = scales.map((scale) => new Evaluator(contextForScale(context, scale)));
+  const evaluators = scales.map((value) => new Evaluator(contextForValue(context, value, axis)));
 
   // 倍率ごとの基準。ここが平均タイムの幅になる。
   const baselines: Evaluation[] = [];
   for (const [index, scale] of scales.entries()) {
     abort();
-    report(`倍率 ${scale.toFixed(2)}: 基準 ${trials} 試行`);
+    report(`${axis === 'near' ? '近くの距離' : '倍率'} ${scale.toFixed(2)}: 基準 ${trials} 試行`);
     baselines.push(await evaluators[index]!.evaluate(baseIds, trials));
   }
 
@@ -177,7 +242,12 @@ export async function measureSensitivity(
       base,
       width,
       widthPerError: error > 0 ? width / error : 0,
-      approximate: skill === undefined ? false : dependsOnApproximate(skill),
+      approximate:
+        skill === undefined
+          ? false
+          : axis === 'near'
+            ? dependsOnNearDistance(skill)
+            : dependsOnApproximate(skill, context.field != null),
     });
     report(`  スキル ${index + 1} / ${candidates.length}`);
   }

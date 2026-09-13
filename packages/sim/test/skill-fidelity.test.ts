@@ -10,7 +10,7 @@ import {
   type Fidelity,
 } from '../src/skill/classify.ts';
 import { compileConditions, newSkillScratch, unsupportedConditions } from '../src/skill/condition.ts';
-import type { SkillData } from '../src/skill/types.ts';
+import { SkillCondition, type SkillData } from '../src/skill/types.ts';
 
 /**
  * スキルの分類（近似の印）を固定する。
@@ -123,7 +123,15 @@ describe('スキルの再現度の分類', () => {
 
   it('確率近似で判定している型が既知のものだけである（順位条件を判定するとき）', () => {
     expect(typesByFidelity(true).approximate).toEqual([
-      // 他のウマ娘の位置と接触。approximate.ts が確率で置き換えている。
+      // 他のウマ娘の位置と接触。
+      //
+      // このうち 12 の型（追い抜き、前後のウマ娘、近くの人数、追い抜いた回数）は、
+      // フィールドを渡していれば確率を引かずに位置から計算している（issue #74、
+      // field/conditions.ts）。**それでも △ のままなので、この一覧は変わらない。**
+      // 相手は作り物の束であり、「近く」を 1 バ身と置いたのも読み取りだからである。
+      // 確率のままなのか位置から決めているのかは理由の文で分かれる（下の 1 件で見張る）。
+      // レーンが要るもの（blocked_*、is_move_lane）と相手の掛かり
+      // （temptation_opponent_count_behind）は、いまも確率である。
       'behind_near_lane_time',
       'behind_near_lane_time_set1',
       'blocked_front',
@@ -180,6 +188,30 @@ describe('スキルの再現度の分類', () => {
     const skill = named('アクセルX');
     expect(classifySkill(skill, derived, { hasField: true }).fidelity).toBe('approximate');
     expect(classifySkill(skill, derived, { hasField: false }).fidelity).toBe('dropped');
+  });
+
+  /**
+   * 確率近似をやめて位置から計算するようにした型（issue #74）。
+   *
+   * **印は △ のままなので、型ごとの一覧（上の 2 件）は動かない。** 確率を引かなく
+   * なっても相手は作り物の束であり、「近く」の距離も読み取りだからである。
+   * 動くのは理由のほうで、フィールドを渡したときだけ「位置から判定している」に変わる。
+   * ここを見張っていないと、確率のままなのか位置から決めているのかが印から読めなくなる。
+   */
+  it('位置から計算するようにした型は、フィールドを渡すと理由が変わる', () => {
+    const reasonOf = (type: string, hasField: boolean): string =>
+      classifyCondition(new SkillCondition(type, '>=', 1), derived, { hasField }).reason;
+    for (const type of ['near_count', 'is_overtake', 'infront_near_lane_time']) {
+      expect(classifyCondition(new SkillCondition(type, '>=', 1), derived, { hasField: true }).fidelity)
+        .toBe('approximate');
+      expect(reasonOf(type, true), type).toContain('位置から判定');
+      expect(reasonOf(type, false), type).toContain('確率で近似');
+    }
+    // 置き換えていない型（レーンが要る、相手の掛かりが要る）は、どちらでも確率のままである。
+    for (const type of ['blocked_side_continuetime', 'is_move_lane', 'temptation_opponent_count_behind']) {
+      expect(reasonOf(type, true), type).toContain('確率で近似');
+      expect(reasonOf(type, false), type).toContain('確率で近似');
+    }
   });
 
   it('理由は条件の型ごとに 1 つだけ並ぶ', () => {

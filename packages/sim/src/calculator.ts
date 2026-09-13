@@ -11,6 +11,7 @@ import {
 } from './data/constants.ts';
 import { ORDER_RATE_CONTINUE_TYPES, resolveOrderRateContinue } from './data/orderRate.ts';
 import type { RaceTrack } from './data/track.ts';
+import { FIELD_COMPUTED_STATES, updateFieldConditions } from './field/conditions.ts';
 import { RecordedField, type FieldBundle, type FieldView } from './field/field.ts';
 import { RngSet } from './rng.ts';
 import {
@@ -561,11 +562,16 @@ export function updateFrame(state: RaceState): boolean {
   // 一度でも外れたら戻らないので、外れた時点で 0 に落として以降は見ない。
   updateOrderRateContinue(state);
 
-  // スキル条件の近似状態を更新
+  // スキル条件の近似状態を更新。
+  // フィールドがあるときは、位置から決まるものだけ確率を引かずに数える
+  // （`field/conditions.ts`）。フィールドが無ければ従来どおり全部が近似である。
   if (changeSecond) {
+    const byField = state.field !== null;
     for (const [key, condition] of Object.entries(approximateConditions)) {
+      if (byField && FIELD_COMPUTED_STATES.has(key)) continue;
       simulation.specialState[key] = condition.update(state, simulation.specialState[key] ?? 0);
     }
+    updateFieldConditions(state);
   }
 
   const skillTriggered = checkSkillTrigger(state);

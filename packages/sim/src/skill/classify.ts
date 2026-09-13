@@ -1,4 +1,5 @@
 import { orderRateBoundaries, resolveOrderRateContinue } from '../data/orderRate.ts';
+import { FIELD_COMPUTED_TYPES } from '../field/conditions.ts';
 import type { DerivedSetting } from '../setting.ts';
 import { approximateConditions, approximateTypeToState, ignoreConditions } from './approximate.ts';
 import { orderRateContinueTypes, staticConditionTarget } from './condition.ts';
@@ -107,6 +108,15 @@ const ORDER_FIELD_REASON =
   '順位は判定しているが、相手は作り物の束である。順位率の対応表もスキルデータの注記からの読み取りで、ゲームと突き合わせていない';
 const DIFF_FIELD_REASON =
   '距離差は判定しているが、相手は作り物の束である。バ身の換算（1 バ身 = 2.5 m）も注記からの読み取りである';
+/**
+ * 確率近似をやめて位置から計算するようにした型の理由。
+ *
+ * 印は △ のままである。確率を引かなくなっても相手は作り物の束であり、
+ * 「近く」を何メートルと置くかもゲームと突き合わせていないためである。
+ * docs/order-field.md 8 節を参照。
+ */
+const FIELD_COMPUTED_REASON =
+  '確率ではなく相手の位置から判定している。ただし相手は作り物の束で、「近く」の距離（既定 1 バ身）も読み取りである';
 
 function approximateReason(condition: SkillCondition): string {
   // 他のウマ娘のスキル発動は、値ごとに別の近似を当てている。
@@ -134,7 +144,14 @@ export function classifyCondition(
     return note('exact', '条件どおりに判定している');
   }
 
-  if (type in approximateTypeToState) return note('approximate', approximateReason(condition));
+  if (type in approximateTypeToState) {
+    // フィールドを渡していれば、位置から決まる型は確率を引かずに計算している。
+    // 印は △ のままで、理由だけが変わる（FIELD_COMPUTED_REASON の注記）。
+    if (options.hasField && FIELD_COMPUTED_TYPES.has(type)) {
+      return note('approximate', FIELD_COMPUTED_REASON);
+    }
+    return note('approximate', approximateReason(condition));
+  }
   if (OTHER_CHARACTER_SKILL_TYPES.has(type)) return note('approximate', approximateReason(condition));
 
   if (FIELD_DEPENDENT_TYPES.has(type)) {
