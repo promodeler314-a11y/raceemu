@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { formatDuration } from '../src/format.ts';
 import {
+  crossPaceKey,
+  estimateCross,
   estimateMulti,
   estimateRun,
   multiPaceKey,
@@ -96,6 +98,37 @@ describe('所要時間の見積もり', () => {
     const solo = estimateRun({ pace: {}, useField: false, count: 10_000 }).ms;
     const field = estimateRun({ pace: {}, useField: true, count: 10_000 }).ms;
     expect(field).toBeGreaterThan(solo);
+  });
+});
+
+describe('コース横断の見積もり', () => {
+  it('コースの本数に比例する', () => {
+    const single = estimateCross({ pace: {}, useField: false, count: 500, courses: 1 });
+    const twelve = estimateCross({ pace: {}, useField: false, count: 500, courses: 12 });
+    expect(twelve.ms).toBeCloseTo(single.ms * 12);
+  });
+
+  it('コースが 0 本なら 0 になる', () => {
+    expect(estimateCross({ pace: {}, useField: false, count: 500, courses: 0 }).ms).toBe(0);
+  });
+
+  it('実測はコース 1 本あたりで覚える', () => {
+    // 1 本 2 秒で 12 本走らせた、という実測を 1 点だけ持つ状態。
+    const pace = one(crossPaceKey(false), { count: 500, ms: 2000 });
+    const estimate = estimateCross({ pace, useField: false, count: 500, courses: 26 });
+    expect(estimate.measured).toBe(true);
+    expect(estimate.ms).toBeCloseTo(2000 * 26);
+  });
+
+  it('順位条件ありのほうが重い。束をコースごとに作り直すため', () => {
+    const solo = estimateCross({ pace: {}, useField: false, count: 500, courses: 12 }).ms;
+    const field = estimateCross({ pace: {}, useField: true, count: 500, courses: 12 }).ms;
+    expect(field).toBeGreaterThan(solo);
+  });
+
+  it('単騎 1 本ぶんの実測とコース横断の実測は混ざらない', () => {
+    const pace = one(paceKey(false), { count: 500, ms: 99_000 });
+    expect(estimateCross({ pace, useField: false, count: 500, courses: 1 }).measured).toBe(false);
   });
 });
 

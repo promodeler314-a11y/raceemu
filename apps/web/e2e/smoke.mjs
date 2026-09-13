@@ -345,6 +345,44 @@ console.log('--- 比較');
 for (const row of compareRows.slice(0, 8)) console.log(' ', row.join(' | '));
 if (compareRows[0].length !== 3) fail('比較の列数が想定と違う');
 
+// コース横断: 距離とバ場に当たる全コースを走らせ、コースごとに 1 行出ること。
+// 押す前に本数と所要時間が出ていることも見る（本数ぶん掛かるので、
+// 見積もりが無いと数分かかる条件に気付けない）。
+const crossEstimate = async () =>
+  ((await page.locator('[data-testid=cross-estimate]').textContent()) ?? '').trim();
+await page.selectOption('select[aria-label="距離"]', 'c:LONG');
+await page.waitForTimeout(150);
+const longEstimate = await crossEstimate();
+await page.selectOption('select[aria-label="距離"]', 'd:3000');
+await page.waitForTimeout(150);
+const shortEstimate = await crossEstimate();
+console.log('--- コース横断の見積もり: 長距離', longEstimate, '/ 芝3000m', shortEstimate);
+if (!/(見込み|目安)/.test(shortEstimate)) fail('コース横断の実行前に所要時間が出ていない');
+if (!/\d+ コース/.test(shortEstimate)) fail('コース横断で当たる本数が出ていない');
+if (longEstimate === shortEstimate) fail('距離を変えてもコース横断の見積もりが変わらない');
+
+await page.fill('input[aria-label="コース 1 本あたりの試行回数"]', '100');
+await page.click('button:has-text("コースを走らせる")');
+await page.waitForFunction(
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('計算中')),
+  null,
+  { timeout: 180000 },
+);
+await page.waitForTimeout(300);
+const crossRows = await page.$$eval('[data-testid=cross-table] tbody tr', (trs) =>
+  trs.map((tr) => [...tr.querySelectorAll('th,td')].map((c) => c.textContent?.trim())),
+);
+console.log('--- コース横断');
+for (const row of crossRows) console.log(' ', row.join(' | '));
+// 芝3000m は 2 コースある。距離が 1 つだけなので区切りの行は出ない。
+if (crossRows.length !== 2) fail(`コース横断の行数が想定と違う: ${crossRows.length}`);
+if (!crossRows.some((row) => row.includes('最速'))) fail('最速のコースに印が付いていない');
+const crossNote = await page.locator('section:has(h2:text("コース横断")) p').last().textContent();
+if (!/順位条件/.test(crossNote ?? '')) fail('コース横断に順位条件の扱いが書かれていない');
+await page.locator('section:has(h2:text("コース横断"))').screenshot({
+  path: 'docs/images/cross-course.png',
+});
+
 // 永続化: 別のタブで開き直しても設定とスナップショットが残ること
 await page.waitForTimeout(800); // 書き込みはまとめてから行う
 const reopened = await context.newPage();

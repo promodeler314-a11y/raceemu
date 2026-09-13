@@ -140,6 +140,80 @@ export function buildTrackData(
   return result;
 }
 
+/**
+ * コースの絞り込み条件。
+ *
+ * 距離は「ぴったりの値」か「距離帯」のどちらかで指定する。
+ * チャンピオンズミーティングは距離帯だけ先に分かってコースが後から決まるので、
+ * 帯で引ける口が要る。育成中に「この個体はどのコースなら走れるか」を見る人は、
+ * 逆にぴったりの距離で引く。docs/webapp-design.md 6.5 節を参照。
+ */
+export interface CourseFilter {
+  /** 1=芝 2=ダート */
+  readonly surface: number;
+  /** ぴったりの距離。指定するとこちらが優先される。 */
+  readonly distance?: number;
+  /** 距離帯。`distance` を指定したときは見ない。 */
+  readonly distanceCategory?: Distance;
+}
+
+/** 絞り込みに当たった 1 コース。 */
+export interface CourseMatch {
+  readonly location: number;
+  readonly course: number;
+  /** レース場の名前（「東京」など） */
+  readonly locationName: string;
+  readonly detail: TrackDetail;
+}
+
+/**
+ * 条件に当たるコースをすべて集める。
+ *
+ * 並びは距離、レース場 ID、コース ID の順に固定する。
+ * 表の行がデータの並び順で動くと、走らせ直すたびに行が入れ替わって読めない。
+ */
+export function matchCourses(
+  trackData: Record<number, RaceTrack>,
+  filter: CourseFilter,
+): CourseMatch[] {
+  const matched: CourseMatch[] = [];
+  for (const [locationKey, location] of Object.entries(trackData)) {
+    for (const [courseKey, detail] of Object.entries(location.courses)) {
+      if (detail.surface !== filter.surface) continue;
+      if (filter.distance !== undefined) {
+        if (detail.distance !== filter.distance) continue;
+      } else if (filter.distanceCategory !== undefined) {
+        if (detail.distanceCategory !== filter.distanceCategory) continue;
+      }
+      matched.push({
+        location: Number(locationKey),
+        course: Number(courseKey),
+        locationName: location.name,
+        detail,
+      });
+    }
+  }
+  matched.sort(
+    (a, b) =>
+      a.detail.distance - b.detail.distance || a.location - b.location || a.course - b.course,
+  );
+  return matched;
+}
+
+/** バ場ごとに、データが持っている距離の一覧。小さい順で重複は無い。 */
+export function courseDistances(
+  trackData: Record<number, RaceTrack>,
+  surface: number,
+): number[] {
+  const distances = new Set<number>();
+  for (const location of Object.values(trackData)) {
+    for (const detail of Object.values(location.courses)) {
+      if (detail.surface === surface) distances.add(detail.distance);
+    }
+  }
+  return [...distances].sort((a, b) => a - b);
+}
+
 export function getSlope(track: TrackDetail, position: number): number {
   for (const slope of track.slopes) {
     if (position >= slope.start && position <= slope.end) {
