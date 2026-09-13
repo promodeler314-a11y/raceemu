@@ -58,7 +58,7 @@
   何を積み直すかだけを持つ。土台（色・書体・角丸・罫線）と各群の中身は
   `Main.dc.html` と同じで、ここでは繰り返さない。
 -->
-<div class="app" data-theme="{{ themeMode }}" style="width: 390px; height: 1330px; display: flex; flex-direction: column;">
+<div class="app" data-theme="{{ themeMode }}" style="width: 390px; height: 1350px; display: flex; flex-direction: column;">
 
   <!-- ── header ───────────────────────────────────────────── -->
   <!-- 1440px の 1 行は 390px には収まらない。高さを固定せず折り返す。 -->
@@ -222,15 +222,22 @@
 
   </div>
 
-  <!-- 出所と AGPL v3 とソースは削らない（AGPL の要求）。1 行に収める。 -->
-  <footer style="flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 16px; background: var(--surface); border-top: 1px solid var(--rule); color: var(--ink3); font-size: 11px;">
-    <span style="white-space: nowrap;">自動保存</span>
-    <span style="flex: 1; min-width: 0; text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">計算モデルは <a href="https://github.com/mee1080/umasim" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">mee1080/umasim</a> の移植 ・ AGPL v3 ・ <a href="https://github.com/promodeler314-a11y/raceemu" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">ソース</a></span>
+  <!--
+    出所と AGPL v3 とソースと、組んだコミットは削らない（AGPL の要求と
+    docs/server-design.md 6 節）。390px では 1 行に収まらないので折り返すが、
+    **語の途中では折らない。** 区切りごとに 1 かたまりにして、折り返しを ・ の位置に限る。
+  -->
+  <footer style="flex: none; display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 2px; padding: 6px 16px; background: var(--surface); border-top: 1px solid var(--rule); color: var(--ink3); font-size: 11px;">
+    <span style="white-space: nowrap;">自動保存 ・</span>
+    <span style="white-space: nowrap;">計算モデルは <a href="https://github.com/mee1080/umasim" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">mee1080/umasim</a> の移植 ・</span>
+    <span style="white-space: nowrap;">AGPL v3 ・</span>
+    <span style="white-space: nowrap;"><a href="https://github.com/promodeler314-a11y/raceemu" target="_blank" rel="noreferrer noopener" style="color: var(--ink2); text-decoration: underline;">ソースはこちら</a> ・</span>
+    <span class="num" style="white-space: nowrap;">902a9524f70e</span>
   </footer>
 
 </div>
 </x-dc>
-<script data-dc-script data-props='{"$preview":{"width":390,"height":1330}}'>
+<script data-dc-script data-props='{"$preview":{"width":390,"height":1350}}'>
 class Component extends DCLogic {
   state = { dark: false };
   renderVals() {
