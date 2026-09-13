@@ -1,6 +1,7 @@
 import { charaSkills, supportHint, type DeckData } from '../../data/src/deck.ts';
 import { skillLvToFactor } from '../../sim/src/data/constants.ts';
 import type { DerivedSetting } from '../../sim/src/setting.ts';
+import { classifySkill } from '../../sim/src/skill/classify.ts';
 import type { SkillData } from '../../sim/src/skill/types.ts';
 import { canTrigger, dependsOnlyOnIgnored } from './screen.ts';
 
@@ -25,7 +26,14 @@ export type Route =
   /** 汎用の白を継承で足す。本数に上限は無い。 */
   | 'inherit'
   /** 他のウマ娘の固有の継承版。6 つまで。 */
-  | 'inheritedUnique';
+  | 'inheritedUnique'
+  /**
+   * 入手経路を問わない。全スキルを候補にしたときに使う。
+   *
+   * どのデッキで育てれば取れるかを問わず「取れるとしたら何が効くか」を見る。
+   * 実際に取れるかは別の問いなので、割引も経路の縛りも当てない。
+   */
+  | 'any';
 
 export interface Candidate {
   readonly skillId: string;
@@ -69,11 +77,38 @@ export interface PlanOptions {
    * ヒントが何回出たかで決まるので、どちらにしても仮定である。
    */
   readonly hintLevel?: number;
+  /**
+   * 条件を落としているスキル（印は ▲）を候補から外す。既定は外さない。
+   *
+   * 落とした条件は**満たしている扱い**になるので、発動率も短縮量も本来より
+   * 高く出る（`packages/sim/src/skill/classify.ts`）。候補が 20 個のうちは
+   * 表の印で見分けられたが、数百に広げると上位が ▲ で埋まって使いものに
+   * ならない。docs/server-design.md 8 節の 7 を参照。
+   *
+   * `includeIgnoredOnly` より広い。あちらは**すべての条件**が無視されている
+   * ものだけを外すので、これを立てるとあちらは効かなくなる。
+   */
+  readonly excludeDropped?: boolean;
+  /**
+   * ▲ の判定に使う。順位条件を判定するか（フィールドを渡すか）。既定は渡さない。
+   *
+   * 順位と距離差の族は、渡さなければ ▲、渡せば △ になる。
+   * つまり同じスキルでもこの値で印が動くので、外す判定にも必ず添える。
+   */
+  readonly hasField?: boolean;
+}
+
+/** 全スキルを候補にするときの指定。経路では縛らず、種類で選ぶ。 */
+export interface AllSkillOptions extends PlanOptions {
+  /** 金（レア）を候補に入れる。既定は入れる。 */
+  readonly openGolds?: boolean;
 }
 
 export interface PlanCandidates {
   /** 無視している条件しか持たないために外したスキルの ID */
   readonly droppedByIgnored: readonly string[];
+  /** 条件を落としている（▲）ために外したスキルの ID。つまみが切ってあれば空。 */
+  readonly droppedByFidelity: readonly string[];
   /** 候補。同じスキルは最も安い経路のものだけが残る。 */
   readonly entries: readonly Candidate[];
   /** 探索に渡す候補の ID */
@@ -104,6 +139,117 @@ function purchasableByName(
   return skillsByName.get(name)?.find((skill) => skill.sp > 0 && PURCHASABLE.has(skill.rarity));
 }
 
+/**
+ * 走らせる前に候補から落とす判定。
+ *
+ * 育成計画からでも全スキルからでも、落とし方は同じである。
+ * 落とした理由ごとに分けて持ち、画面が「何個を何の理由で外したか」を出せるようにする。
+ */
+function createScreen(setting: DerivedSetting, options: PlanOptions) {
+  const includeIgnoredOnly = options.includeIgnoredOnly ?? false;
+  const excludeDropped = options.excludeDropped ?? false;
+  const hasField = options.hasField ?? false;
+  const byIgnored: string[] = [];
+  const byFidelity: string[] = [];
+  const usable = (skill: SkillData): boolean => {
+    if (!canTrigger(skill, setting)) return false;
+    if (!includeIgnoredOnly && dependsOnlyOnIgnored(skill, setting)) {
+      byIgnored.push(skill.id);
+      return false;
+    }
+    if (excludeDropped && classifySkill(skill, setting, { hasField }).fidelity === 'dropped') {
+      byFidelity.push(skill.id);
+      return false;
+    }
+    return true;
+  };
+  return { usable, byIgnored, byFidelity };
+}
+
+/** 同じスキルに複数の経路があるときは、最も安いものを残す。 */
+function createOffer() {
+  const best = new Map<string, Candidate>();
+  return {
+    best,
+    offer(candidate: Candidate): void {
+      const current = best.get(candidate.skillId);
+      if (current === undefined || candidate.cost < current.cost) {
+        best.set(candidate.skillId, candidate);
+      }
+    },
+  };
+}
+
+/** 候補の一覧から、探索に渡す形にまとめる。 */
+function collect(
+  best: ReadonlyMap<string, Candidate>,
+  screen: ReturnType<typeof createScreen>,
+  alwaysSkillIds: readonly string[],
+): PlanCandidates {
+  const entries = [...best.values()].sort((a, b) => a.cost - b.cost);
+  const hintLevels: Record<string, number> = {};
+  const countByRoute: Record<Route, number> = {
+    chara: 0, hint: 0, inherit: 0, inheritedUnique: 0, any: 0,
+  };
+  for (const entry of entries) {
+    if (entry.hintLevel > 0) hintLevels[entry.skillId] = entry.hintLevel;
+    countByRoute[entry.route]++;
+  }
+  return {
+    entries,
+    skillIds: entries.map((entry) => entry.skillId),
+    hintLevels,
+    alwaysSkillIds,
+    countByRoute,
+    droppedByIgnored: [...new Set(screen.byIgnored)],
+    droppedByFidelity: [...new Set(screen.byFidelity)],
+  };
+}
+
+/**
+ * 買えるスキル全体を候補にする。
+ *
+ * 育成計画は「このデッキで何が取れるか」を問う。こちらはその縛りを外し、
+ * 「取れるとしたら何が効くか」を問う。数百の候補になるのでブラウザでは
+ * 回しきれず、サーバ側の探索（docs/server-design.md 1 節）で初めて意味を持つ。
+ *
+ * 割引は当てない。ヒントは誰のデッキに何があるかで決まり、経路を問わない以上
+ * 仮定の置きようがないためである。費用は表示どおりの総額になる。
+ */
+export function buildAllSkillCandidates(
+  skills: readonly SkillData[],
+  setting: DerivedSetting,
+  options: AllSkillOptions = {},
+): PlanCandidates {
+  const openWhites = options.openWhites ?? true;
+  const openGolds = options.openGolds ?? true;
+  const openInheritedUniques = options.openInheritedUniques ?? true;
+  const screen = createScreen(setting, options);
+  const { best, offer } = createOffer();
+
+  for (const skill of skills) {
+    if (skill.sp <= 0) continue;
+    const kind =
+      skill.rarity === 'normal' ? openWhites
+      : skill.rarity === 'rare' ? openGolds
+      : skill.rarity === 'inherit' ? openInheritedUniques
+      : false;
+    if (!kind) continue;
+    if (!screen.usable(skill)) continue;
+    offer({
+      skillId: skill.id,
+      name: skill.name,
+      rarity: skill.rarity,
+      route: 'any',
+      cost: costOf(skill, 0),
+      hintLevel: 0,
+      source: null,
+    });
+  }
+
+  return collect(best, screen, []);
+}
+
 export function buildPlanCandidates(
   skills: readonly SkillData[],
   skillsByName: ReadonlyMap<string, readonly SkillData[]>,
@@ -114,23 +260,9 @@ export function buildPlanCandidates(
 ): PlanCandidates {
   const openWhites = options.openWhites ?? true;
   const openInheritedUniques = options.openInheritedUniques ?? true;
-  const includeIgnoredOnly = options.includeIgnoredOnly ?? false;
-  const dropped: string[] = [];
-  const usable = (skill: SkillData): boolean => {
-    if (!canTrigger(skill, setting)) return false;
-    if (!includeIgnoredOnly && dependsOnlyOnIgnored(skill, setting)) {
-      dropped.push(skill.id);
-      return false;
-    }
-    return true;
-  };
-
-  // 同じスキルに複数の経路があるときは、最も安いものを残す。
-  const best = new Map<string, Candidate>();
-  const offer = (candidate: Candidate): void => {
-    const current = best.get(candidate.skillId);
-    if (current === undefined || candidate.cost < current.cost) best.set(candidate.skillId, candidate);
-  };
+  const screen = createScreen(setting, options);
+  const usable = screen.usable;
+  const { best, offer } = createOffer();
 
   const chara = plan.charaId == null ? undefined : deck.charasById.get(plan.charaId);
   const alwaysSkillIds: string[] = [];
@@ -192,20 +324,5 @@ export function buildPlanCandidates(
     });
   }
 
-  const entries = [...best.values()].sort((a, b) => a.cost - b.cost);
-  const hintLevels: Record<string, number> = {};
-  const countByRoute: Record<Route, number> = { chara: 0, hint: 0, inherit: 0, inheritedUnique: 0 };
-  for (const entry of entries) {
-    if (entry.hintLevel > 0) hintLevels[entry.skillId] = entry.hintLevel;
-    countByRoute[entry.route]++;
-  }
-
-  return {
-    entries,
-    skillIds: entries.map((entry) => entry.skillId),
-    hintLevels,
-    alwaysSkillIds,
-    countByRoute,
-    droppedByIgnored: [...new Set(dropped)],
-  };
+  return collect(best, screen, alwaysSkillIds);
 }

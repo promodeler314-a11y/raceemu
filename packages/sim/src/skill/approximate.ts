@@ -8,6 +8,14 @@ import type { RaceState } from '../state.ts';
  * ここに並ぶ確率は本家から写したものだが、ゲームと突き合わせて確かめたものではない。
  * どれだけ不確かかを数字にするため、設定の `approximateRateScale`（既定 1.0）で
  * 全体に倍率を掛けられるようにしてある。docs/solver-design.md 4 節を参照。
+ *
+ * **フィールドを渡したときは、位置から決まるものを確率で引かない。**
+ * 追い抜き、前後のウマ娘、近くの人数など 12 の型は他頭の位置の時系列から計算する
+ * （`field/conditions.ts` の `FIELD_COMPUTED_STATES`）。この表に残っているのは、
+ * フィールドが無いとき（本家と同じ単騎モデル）の振る舞いと、位置だけでは決まらない
+ * もの（レーンを要するブロック、相手の掛かり、相手のスキル発動）である。
+ * 位置から計算する型には `approximateRateScale` の倍率も効かない。
+ * docs/order-condition.md 5.3 節と docs/order-field.md 8 節を参照。
  */
 export interface ApproximateCondition {
   readonly displayName: string;
@@ -245,6 +253,14 @@ export const approximateConditions: Readonly<Record<string, ApproximateCondition
   overtake_target_no_order_up_time: new StartContinue('追い抜き対象順位変動なし(絶ボク)', 0.8, 0.6),
 };
 
+/**
+ * 条件の型から、近似状態の鍵へ。
+ *
+ * フィールドがあるときに位置から計算する型は、鍵の側だけが
+ * `field/conditions.ts` の `FIELD_COMPUTED_STATES` に並んでいる。
+ * ここに残す（表から外さない）のは、フィールドが無ければ近似に落ちるためと、
+ * 条件の読み側（`checkSpecialState`）がこの表で鍵を引いているためである。
+ */
 export const approximateTypeToState: Readonly<Record<string, string>> = {
   is_move_lane: 'move_lane',
   change_order_onetime: 'change_order_onetime',

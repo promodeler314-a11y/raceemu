@@ -12,6 +12,7 @@ import {
 import { getSlope, type Corner } from './data/track.ts';
 import type { RngSet } from './rng.ts';
 import type { DerivedSetting, DebuffType, SystemSetting } from './setting.ts';
+import type { FieldSnapshot } from './field/conditions.ts';
 import type { FieldView } from './field/field.ts';
 import { ORDER_RATE_CONTINUE_TYPES } from './data/orderRate.ts';
 import { approximateConditions } from './skill/approximate.ts';
@@ -176,6 +177,13 @@ export class RaceSimulationState {
   temptationWaste = 0.0;
   speedDebuff = 0.0;
   specialState: Record<string, number> = {};
+  /**
+   * 位置関係で決まる条件を計算するための、1 秒前の順位と前後の距離。
+   *
+   * 追い抜きも詰め寄られも「前の秒と比べてどう動いたか」なので、1 秒前の値が要る。
+   * フィールドが無いときは使わない。docs/order-condition.md 5.3 節を参照。
+   */
+  fieldPrevious: FieldSnapshot | null = null;
   leadCompetitionStart: number | null = null;
   competeFight = false;
   competeFightStart: number | null = null;

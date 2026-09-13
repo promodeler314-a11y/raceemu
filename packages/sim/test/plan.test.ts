@@ -3,6 +3,7 @@ import { loadDeckData } from '../../data/src/deck-node.ts';
 import { charaSkills, supportHint } from '../../data/src/deck.ts';
 import { loadGameData } from '../../data/src/node.ts';
 import { RaceCalculator } from '../src/calculator.ts';
+import { classifySkill } from '../src/skill/classify.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { WorkerPool } from '../src/parallel/pool.ts';
 import { toSerializable } from '../src/parallel/protocol.ts';
@@ -12,7 +13,7 @@ import {
   emptyPassiveBonus,
   type RaceSetting,
 } from '../src/setting.ts';
-import { buildPlanCandidates } from '../../solver/src/candidates.ts';
+import { buildAllSkillCandidates, buildPlanCandidates } from '../../solver/src/candidates.ts';
 import { createCostModel } from '../../solver/src/cost.ts';
 import { canTrigger, dependsOnlyOnIgnored, screenSkills } from '../../solver/src/screen.ts';
 import { optimizeSkills, type OptimizeContext } from '../../solver/src/optimize.ts';
@@ -227,6 +228,94 @@ describe('判定できない条件しか持たないスキル', () => {
     expect(off.droppedByIgnored).toContain(solo);
     expect(on.droppedByIgnored).toEqual([]);
     expect(off.skillIds.length).toBeLessThan(on.skillIds.length);
+  });
+});
+
+describe('全スキルからの候補', () => {
+  /**
+   * 入手経路を問わずに候補を組む（docs/server-design.md 8 節の 7）。
+   * デッキのデータを読まずに組めることが、画面側で動的 import を要らなくしている。
+   */
+  it('白・金・固有の継承版が入り、経路は問わない', () => {
+    const all = buildAllSkillCandidates(data.skills, derived);
+    expect(all.skillIds.length).toBeGreaterThan(200);
+    expect(all.countByRoute.any).toBe(all.skillIds.length);
+    const rarities = new Set(all.entries.map((e) => e.rarity));
+    expect(rarities).toEqual(new Set(['normal', 'rare', 'inherit']));
+    // 固有そのもの（買えない）と進化は入らない。
+    expect(all.entries.every((e) => e.rarity !== 'unique' && e.rarity !== 'evo')).toBe(true);
+    // 割引は当てないので、費用は表示どおりの総額になる。
+    expect(all.hintLevels).toEqual({});
+  });
+
+  it('種類ごとに閉じられる', () => {
+    const whitesOnly = buildAllSkillCandidates(data.skills, derived, {
+      openGolds: false,
+      openInheritedUniques: false,
+    });
+    expect(new Set(whitesOnly.entries.map((e) => e.rarity))).toEqual(new Set(['normal']));
+    expect(whitesOnly.skillIds.length).toBeLessThan(
+      buildAllSkillCandidates(data.skills, derived).skillIds.length,
+    );
+  });
+
+  it('育成計画より広い', () => {
+    const plan = buildPlanCandidates(data.skills, data.skillsByName, deck, derived, {});
+    const all = buildAllSkillCandidates(data.skills, derived);
+    expect(all.skillIds.length).toBeGreaterThan(plan.skillIds.length);
+    // 育成計画に出てこない金が、差のほとんどである。
+    expect(plan.entries.some((e) => e.rarity === 'rare')).toBe(false);
+    expect(all.entries.some((e) => e.rarity === 'rare')).toBe(true);
+  });
+});
+
+describe('条件を落としているスキルを外すつまみ', () => {
+  /**
+   * ▲ は条件を落としている＝満たしている扱いなので発動率が高く出る。
+   * 候補が 20 個のうちは印で見分けられたが、数百に広げると上位が ▲ で埋まる。
+   * docs/server-design.md 8 節の 7 を参照。
+   */
+  it('外すと候補が減り、外したものは ▲ である', () => {
+    const kept = buildAllSkillCandidates(data.skills, derived, { hasField: false });
+    const cut = buildAllSkillCandidates(data.skills, derived, {
+      excludeDropped: true,
+      hasField: false,
+    });
+    expect(cut.skillIds.length).toBeLessThan(kept.skillIds.length);
+    expect(cut.droppedByFidelity.length).toBeGreaterThan(0);
+    expect(kept.droppedByFidelity).toEqual([]);
+    for (const id of cut.droppedByFidelity) {
+      const skill = data.skillsById.get(id)!;
+      expect(classifySkill(skill, derived, { hasField: false }).fidelity).toBe('dropped');
+      expect(cut.skillIds).not.toContain(id);
+    }
+  });
+
+  /**
+   * 順位と距離差の族は、順位条件を判定すれば ▲ から △ に上がる。
+   * つまり同じつまみでも、判定しているかどうかで落ちる数がまるで変わる。
+   */
+  it('順位条件を判定していれば、落ちる数はずっと少ない', () => {
+    const withoutField = buildAllSkillCandidates(data.skills, derived, {
+      excludeDropped: true,
+      hasField: false,
+    });
+    const withField = buildAllSkillCandidates(data.skills, derived, {
+      excludeDropped: true,
+      hasField: true,
+    });
+    expect(withField.droppedByFidelity.length).toBeLessThan(
+      withoutField.droppedByFidelity.length / 10,
+    );
+  });
+
+  it('育成計画でも同じように効く', () => {
+    const cut = buildPlanCandidates(data.skills, data.skillsByName, deck, derived, {}, {
+      excludeDropped: true,
+      hasField: false,
+    });
+    const kept = buildPlanCandidates(data.skills, data.skillsByName, deck, derived, {});
+    expect(cut.skillIds.length).toBeLessThan(kept.skillIds.length);
   });
 });
 

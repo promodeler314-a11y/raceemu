@@ -26,11 +26,11 @@ const SERIES = {
  * 色は CSS のトークンで持っているが、uPlot は canvas に描くため
  * ここだけは JavaScript 側で値を選ぶ必要がある。
  */
-function isDark(): boolean {
+export function isDark(): boolean {
   return document.documentElement.dataset['theme'] === 'dark';
 }
 
-function color(slot: keyof typeof SERIES): string {
+export function color(slot: keyof typeof SERIES): string {
   return isDark() ? SERIES[slot].dark : SERIES[slot].light;
 }
 
@@ -39,15 +39,38 @@ function tokenColor(name: string): string {
   return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
 }
 
-const cursorSync = uPlot.sync('race');
+/**
+ * カーソルの同期は図の組ごとに分ける。
+ *
+ * 単騎の詳細は横軸が距離、全頭同時の 1 本は横軸が時刻である。
+ * 同じ鍵にすると、軸の意味が違うものどうしで位置を合わせてしまう。
+ */
+const cursorSyncs = new Map<string, uPlot.SyncPubSub>();
+function cursorSync(key: string): uPlot.SyncPubSub {
+  let sync = cursorSyncs.get(key);
+  if (sync === undefined) {
+    sync = uPlot.sync(key);
+    cursorSyncs.set(key, sync);
+  }
+  return sync;
+}
 
 /** 同じ位置（フレーム）で複数発動した場合はまとめる。 */
 export interface SkillMarker {
+  /** 横軸の値。距離の図では m、時刻の図では秒。 */
   readonly position: number;
   readonly labels: readonly string[];
+  /** 図の下に出す見出し。省くと横軸の値を距離として出す。 */
+  readonly caption?: string;
 }
 
-interface CourseBands {
+/**
+ * 図の背景に敷くコースの目印。
+ *
+ * 値の単位は横軸に合わせる。単騎の詳細では距離 (m)、
+ * 全頭同時の 1 本では時刻 (秒) を入れる。
+ */
+export interface CourseBands {
   readonly corners: readonly [number, number][];
   readonly phases: readonly number[];
   readonly skills: readonly SkillMarker[];
@@ -127,24 +150,48 @@ function coursePlugin(bands: CourseBands, onHoverSkill: (marker: SkillMarker | n
   };
 }
 
-interface ChartProps {
+export interface ChartProps {
   readonly title: string;
   readonly subtitle?: string;
   readonly x: Float64Array;
   readonly series: readonly {
     label: string;
-    values: Float64Array;
-    slot: keyof typeof SERIES;
+    /**
+     * 系列の値。途中で終わる系列（ゴールした頭）は null を置くと線が切れる。
+     */
+    values: Float64Array | readonly (number | null)[];
+    slot?: keyof typeof SERIES;
+    /** slot より優先する線の色。全頭同時の図で頭ごとに色を変えるのに使う。 */
+    color?: string;
     /** 参照線として破線で描く。系列そのものではないもの。 */
     dashed?: boolean;
+    /** 線の太さ。省くと 2（破線は 1.5）。 */
+    width?: number;
   }[];
   readonly bands: CourseBands;
   readonly height: number;
   /** true なら 0 を含めた範囲にする。速度のように 0 付近を使わない図では false。 */
   readonly includeZero?: boolean;
+  /** 横軸の見出し。省くと距離。 */
+  readonly xLabel?: string;
+  /** カーソルを同期する相手の組。横軸の意味が違う図は別の鍵にする。 */
+  readonly syncKey?: string;
+  /** 凡例を出すか。系列が多いときに畳める。 */
+  readonly legend?: boolean;
 }
 
-function Chart({ title, subtitle, x, series, bands, height, includeZero = true }: ChartProps) {
+export function Chart({
+  title,
+  subtitle,
+  x,
+  series,
+  bands,
+  height,
+  includeZero = true,
+  xLabel = '距離 (m)',
+  syncKey = 'race',
+  legend = true,
+}: ChartProps) {
   const ref = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
   const [hoverSkill, setHoverSkill] = useState<SkillMarker | null>(null);
@@ -160,8 +207,8 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
       title,
       width: element.clientWidth,
       height,
-      cursor: { sync: { key: cursorSync.key }, drag: { x: true, y: false } },
-      legend: { live: true },
+      cursor: { sync: { key: cursorSync(syncKey).key }, drag: { x: true, y: false } },
+      legend: { show: legend, live: true },
       scales: {
         x: { time: false },
         y: includeZero
@@ -175,22 +222,23 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
             },
       },
       axes: [
-        { label: '距離 (m)', stroke: isDark() ? '#c3c2b7' : '#52514e', grid: { stroke: isDark() ? '#2a2a28' : '#eceae4' } },
+        { label: xLabel, stroke: isDark() ? '#c3c2b7' : '#52514e', grid: { stroke: isDark() ? '#2a2a28' : '#eceae4' } },
         { stroke: isDark() ? '#c3c2b7' : '#52514e', grid: { stroke: isDark() ? '#2a2a28' : '#eceae4' } },
       ],
       series: [
-        { label: '距離' },
+        { label: xLabel },
         ...series.map((s) => ({
           label: s.label,
-          stroke: color(s.slot),
-          width: s.dashed === true ? 1.5 : 2,
+          stroke: s.color ?? color(s.slot ?? 'context'),
+          width: s.width ?? (s.dashed === true ? 1.5 : 2),
           ...(s.dashed === true ? { dash: [4, 3] } : {}),
           points: { show: false },
         })),
       ],
       plugins: [coursePlugin(bands, setHoverSkill)],
     };
-    const data: uPlot.AlignedData = [x, ...series.map((s) => s.values)];
+    // 横軸のあとに系列が並ぶ。値は Float64Array と (number | null)[] を混ぜられる。
+    const data = [x, ...series.map((s) => s.values)] as uPlot.AlignedData;
     plot.current = new uPlot(options, data, element);
     const onResize = () => plot.current?.setSize({ width: element.clientWidth, height });
     window.addEventListener('resize', onResize);
@@ -199,7 +247,7 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
       plot.current?.destroy();
       plot.current = null;
     };
-  }, [title, height, x, series, bands, includeZero]);
+  }, [title, height, x, series, bands, includeZero, xLabel, syncKey, legend]);
 
   const skillHint =
     bands.skills.length === 0
@@ -207,7 +255,7 @@ function Chart({ title, subtitle, x, series, bands, height, includeZero = true }
       : '薄い縦線と三角の印はスキル発動位置。カーソルを合わせると名前を表示。';
   const caption =
     hoverSkill !== null
-      ? `${hoverSkill.position.toFixed(0)} m ・ ${hoverSkill.labels.join('、')}`
+      ? `${hoverSkill.caption ?? `${hoverSkill.position.toFixed(0)} m`} ・ ${hoverSkill.labels.join('、')}`
       : [subtitle, skillHint].filter((s) => s !== undefined).join(' ');
 
   return (
