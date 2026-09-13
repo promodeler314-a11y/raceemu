@@ -358,6 +358,7 @@ export class WorkerPool {
         from,
         count,
         critical: spec,
+        field: options.field ?? null,
       }),
       (response, from) => {
         if (response.kind !== 'critical') return;

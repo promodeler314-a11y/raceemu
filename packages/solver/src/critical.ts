@@ -1,4 +1,5 @@
 import { RaceCalculator } from '../../sim/src/calculator.ts';
+import type { FieldBundle } from '../../sim/src/field/field.ts';
 import type { RaceTrack } from '../../sim/src/data/track.ts';
 import type { RaceSetting, SystemSetting } from '../../sim/src/setting.ts';
 import { ADJUSTMENT_COUNT_BUCKETS } from '../../sim/src/state.ts';
@@ -37,6 +38,15 @@ export interface CriticalOptions {
    * 境界から離れた反転は捕まえられないので、これは保険であって保証ではない。
    */
   readonly verifyWindow?: number;
+  /**
+   * 他のウマ娘の位置。渡すと順位条件を実際に判定する。
+   *
+   * **束は呼ぶ側が 1 つだけ作って渡す。** 逆算は 1 試行のなかでステータスを振って
+   * 何度も走らせるので、途中で束が変わると「その試行ではステータス以外の出目が
+   * 変わらない」という臨界値の前提が崩れる。相手を自分と同格にする指定のときは、
+   * 振る前のステータスで 1 度だけ組む。
+   */
+  readonly field?: FieldBundle | null;
 }
 
 export function resolveMethod(options: CriticalOptions): 'bisect' | 'scan' {
@@ -75,6 +85,7 @@ export function criticalValueForTrial(
     const result = calculator.simulate(withStatus(setting, options.status, values[index]!), {
       seed,
       trial,
+      field: options.field ?? null,
     }).result;
     return achieved(options.goal, result);
   };
@@ -125,6 +136,7 @@ function scan(
     const result = calculator.simulate(withStatus(setting, options.status, values[i]!), {
       seed,
       trial,
+      field: options.field ?? null,
     }).result;
     if (achieved(options.goal, result)) {
       return { value: values[i]!, fellBack: racesSoFar > 0, races };
@@ -213,7 +225,9 @@ export function criticalValuesByAdjustmentCountForTrial(
   let filled = 0;
   for (let i = 0; i < values.length && filled < ADJUSTMENT_COUNT_BUCKETS; i++) {
     races++;
-    const result = calculator.simulate(withStatus(setting, options.status, values[i]!), { seed, trial }).result;
+    const result = calculator
+      .simulate(withStatus(setting, options.status, values[i]!), { seed, trial, field: options.field ?? null })
+      .result;
     if (!achieved(options.goal, result)) continue;
     const bucket = Math.min(result.positionCompetitionCount, ADJUSTMENT_COUNT_BUCKETS - 1);
     if (Number.isNaN(byCount[bucket]!)) {

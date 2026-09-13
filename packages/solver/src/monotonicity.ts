@@ -1,4 +1,5 @@
 import { RaceCalculator } from '../../sim/src/calculator.ts';
+import type { FieldBundle } from '../../sim/src/field/field.ts';
 import type { RaceTrack } from '../../sim/src/data/track.ts';
 import type { RaceSetting, SystemSetting } from '../../sim/src/setting.ts';
 import { achieved, withStatus, type Goal, type TargetStatus } from './target.ts';
@@ -19,6 +20,11 @@ export interface MonotonicityOptions {
   readonly step: number;
   readonly trials: number;
   readonly seed?: number;
+  /**
+   * 他のウマ娘の位置。渡すと順位条件を実際に判定する。
+   * 逆算と同じく、束は呼ぶ側が 1 つだけ作って渡す。
+   */
+  readonly field?: FieldBundle | null;
 }
 
 export interface MonotonicityReport {
@@ -63,6 +69,7 @@ export function checkMonotonicity(
       const result = calculator.simulate(withStatus(setting, options.status, value), {
         seed,
         trial,
+        field: options.field ?? null,
       }).result;
       return achieved(options.goal, result);
     });

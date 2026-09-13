@@ -187,6 +187,8 @@ export interface CriticalRequest {
   readonly from: number;
   readonly count: number;
   readonly critical: CriticalSpec;
+  /** 他のウマ娘の位置。渡すと順位条件を実際に判定する。 */
+  readonly field?: FieldSpec | null;
 }
 
 export interface CriticalSpec {

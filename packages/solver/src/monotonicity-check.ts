@@ -3,6 +3,8 @@
  *   pnpm monotonicity [--trials 200]
  */
 import { loadGameData } from '../../data/src/node.ts';
+import { buildFieldBundle, defaultFieldProfile } from '../../sim/src/field/field.ts';
+import { opponentSkillPool } from '../../sim/src/field/opponent-skills.ts';
 import { defaultSystemSetting, type RaceSetting, type UmaStatus } from '../../sim/src/setting.ts';
 import { checkMonotonicity } from './monotonicity.ts';
 import type { Goal } from './target.ts';
@@ -15,6 +17,15 @@ function arg(name: string, fallback: string): string {
   return index >= 0 && index + 1 < process.argv.length ? process.argv[index + 1]! : fallback;
 }
 const trials = Number(arg('trials', '200'));
+/**
+ * 順位条件を判定するか。既定は判定する（アプリの既定に合わせる）。
+ *   pnpm monotonicity --field off
+ *
+ * 束は設定ごとに 1 つだけ作って使い回す。逆算と同じ前提である。
+ * 判定を入れると、速くなった結果として順位が上がり、後ろ寄りの条件を外す経路ができる。
+ * 反転が増えるならそれは二分探索を使えなくする要因なので、ここで見える必要がある。
+ */
+const useField = arg('field', 'on') !== 'off';
 
 const baseUma: UmaStatus = {
   charaName: '',
@@ -46,6 +57,26 @@ function setting(patch: Partial<UmaStatus>, location: number, course: number): R
   };
 }
 
+/** 設定ごとの束。コースと相手の想定が同じなら作り直さない。 */
+const bundles = new Map<string, ReturnType<typeof buildFieldBundle>>();
+function fieldFor(setting: RaceSetting) {
+  if (!useField) return null;
+  const { track } = setting;
+  const key = `${track.location}/${track.course}/${track.gateCount}/${JSON.stringify(setting.uma)}`;
+  let bundle = bundles.get(key);
+  if (bundle === undefined) {
+    bundle = buildFieldBundle(defaultFieldProfile(track.gateCount), track, system, data.trackData, {
+      samples: 64,
+      seed: 9001,
+      self: setting.uma,
+      skillPool: opponentSkillPool(data.skillsById),
+      skillsById: data.skillsById,
+    });
+    bundles.set(key, bundle);
+  }
+  return bundle;
+}
+
 const profiles: { label: string; setting: RaceSetting }[] = [
   { label: '東京芝2400 先行', setting: setting({ style: 'SEN' }, 10006, 10606) },
   { label: '東京芝2400 逃げ', setting: setting({ style: 'NIGE' }, 10006, 10606) },
@@ -64,6 +95,7 @@ const goals: { label: string; goal: Goal }[] = [
 ];
 
 console.log(`スタミナを 200 から 1600 まで 10 刻みで動かし、${trials} 試行ずつ調べる`);
+console.log(`順位条件: ${useField ? '判定する' : '無視する'}`);
 console.log('');
 console.log('| 設定 | 目標 | 反転を含む試行 | 反転の総数 | 反転の最大幅 | 常に達成 | 一度も達成せず |');
 console.log('| --- | --- | ---: | ---: | ---: | ---: | ---: |');
@@ -83,6 +115,7 @@ for (const profile of profiles) {
       step: 10,
       trials,
       seed: 20260904,
+      field: fieldFor(profile.setting),
     });
     totalTrials += report.trials;
     totalWithInversion += report.trialsWithInversion;
