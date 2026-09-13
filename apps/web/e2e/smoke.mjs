@@ -300,6 +300,59 @@ console.log('--- 疎通の確認（サーバ無し）:', healthText);
 if (!healthText.includes('口が無い')) fail(`口が無いことを伝えていない: ${healthText}`);
 if (/JSON|Unexpected token/i.test(healthText)) fail(`生の例外が画面に出ている: ${healthText}`);
 
+// 近似の感度分析: 近似の置き方を半分と倍に振って、短縮量の幅が出ることを確かめる。
+// 3 通り × (1 + 候補) 構成を走らせるので、e2e では候補 2 個・50 試行まで落とす。
+//
+// 軸は 2 つある。距離の軸は順位条件を判定しているときだけ効くので、ここで判定を入れる
+// （この段に来るまでに外してある）。軸を切り替えると注意の文が入れ替わることも見る。
+const sensitivitySection = 'section:has(h2:text("近似の感度"))';
+console.log('--- 近似の感度');
+if (!(await page.isChecked('[data-testid=sensitivity-axis-near]'))) {
+  fail('既定の軸が「近く」の距離になっていない');
+}
+const soloNote = (await page.textContent('[data-testid=sensitivity-axis-note]')).trim();
+console.log('  距離の軸の注意（順位条件を判定していないとき）:', soloNote);
+if (!soloNote.includes('何も動かない')) fail(`距離が効かない旨が出ていない: ${soloNote}`);
+await page.check('[data-testid=use-field]');
+const nearNote = (await page.textContent('[data-testid=sensitivity-axis-note]')).trim();
+console.log('  距離の軸の注意（判定しているとき）:', nearNote);
+if (nearNote === soloNote) fail('順位条件を入れても注意が変わらない');
+await page.click('[data-testid=sensitivity-axis-rate]');
+const rateNote = (await page.textContent('[data-testid=sensitivity-axis-note]')).trim();
+console.log('  倍率の軸の注意（判定しているとき）:', rateNote);
+if (!rateNote.includes('位置から決まる')) fail(`倍率が効かない旨が出ていない: ${rateNote}`);
+await page.click('[data-testid=sensitivity-axis-near]');
+const beforeEstimate = (await page.textContent('[data-testid=sensitivity-estimate]')).trim();
+console.log('  実行前の見積もり:', beforeEstimate);
+if (!/約/.test(beforeEstimate)) fail(`感度分析の見積もりが出ていない: ${beforeEstimate}`);
+await page.fill('[data-testid=sensitivity-trials]', '50');
+await page.fill('[data-testid=sensitivity-limit]', '2');
+await page.click('button:has-text("近似の幅を測る")');
+await page.waitForFunction(
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === '測っている'),
+  null,
+  { timeout: 300000 },
+);
+await page.waitForSelector('[data-testid=sensitivity-result]', { timeout: 10000 });
+const sensitivityRows = await page.$$eval(
+  '[data-testid=sensitivity-table] tbody tr',
+  (trs) => trs.map((tr) => [...tr.querySelectorAll('td')].map((c) => c.textContent?.trim())),
+);
+for (const row of sensitivityRows) console.log('  幅', row.join(' | '));
+if (sensitivityRows.length !== 2) fail(`感度分析の行数が想定と違う: ${sensitivityRows.length}`);
+// 列は スキル / 軸に効くか / 振った値 3 通り / 幅 / 幅 ÷ 誤差
+if (sensitivityRows[0].length !== 7) fail(`感度分析の列数が想定と違う: ${sensitivityRows[0].length}`);
+const verdict = (await page.textContent('[data-testid=sensitivity-verdict]')).trim();
+console.log(' ', verdict);
+if (verdict.length === 0) fail('感度分析の読み方が出ていない');
+// 実測が付いたら「目安」から「見込み」に変わる。
+const afterEstimate = (await page.textContent('[data-testid=sensitivity-estimate]')).trim();
+console.log('  実行後の見積もり:', afterEstimate);
+if (!afterEstimate.startsWith('見込み')) fail(`実測が見積もりに反映されていない: ${afterEstimate}`);
+await page.locator(sensitivitySection).screenshot({ path: 'docs/images/m10-sensitivity.png' });
+// 順位条件はこの段のために入れたので、あとの段のために戻しておく。
+await page.uncheck('[data-testid=use-field]');
+
 // 育成計画: 候補を手持ちではなく入手経路から組み立てる。
 // サポートカードと育成ウマ娘のデータは別の塊に切ってあるので、
 // 切り替えたあとに読み込みを待つ。
@@ -721,6 +774,14 @@ const overflow = await mobile.evaluate(
 console.log('--- 幅 390 での横あふれ:', overflow, 'px');
 if (overflow > 0) fail('小さい画面で横にあふれている');
 await mobile.screenshot({ path: 'docs/images/m4-mobile.png', fullPage: true });
+// 探索の面は表が多い。開いた面だけを見ていると、あふれを見落とす。
+await mobile.goto('http://localhost:4173/#tab=solve', { waitUntil: 'load' });
+await mobile.waitForTimeout(300);
+const solveOverflow = await mobile.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+);
+console.log('--- 幅 390 での横あふれ（探索の面）:', solveOverflow, 'px');
+if (solveOverflow > 0) fail('小さい画面の探索の面で横にあふれている');
 await mobile.close();
 
 console.log('エラー:', errors.length === 0 ? 'なし' : errors);

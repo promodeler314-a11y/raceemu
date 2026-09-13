@@ -5,9 +5,13 @@ import {
   estimateCross,
   estimateMulti,
   estimateRun,
+  estimateSensitivity,
   multiPaceKey,
   paceKey,
   recordPace,
+  sensitivityCandidates,
+  sensitivityPaceKey,
+  sensitivityScales,
   type PaceSample,
 } from '../src/store.ts';
 
@@ -145,5 +149,132 @@ describe('所要時間の表示', () => {
   it('数でないものは線で返す', () => {
     expect(formatDuration(Number.NaN)).toBe('–');
     expect(formatDuration(-1)).toBe('–');
+  });
+});
+
+describe('近似の感度分析の見積もり', () => {
+  it('振る値の数 × (1 + 候補の数) × 試行数ぶんを走らせると見る', () => {
+    const estimate = estimateSensitivity({
+      pace: {},
+      useField: true,
+      sensitivityTrials: 300,
+      candidateCount: 8,
+    });
+    // 既定の倍率は 0.5 / 1 / 2 の 3 通り。
+    expect(estimate.totalTrials).toBe(3 * 9 * 300);
+    expect(estimate.measured).toBe(false);
+  });
+
+  it('軸ごとに実測を分ける。倍率と距離では 1 レースの重さが違う', () => {
+    const pace = recordPace({}, sensitivityPaceKey(true, 'rate'), { count: 900, ms: 3000 });
+    expect(
+      estimateSensitivity({
+        pace,
+        useField: true,
+        sensitivityAxis: 'rate',
+        sensitivityTrials: 100,
+        candidateCount: 2,
+      }).measured,
+    ).toBe(true);
+    // 距離の軸はまだ測っていないので、目安のままである。
+    expect(
+      estimateSensitivity({
+        pace,
+        useField: true,
+        sensitivityAxis: 'near',
+        sensitivityTrials: 100,
+        candidateCount: 2,
+      }).measured,
+    ).toBe(false);
+  });
+
+  it('どちらの軸も 3 通りで、基準値を真ん中に挟む', () => {
+    expect(sensitivityScales('rate')).toEqual([0.5, 1.0, 2.0]);
+    // 距離の基準は 1 バ身 = 2.5 m。
+    expect(sensitivityScales('near')).toEqual([1.25, 2.5, 5]);
+  });
+
+  it('実測が付くと、単騎の実測ではなく感度分析の実測から出す', () => {
+    // 単騎の実測だけを持たせても、鍵が違うので目安のままである。
+    const solo = one(paceKey(true), { count: 10_000, ms: 1000 });
+    expect(
+      estimateSensitivity({
+        pace: solo,
+        useField: true,
+        sensitivityTrials: 100,
+        candidateCount: 3,
+      }).measured,
+    ).toBe(false);
+    const pace = recordPace(solo, sensitivityPaceKey(true), { count: 1200, ms: 6000 });
+    const estimate = estimateSensitivity({
+      pace,
+      useField: true,
+      sensitivityTrials: 100,
+      candidateCount: 3,
+    });
+    expect(estimate.measured).toBe(true);
+    expect(estimate.totalTrials).toBe(1200);
+    expect(estimate.ms).toBeCloseTo(6000);
+  });
+
+  it('重くなるので、候補を増やすと見込みも伸びる', () => {
+    const few = estimateSensitivity({
+      pace: {},
+      useField: true,
+      sensitivityTrials: 300,
+      candidateCount: 4,
+    }).ms;
+    const many = estimateSensitivity({
+      pace: {},
+      useField: true,
+      sensitivityTrials: 300,
+      candidateCount: 16,
+    }).ms;
+    expect(many).toBeGreaterThan(few);
+  });
+});
+
+describe('近似の感度分析で幅を測るスキルの選び方', () => {
+  const singles = (ids: readonly string[]) =>
+    ids.map((skillId) => ({ skillId })) as never as ReturnType<
+      () => NonNullable<Parameters<typeof sensitivityCandidates>[0]['optimizeResult']>
+    >['singles'];
+
+  it('探索を走らせていなければ、選んでいるスキルの先頭から取る', () => {
+    expect(
+      sensitivityCandidates({
+        skillIds: ['a', 'b', 'c', 'd'],
+        optimizeResult: null,
+        sensitivityLimit: 3,
+      }),
+    ).toEqual(['a', 'b', 'c']);
+  });
+
+  it('探索を走らせてあれば、最良の構成を先に取る', () => {
+    const chosen = sensitivityCandidates({
+      skillIds: ['a', 'b', 'c', 'd'],
+      optimizeResult: {
+        best: ['c', 'd'],
+        singles: singles(['a', 'b', 'c', 'd']),
+      } as never,
+      sensitivityLimit: 3,
+    });
+    expect(chosen).toEqual(['c', 'd', 'a']);
+  });
+
+  it('同じスキルを二度測らない', () => {
+    const chosen = sensitivityCandidates({
+      skillIds: [],
+      optimizeResult: { best: ['a'], singles: singles(['a', 'a', 'b']) } as never,
+      sensitivityLimit: 10,
+    });
+    expect(chosen).toEqual(['a', 'b']);
+  });
+
+  it('上限は 30 で止める。走らせる構成が候補の数だけ増えるためである', () => {
+    const ids = Array.from({ length: 50 }, (_, i) => `s${i}`);
+    expect(
+      sensitivityCandidates({ skillIds: ids, optimizeResult: null, sensitivityLimit: 999 }),
+    ).toHaveLength(30);
   });
 });

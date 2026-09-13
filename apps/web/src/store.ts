@@ -34,6 +34,13 @@ import { resolveMethod } from '../../../packages/solver/src/critical.ts';
 import { createCostModel } from '../../../packages/solver/src/cost.ts';
 import { optimizeSkills, type OptimizeResult } from '../../../packages/solver/src/optimize.ts';
 import {
+  DEFAULT_SCALES,
+  baseValueOf,
+  measureSensitivity,
+  type SensitivityAxis,
+  type SensitivityResult,
+} from '../../../packages/solver/src/sensitivity.ts';
+import {
   buildAllSkillCandidates,
   buildPlanCandidates,
   type PlanCandidates,
@@ -495,6 +502,20 @@ interface AppState {
   searchTarget: SearchTarget;
   /** 直前の探索をどこで回したか。結果がどちらのものかを画面に出す。 */
   ranOnServer: boolean;
+
+  /**
+   * 近似の感度分析。振った値 1 つ、スキル 1 つあたり 1 構成を走らせる。
+   * 相手の強さの幅（`runBand`）はレース 3 回で終わるが、こちらは重さが
+   * 候補の数に比例して伸びる。押したときだけ測り、候補は上限で切る。
+   * docs/solver-design.md 4.1 節を参照。
+   */
+  sensitivityAxis: SensitivityAxis;
+  sensitivityTrials: number;
+  /** 幅を測るスキルの上限。効きの大きいものから取る。 */
+  sensitivityLimit: number;
+  sensitivityResult: SensitivityResult | null;
+  sensitivityLog: string[];
+  sensitivityRunning: boolean;
   plan: PlanSetting;
   /** サポートカードと育成ウマ娘。読み込むまでは null。 */
   deck: DeckData | null;
@@ -562,6 +583,12 @@ interface AppState {
   loadDeck: () => Promise<void>;
   togglePlanCard: (id: number) => void;
   runOptimize: () => Promise<void>;
+  /** 振る軸を選ぶ。倍率と「近く」の距離は別の世界なので、まとめずに 1 つずつ測る。 */
+  setSensitivityAxis: (axis: SensitivityAxis) => void;
+  setSensitivityTrials: (trials: number) => void;
+  setSensitivityLimit: (limit: number) => void;
+  /** 近似確率を半分と倍に振り、スキルごとの短縮量の幅を測る。 */
+  runSensitivity: () => Promise<void>;
   shareUrl: () => string;
   applyShared: () => boolean;
   /** 保存してある設定とスナップショットを読み、そのあと共有 URL を当てる。 */
@@ -746,6 +773,18 @@ export const useStore = create<AppState>((set, get) => ({
   optimizeResult: null,
   optimizeLog: [],
   optimizeRunning: false,
+  // 既定は候補 8 個・300 試行。倍率 3 通りで 27 構成 × 300 = 8100 試行になる。
+  // 手元の実測（2 Worker）でおよそ 25 秒で、押して待てる範囲に収まる。
+  // 軸の既定は「近く」の距離である。順位条件の判定（`useField`）が既定で入っており、
+  // そのとき位置から決まる 12 型には倍率が効かない。既定の設定で効くほうを先に出す。
+  // 判定を切ったときは倍率のほうが効くので、画面が軸を選び直すよう促す。
+  // docs/solver-design.md 4.1 節を参照。
+  sensitivityAxis: 'near' as SensitivityAxis,
+  sensitivityTrials: 300,
+  sensitivityLimit: 8,
+  sensitivityResult: null,
+  sensitivityLog: [],
+  sensitivityRunning: false,
 
   dismissError: () => set({ error: null }),
   dismissNotice: () => set({ notice: null }),
@@ -1369,6 +1408,80 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
+  setSensitivityAxis: (sensitivityAxis) => set({ sensitivityAxis, sensitivityResult: null }),
+  setSensitivityTrials: (sensitivityTrials) => set({ sensitivityTrials }),
+  setSensitivityLimit: (sensitivityLimit) => set({ sensitivityLimit }),
+
+  /**
+   * 近似の置き方を振り、スキルごとの短縮量がどれだけ動くかを測る。
+   *
+   * 振る軸は 2 つある。近似確率の倍率（`rate`）と「近く」の距離（`near`）で、
+   * 別々に置いた値なので 1 つの幅にまとめず、選んだほうだけを測る
+   * （docs/solver-design.md 4.1 節）。
+   *
+   * 相手の強さの幅（`runBand`）と違って、振った値 1 つにつきスキルの数だけ構成を
+   * 走らせる。3 通り × (1 + 候補数) 構成なので、候補を絞らないと終わらない。
+   * 探索を先に走らせてあれば、その解と効きの大きい候補から上限ぶんを取る。
+   */
+  runSensitivity: async () => {
+    const state = get();
+    if (state.running || state.optimizeRunning || state.sensitivityRunning) return;
+
+    // 基準は候補を 1 つも取らない構成にする。探索の「単体」と同じ測り方にして、
+    // 短縮量をそのまま突き合わせられるようにするためである。
+    const plan = state.plan.source === 'selected' ? null : state.planCandidates;
+    const always =
+      plan === null
+        ? []
+        : plan.alwaysSkillIds
+            .map((id) => gameData.skillsById.get(id))
+            .filter((skill): skill is NonNullable<typeof skill> => skill !== undefined);
+    const candidates = sensitivityCandidates(state);
+    if (candidates.length === 0) {
+      set({ error: '幅を測るスキルを選ぶか、先に探索を走らせる' });
+      return;
+    }
+
+    controller = new AbortController();
+    set({ sensitivityRunning: true, error: null, sensitivityResult: null, sensitivityLog: [] });
+    try {
+      const result = await measureSensitivity(
+        {
+          pool: getPool(),
+          system,
+          base: toSerializable({ ...buildSetting(state), skills: always }),
+          cost: costModelFor(plan === null ? state.hintLevels : plan.hintLevels),
+          seed: state.seed,
+          field: fieldSpec(state),
+        },
+        {
+          candidates,
+          trials: state.sensitivityTrials,
+          axis: state.sensitivityAxis,
+          scales: sensitivityScales(state.sensitivityAxis),
+          skillsById: gameData.skillsById,
+          signal: controller.signal,
+          onProgress: (message) => set((s) => ({ sensitivityLog: [...s.sensitivityLog, message] })),
+        },
+      );
+      set((s) => ({
+        sensitivityResult: result,
+        // 次に押す前の見積もりに使う。走った試行の総数で数えれば点になる。
+        pace: recordPace(s.pace, sensitivityPaceKey(s.useField, s.sensitivityAxis), {
+          count: result.races,
+          ms: result.elapsedMs,
+        }),
+      }));
+    } catch (error) {
+      if (!(error instanceof SimulationCancelled)) {
+        set({ error: error instanceof Error ? error.message : String(error) });
+      }
+    } finally {
+      set({ sensitivityRunning: false });
+      controller = null;
+    }
+  },
+
   shareUrl: () => {
     const state = get();
     const encoded = encodeShareState({
@@ -1480,6 +1593,42 @@ export function defaultOpponents(gateCount: number): Opponent[] {
     }
   }
   return list;
+}
+
+/**
+ * 軸ごとに振る値。どちらも基準値を真ん中に挟み、半分と倍に振る。
+ *
+ * 倍率は `approximateRateScale` の 0.5 / 1.0 / 2.0、距離は `nearLaneMeters` の
+ * 1.25 / 2.5 / 5 m である。根拠のある値ではなく、**桁で振って動くかを見るための目盛り**
+ * である（docs/solver-design.md 4.1 節）。基準値は `baseValueOf` から引き、
+ * 幅の基準が計算側とずれないようにしてある。
+ */
+export function sensitivityScales(axis: SensitivityAxis): readonly number[] {
+  if (axis === 'rate') return DEFAULT_SCALES;
+  const base = baseValueOf('near');
+  return [base / 2, base, base * 2];
+}
+
+/**
+ * 近似の感度分析で幅を測るスキルを選ぶ。
+ *
+ * 倍率 1 つにつき候補の数だけ構成を走らせるので、候補を全部は測れない。
+ * 探索を先に走らせてあれば、その最良の構成を先に取り、残りを効きの大きい順
+ * （`singles` は限界貢献度で並べてある）で埋める。走らせていなければ、
+ * いま選んでいるスキルの先頭から取る。
+ */
+export function sensitivityCandidates(state: {
+  skillIds: readonly string[];
+  optimizeResult: OptimizeResult | null;
+  sensitivityLimit: number;
+}): string[] {
+  const limit = Math.max(1, Math.min(30, Math.floor(state.sensitivityLimit)));
+  const result = state.optimizeResult;
+  const ordered =
+    result === null
+      ? [...state.skillIds]
+      : [...result.best, ...result.singles.map((single) => single.skillId)];
+  return [...new Set(ordered)].slice(0, limit);
 }
 
 /** 順位条件を判定するときの相手の想定。頭数は 9 と 12 だけを扱う。 */
@@ -1610,6 +1759,16 @@ export function crossPaceKey(useField: boolean): string {
   return useField ? 'cross:field' : 'cross:solo';
 }
 
+/**
+ * 近似の感度分析の実測を覚えるときの鍵。
+ *
+ * 単騎の実行と同じ計算を走らせるので 1 試行あたりの費用は近いが、
+ * 構成を何度も切り替えるぶん固定の費用の入り方が違う。実測が混ざらないように鍵を分ける。
+ */
+export function sensitivityPaceKey(useField: boolean, axis: SensitivityAxis = 'rate'): string {
+  return `sensitivity:${axis}:${useField ? 'field' : 'solo'}`;
+}
+
 export interface Estimate {
   readonly ms: number;
   /** 直前の実測に基づくか。false なら作り付けの目安である。 */
@@ -1681,6 +1840,33 @@ export function estimateCross(state: {
 /** バ場ごとの距離の一覧。選択欄を作るのに使う。 */
 export function distancesOf(surface: number): number[] {
   return courseDistances(gameData.trackData, surface);
+}
+
+/**
+ * 近似の感度分析にかかる時間。
+ *
+ * 走るのは「振る値の数 × (1 + 候補の数)」構成ぶんで、1 構成が指定した試行数である。
+ * 軸（倍率 / 近くの距離）で 1 レースの重さが変わるので、実測の鍵も軸ごとに分ける。
+ * 相手の強さの幅（3 回）と違って桁で重いので、押す前に見込みを出す。
+ * 実測が無いあいだは単騎の実行の目安を試行の総数ぶんに伸ばして使う。
+ */
+export function estimateSensitivity(state: {
+  pace: Record<string, readonly PaceSample[]>;
+  useField: boolean;
+  sensitivityAxis?: SensitivityAxis;
+  sensitivityTrials: number;
+  candidateCount: number;
+}): Estimate & { readonly totalTrials: number } {
+  const axis = state.sensitivityAxis ?? 'rate';
+  const scales = sensitivityScales(axis).length;
+  const totalTrials = scales * (1 + state.candidateCount) * state.sensitivityTrials;
+  const estimate = estimateWith(
+    state.pace,
+    sensitivityPaceKey(state.useField, axis),
+    state.useField ? FALLBACK_PACE.field : FALLBACK_PACE.solo,
+    totalTrials,
+  );
+  return { ...estimate, totalTrials };
 }
 
 function buildSetting(state: AppState): RaceSetting {

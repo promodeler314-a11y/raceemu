@@ -53,6 +53,22 @@ export function OptimizePanel() {
   );
   const bestFidelity = result === null ? null : countFidelity(result.best, fidelities);
 
+  /*
+    近似の感度分析の結果。印（△ / ▲）とは別に添える。
+    印は「どれだけ怪しいか」を発動条件の型から言い、感度分析は「どれだけ結果が動くか」を
+    実測で言う。どちらも近似の話だが、出どころも要る手間も違うので混ぜない。
+    docs/solver-design.md 4.1 節を参照。
+  */
+  const sensitivity = useStore((s) => s.sensitivityResult);
+  const sensitivityAxis = useStore((s) => s.sensitivityAxis);
+  const shakyInBest = useMemo(() => {
+    if (result === null || sensitivity === null) return [];
+    const best = new Set(result.best);
+    return sensitivity.skills.filter(
+      (skill) => best.has(skill.skillId) && skill.widthPerError >= 1,
+    );
+  }, [result, sensitivity]);
+
   // 結果の表示に使う費用は、育成計画のときはヒントの割引を含む。
   const levels = plan.source !== 'selected' && planCandidates !== null ? planCandidates.hintLevels : hintLevels;
   const costModel = useMemo(() => costModelFor(levels), [levels]);
@@ -211,6 +227,23 @@ export function OptimizePanel() {
                 この構成の {result.best.length} 個のうち、{bestFidelity.approximate} 個は発動条件に
                 近似を含み、{bestFidelity.dropped} 個は条件を落としている。
                 落としているものが多いほど、短縮量は本来より大きく出ている。
+              </p>
+            )}
+            {/*
+              感度分析を走らせてあれば、その解の短縮量が近似の置き方でどれだけ動くかを添える。
+              上の印は型から言う話、こちらは実測から言う話である。
+            */}
+            {shakyInBest.length > 0 && (
+              <p className="mt-1 text-xs text-warn-ink" data-testid="optimize-sensitivity">
+                {sensitivityAxis === 'near' ? '「近く」の距離' : '近似確率の倍率'}
+                を振った結果では、この構成の {shakyInBest.length} 個は短縮量が誤差より
+                大きく動く（
+                {shakyInBest
+                  .slice(0, 3)
+                  .map((skill) => name(skill.skillId))
+                  .join('、')}
+                {shakyInBest.length > 3 && ' ほか'}
+                ）。この差は近似の中に消えるので、近い順位の構成どうしはここでは決められない。
               </p>
             )}
           </div>
