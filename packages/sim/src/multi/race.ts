@@ -29,6 +29,14 @@ export interface MultiRaceOptions {
   readonly trial: number;
   /** フレーム列を記録する出走番号。詳細表示に使う。 */
   readonly recordFramesFor?: number;
+  /**
+   * 全頭のフレーム列を記録する。1 試行を開いて中身を見るときだけ使う。
+   *
+   * 記録は `RaceFrame` を配列に足すだけで、乱数も計算も触らない。
+   * 記録しても結果は 1 ビットも変わらない（`multi.test.ts` の
+   * 「走らせ直しても元の実行と着順とタイムが一致する」が固定している）。
+   */
+  readonly recordAllFrames?: boolean;
   /** 各フレームの終わりに呼ばれる。隊列を描いたり、位置取りを数えたりするのに使う。 */
   readonly onFrame?: (frame: number, states: readonly RaceState[]) => void;
 }
@@ -110,7 +118,7 @@ export function runMultiRace(
     const state = calculator.createState(setting, {
       seed: entry.seed ?? entrySeed(options.seed, i),
       trial: options.trial,
-      recordFrames: options.recordFramesFor === i,
+      recordFrames: options.recordAllFrames === true || options.recordFramesFor === i,
       field,
     });
     state.paceMakerSource = () => field.leader();

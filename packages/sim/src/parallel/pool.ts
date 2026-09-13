@@ -60,6 +60,14 @@ export interface MultiOutput {
   /** 出走頭数 */
   readonly entries: number;
   readonly cancelled?: boolean;
+  /**
+   * 詰め直したあとの並びが、元のどの試行番号だったか。
+   *
+   * 中断したときだけ入る。塊は順不同で終わるので穴が飛び飛びに残り、
+   * 詰め直すと並びの位置と試行番号がずれる。1 試行を走らせ直すには
+   * 試行番号そのものが要るので、捨てずに返す。
+   */
+  readonly trialIndices?: Int32Array;
 }
 
 export interface CriticalOutput {
@@ -319,14 +327,21 @@ export class WorkerPool {
     if (!cancelled) return { packed, entries: entries.length };
     // 塊は順不同で終わるので、埋まった試行だけを詰め直す
     const kept = new Float64Array(filled * width);
+    const trialIndices = new Int32Array(filled);
     let out = 0;
     for (let trial = 0; trial < total; trial++) {
       // 着順は 1 以上なので、0 のままなら埋まっていない
       if (packed[trial * width] === 0) continue;
       kept.set(packed.subarray(trial * width, (trial + 1) * width), out * width);
+      trialIndices[out] = trial;
       out++;
     }
-    return { packed: kept.subarray(0, out * width), entries: entries.length, cancelled };
+    return {
+      packed: kept.subarray(0, out * width),
+      entries: entries.length,
+      cancelled,
+      trialIndices: trialIndices.subarray(0, out),
+    };
   }
 
   async runCritical(
