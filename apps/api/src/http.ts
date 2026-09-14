@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
-import { extname, join, normalize, resolve, sep } from 'node:path';
+import { basename, extname, join, normalize, resolve, sep } from 'node:path';
 import { createGzip } from 'node:zlib';
 import type { GameData } from '../../../packages/data/src/index.ts';
 import type { Config } from './config.ts';
@@ -110,6 +110,17 @@ const GZIP_MIN_BYTES = 64 * 1024;
  */
 const GZIP_TYPES = new Set(['.html', '.js', '.css', '.json', '.svg']);
 
+/**
+ * 名前が変わらないまま中身が入れ替わるファイル。**長く持たせてはいけない。**
+ *
+ * 資産は名前にハッシュが入り、スキル一覧の表は名前に版が入るので、どちらも不変にできる。
+ * 入口だけが同じ名前のまま差し替わる。`index.html` と、スキル一覧の版を教える
+ * `skill-list/index.json`（`SkillListIndex`、issue #83）がそれである。
+ * 不変として配ると、**新しい版を置いても画面が古い名前を取りに行き続ける。**
+ * 版がパスに入っている効き目が、入口のところで消える。
+ */
+const REVALIDATE_NAMES = new Set(['index.html', 'index.json']);
+
 async function serveStatic(
   root: string,
   pathname: string,
@@ -136,9 +147,10 @@ async function serveStatic(
       'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream',
       // 縮めると長さが先に分からない。chunked で流す。
       ...(gzip ? { 'content-encoding': 'gzip' } : { 'content-length': info.size }),
-      // 名前にハッシュが付く資産は長く持たせ、index.html は持たせない。
-      // スキル一覧の表は名前に版が入るので、こちらも不変として持たせてよい。
-      'cache-control': target.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable',
+      // 名前にハッシュや版が付くものは長く持たせ、入口は持たせない。
+      'cache-control': REVALIDATE_NAMES.has(basename(target))
+        ? 'no-cache'
+        : 'public, max-age=31536000, immutable',
       // 縮めた応答と縮めていない応答が同じ URL で出る。手前に proxy を置いたときに
       // 取り違えられないようにする。
       vary: 'accept-encoding',

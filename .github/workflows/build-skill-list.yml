@@ -109,6 +109,12 @@ jobs:
             echo "::error::$OUT_DIR に JSON が 1 つも無い。生成が書いていない" >&2
             exit 1
           fi
+          # 版を教える 1 枚が無いと、画面はどの版を取ればよいか分からない。
+          # 表があっても配れていないのと同じなので、ここでも赤にする。
+          if [ ! -f "$OUT_DIR/index.json" ]; then
+            echo "::error::$OUT_DIR/index.json が無い。生成が版の名前を教えていない" >&2
+            exit 1
+          fi
 
       - id: diff
         env:
@@ -137,24 +143,21 @@ jobs:
         id: prune
         run: |
           set -o pipefail
-          # 新しい順に並べ、KEEP 個より後ろを消す。並びは commit の時刻で決める
-          # （checkout した直後はファイルの更新時刻が全部同じになる）。
-          # 今回作ったものはまだ commit されていないので、いちばん新しいものとして扱う。
+          # 版ごとの古さを commit の時刻で測って渡す。checkout した直後は
+          # ファイルの更新時刻が全部同じになるので、ファイルシステムからは決まらない。
+          # 今回作ったものはまだ commit されていないので行が出ず、
+          # スクリプトがいちばん新しいものとして扱う。
           for f in "$OUT_DIR"/*.json; do
             [ -e "$f" ] || continue
             ts=$(git log -1 --format=%ct -- "$f")
-            echo "${ts:-9999999999} $f"
-          done | sort -rn | cut -d' ' -f2- | tail -n "+$((KEEP + 1))" > /tmp/skill-list-stale.txt
-          removed=''
-          while read -r path; do
-            [ -n "$path" ] || continue
-            rm -f "$path"
-            removed="$removed $path"
-          done < /tmp/skill-list-stale.txt
-          if [ -n "$removed" ]; then
-            echo "古い世代を落とした:$removed"
-          fi
-          echo "removed=$removed" >> "$GITHUB_OUTPUT"
+            if [ -n "$ts" ]; then echo "$ts $(basename "$f")"; fi
+          done > /tmp/skill-list-ages.txt
+          # 掃除そのものと、版を教える 1 枚（index.json）の整合は
+          # scripts/prune-skill-list.mjs が持つ。**食い違っても誰も落ちない**ので、
+          # 手元で動かせる所に出して test/workflows.test.ts に見張らせている。
+          node scripts/prune-skill-list.mjs "$OUT_DIR" "$KEEP" \
+            < /tmp/skill-list-ages.txt | tee /tmp/skill-list-prune.txt
+          echo "removed=$(sed -n 's/^removed: //p' /tmp/skill-list-prune.txt)" >> "$GITHUB_OUTPUT"
 
       - if: steps.diff.outputs.changed == 'true'
         env:
@@ -192,9 +195,13 @@ jobs:
             echo "- **表の値は相手の分布に依る。** 相手の作り方を変えた回は、値がまとめて動くのが正しい。"
             echo "- **「単体」であって「限界」ではない。** 何も持っていない構成へ 1 つ足したときの差なので、食い合うスキルは過大に出る。"
             echo "- 行が無いことには「発動しない」と「測っていない」の 2 通りがある。落とした数は JSON の screenedOut にある。"
+            echo
+            echo "## 版を教える 1 枚"
+            echo
+            echo "画面は \`skill-list/index.json\` の \`latest\` を見てから本体を取りに行く。掃除のあとに \`generations\` を実際に残っているものへ合わせてある（scripts/prune-skill-list.mjs）。"
             if [ -n "$REMOVED" ]; then
               echo
-              echo "古い世代を落とした（リポジトリには $KEEP 世代だけ残す。理由は docs/deploy.md 6 節）:"
+              echo "古い世代を落とした（リポジトリには $KEEP 世代だけ残す。理由は docs/deploy.md 6.5 節）:"
               echo
               for path in $REMOVED; do echo "- \`$path\`"; done
             fi

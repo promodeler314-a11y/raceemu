@@ -1,4 +1,14 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -13,6 +23,9 @@ import { describe, expect, it } from 'vitest';
  * また現れる。ここで一括して見ておく。
  */
 const DIR = '.github/workflows';
+
+/** 掃除と `index.json` の整合を持つスクリプト。 */
+const PRUNE = 'scripts/prune-skill-list.mjs';
 
 function steps(body: string): string[] {
   // `run: |` から、次の同じ深さの項目までを 1 つの塊として取る。
@@ -198,6 +211,149 @@ describe('スキル一覧の表の作り直し', () => {
 
   it('残す世代数の理由が docs にある', () => {
     expect(readFileSync('docs/deploy.md', 'utf8')).toContain(`${keep} 世代`);
+  });
+
+  it('版を教える 1 枚が無ければ赤で落ちる', () => {
+    // index.json が無いと、画面はどの版を取ればよいか分からない。
+    // 表があっても配れていないのと同じである。
+    expect(workflow).toContain('if [ ! -f "$OUT_DIR/index.json" ]; then');
+    expect(workflow).toMatch(/index\.json が無い[\s\S]*?exit 1/);
+  });
+
+  it('掃除がスクリプトを呼んでいる', () => {
+    expect(workflow).toContain(`node ${PRUNE} "$OUT_DIR" "$KEEP"`);
+  });
+});
+
+/**
+ * 掃除と、版を教える 1 枚（`index.json`）の整合を見る。
+ *
+ * **食い違っても誰も落ちない。** `generations` に消した版の名前が残っても
+ * `index.json` は正しい JSON のままで、画面は取りに行って初めて 404 を引く。
+ * 表が出ないのがネットワークのせいなのか配り方のせいなのかも区別が付かない。
+ * pipefail の事故や check-race-model のパスの食い違いと同じ形（壊れているのに静か）
+ * なので、**実際に走らせて**確かめる。
+ */
+describe('スキル一覧の掃除', () => {
+  const script = readFileSync(PRUNE, 'utf8');
+
+  /**
+   * 見本を作って掃除を走らせ、あとに残ったものと `index.json` を返す。
+   *
+   * ワークフローと同じように子プロセスで呼ぶ。引数と標準入力の読み方まで含めて
+   * 通しで見たいからである（呼び出しの形が変わると、本番でだけ壊れる）。
+   */
+  function run(
+    files: readonly string[],
+    index: unknown,
+    keep: number,
+    ages: readonly string[] = [],
+  ) {
+    const dir = mkdtempSync(join(tmpdir(), 'raceemu-prune-'));
+    try {
+      for (const name of files) writeFileSync(join(dir, name), '{"format":1}');
+      writeFileSync(join(dir, 'index.json'), JSON.stringify(index));
+      const run = spawnSync('node', [PRUNE, dir, String(keep)], {
+        input: `${ages.join('\n')}\n`,
+        encoding: 'utf8',
+      });
+      const left = readdirSync(dir).sort();
+      const after =
+        run.status === 0
+          ? (JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8')) as {
+              latest: string;
+              generations: string[];
+            })
+          : { latest: '', generations: [] };
+      return { status: run.status, stdout: run.stdout, stderr: run.stderr, left, after };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  // 古い順に a → b、いちばん新しい c はまだ commit されていない（行が無い）。
+  const AGES = ['1700000000 a.json', '1800000000 b.json'];
+
+  it('掃除のあとに index.json が指す版が実在する', () => {
+    const { status, left, after } = run(
+      ['a.json', 'b.json', 'c.json'],
+      { latest: 'c.json', generations: ['c.json', 'b.json', 'a.json'] },
+      2,
+      AGES,
+    );
+    expect(status).toBe(0);
+    expect(left).toContain(after.latest);
+    for (const name of after.generations) expect(left).toContain(name);
+  });
+
+  it('generations に消した版が残らない', () => {
+    const { left, after, stdout } = run(
+      ['a.json', 'b.json', 'c.json'],
+      { latest: 'c.json', generations: ['c.json', 'b.json', 'a.json'] },
+      2,
+      AGES,
+    );
+    // 新しい 2 世代（c と b）が残り、いちばん古い a が落ちる。
+    expect(after.generations).toEqual(['c.json', 'b.json']);
+    expect(left).toEqual(['b.json', 'c.json', 'index.json']);
+    // ワークフローが PR 本文に載せる行。
+    expect(stdout).toMatch(/^removed: .*a\.json$/m);
+  });
+
+  it('index.json そのものは版として数えない', () => {
+    // 残す世代数が 1 でも、index.json は消えない。並べて数えていると、
+    // 版として落ちるか、いちばん古いものとして最初に消える。
+    const { left, after } = run(
+      ['a.json', 'b.json'],
+      { latest: 'b.json', generations: ['b.json', 'a.json'] },
+      1,
+      AGES,
+    );
+    expect(left).toEqual(['b.json', 'index.json']);
+    expect(after.generations).toEqual(['b.json']);
+  });
+
+  it('latest は残す世代数によらず必ず残る', () => {
+    // 版が変わらなかった回に force で作り直すと、latest が指す版が
+    // 「commit の時刻がいちばん古い」側に来ることがありうる。
+    const { left, after } = run(
+      ['a.json', 'b.json'],
+      { latest: 'a.json', generations: ['a.json'] },
+      1,
+      AGES,
+    );
+    expect(left).toEqual(['a.json', 'index.json']);
+    expect(after.latest).toBe('a.json');
+    expect(after.generations).toEqual(['a.json']);
+  });
+
+  it('index.json が指す版が無ければ赤で落ちる', () => {
+    // 掃除の前から食い違っている場合。このまま配ると画面は 404 を引く。
+    const { status, stderr } = run(
+      ['a.json'],
+      { latest: 'gone.json', generations: ['gone.json'] },
+      2,
+      AGES,
+    );
+    expect(status).toBe(1);
+    expect(stderr).toContain('::error::');
+    expect(stderr).toContain('gone.json');
+  });
+
+  it('版を教える 1 枚が読めなければ赤で落ちる', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'raceemu-prune-'));
+    try {
+      writeFileSync(join(dir, 'a.json'), '{"format":1}');
+      const result = spawnSync('node', [PRUNE, dir, '2'], { input: '', encoding: 'utf8' });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('::error::');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('使い方が書いてある', () => {
+    expect(script).toContain('node scripts/prune-skill-list.mjs');
   });
 });
 
