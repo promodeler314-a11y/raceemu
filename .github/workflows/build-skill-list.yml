@@ -1,0 +1,224 @@
+# スキル一覧（issue #83）の事前計算した表を作り直す。
+#
+# 全スキル × 代表コース × 脚質 × 基準個体の単体評価は、4 コアで 1 時間を超える。
+# ブラウザでは回らないので、ここで回して apps/web/public/skill-list/<版>.json に
+# 置き、画面は動的に取る。中身は packages/solver/src/skill-list-cli.ts 参照。
+#
+# ## 毎週ではなく、材料が動いたときだけ回す
+#
+# 表の版は packages/solver/src/skill-list.ts の SkillListDataset が決める。
+# スキルデータ、コースデータ、本家の計算式の指紋、相手の束の作り方の 4 つである。
+# **どれも動いていない週に回しても、同じ値を何時間もかけて作り直すだけになる。**
+# 他の 3 本（sync-game-data / sync-skill-model / check-race-model）が週次なのは、
+# 本家が動いたかどうかを取りに行かないと分からないからで、こちらは 4 つとも
+# このリポジトリの中のファイルである。**動いたことは push で分かる。**
+#
+# そこで schedule を持たず、main でその 4 つが動いた push で起こす。
+#
+# ## 既存の 3 本との順序
+#
+# 3 本はどれも「下書き PR を出すところまで」で、main に入るのは人がマージしたときである。
+# つまりこの workflow は**必ずそのマージの後に走る**。並んで走ることはない。
+#
+# - sync-game-data の PR がマージされる → skills.json / courses.json が動く → ここが走る。
+# - check-race-model の PR がマージされる → race-manifest.json が動く → ここが走る。
+#   CLAUDE.md のとおり、この PR のマージは「移植を追随させた」という宣言なので、
+#   ここが走る時点で packages/sim は既に新しい本家に合っている。
+#   **逆に言うと、移植側だけを直して本家が動いていない回（こちらのバグ取り）は
+#   指紋が動かないので起きない。** そのときは workflow_dispatch に force を付けて回す。
+# - sync-skill-model は読み取り用の分類モデルで、表の値には関わらない。順序は無い。
+#
+# ## 時間
+#
+# GitHub Actions の 1 ジョブの上限は 6 時間である。手元の 4 コアでの見積もりが約 71 分、
+# ubuntu-latest の 4 vCPU は 1.5〜2 倍遅いと見て 2〜2.5 時間なので、いまの範囲
+# （距離帯ごとの代表コース）なら収まる。timeout-minutes で 4 時間に切ってある。
+# **コース 137 本すべてに広げると 6 時間には収まらない。** そのときは matrix で
+# 距離帯ごとに分けるか、自前のランナーに移す。docs/deploy.md 6 節を参照。
+name: build-skill-list
+
+on:
+  push:
+    branches: [main]
+    paths:
+      # SkillListDataset の 4 つ。ここを増やすときは test/workflows.test.ts も直す
+      # （契約の項目数と食い違うと落ちる）。
+      - packages/data/assets/skills.json
+      - packages/data/assets/courses.json
+      - packages/sim/upstream/race-manifest.json
+      - packages/sim/src/field/field.ts
+  workflow_dispatch:
+    inputs:
+      force:
+        description: '版が変わらなくても作り直して PR を出す（移植側だけを直したとき）'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# 2 つのマージが続けて入ったときに、数時間の生成が並んで走らないようにする。
+concurrency:
+  group: build-skill-list
+  cancel-in-progress: true
+
+env:
+  # 生成先。**この 1 か所だけが場所を決める。** 生成・差分・掃除・commit のどれかが
+  # 別の場所を見ると、毎回「差分なし」で緑になる（check-race-model で実際に起きた形）。
+  OUT_DIR: apps/web/public/skill-list
+  # リポジトリに残す世代数。JSON は数 MB あり、git は消しても履歴に残る。
+  # 2 なら「いまの版」と「入れ替えの最中にまだ古い画面が取りに来る版」で足りる。
+  # 理由は docs/deploy.md 6 節。
+  KEEP: '2'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.SYNC_PAT || github.token }}
+          # 掃除で「どの版が古いか」を commit の時刻から決める。浅いままだと
+          # 前の世代の commit が無く、全部を同じ古さと見てしまう。
+          fetch-depth: 0
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # onnxruntime-node は Linux 版だけ CUDA 用の追加バイナリを取りに行く。
+      # ここでは使わないので落とす（deploy/Dockerfile と同じ）。
+      - run: pnpm install --frozen-lockfile
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+
+      - id: generate
+        run: |
+          # tee の終了状態が job の成否になってしまう。pipefail が無いと、
+          # 生成に失敗しても「差分なし」として緑で終わる。
+          set -o pipefail
+          mkdir -p "$OUT_DIR"
+          pnpm skill-list | tee /tmp/skill-list-summary.txt
+          # 生成が黙って何も書かなかった場合、次の段は「差分なし」と判断して
+          # 緑で終わる。表が 1 つも無い状態は必ず赤にする。
+          if ! ls "$OUT_DIR"/*.json >/dev/null 2>&1; then
+            echo "::error::$OUT_DIR に JSON が 1 つも無い。生成が書いていない" >&2
+            exit 1
+          fi
+
+      - id: diff
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -o pipefail
+          # 新しい版は新しい名前で出る。追跡されていないファイルがあれば版が変わった。
+          new_files=$(git ls-files --others --exclude-standard -- "$OUT_DIR")
+          if [ -n "$new_files" ]; then
+            echo "新しい版: $new_files"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$FORCE" = "true" ]; then
+            echo "版は変わらないが force が指定された"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            # 版が同じなら、差分は生成時刻と所要時間だけである。
+            # 残すと中身の変わらない PR が毎回出るので捨てる。
+            echo "版は変わらなかった。生成時刻だけの差分を捨てる"
+            if ! git diff --quiet -- "$OUT_DIR"; then
+              git checkout -- "$OUT_DIR"
+            fi
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.diff.outputs.changed == 'true'
+        id: prune
+        run: |
+          set -o pipefail
+          # 新しい順に並べ、KEEP 個より後ろを消す。並びは commit の時刻で決める
+          # （checkout した直後はファイルの更新時刻が全部同じになる）。
+          # 今回作ったものはまだ commit されていないので、いちばん新しいものとして扱う。
+          for f in "$OUT_DIR"/*.json; do
+            [ -e "$f" ] || continue
+            ts=$(git log -1 --format=%ct -- "$f")
+            echo "${ts:-9999999999} $f"
+          done | sort -rn | cut -d' ' -f2- | tail -n "+$((KEEP + 1))" > /tmp/skill-list-stale.txt
+          removed=''
+          while read -r path; do
+            [ -n "$path" ] || continue
+            rm -f "$path"
+            removed="$removed $path"
+          done < /tmp/skill-list-stale.txt
+          if [ -n "$removed" ]; then
+            echo "古い世代を落とした:$removed"
+          fi
+          echo "removed=$removed" >> "$GITHUB_OUTPUT"
+
+      - if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_PAT || github.token }}
+          HAS_PAT: ${{ secrets.SYNC_PAT != '' }}
+          REMOVED: ${{ steps.prune.outputs.removed }}
+        run: |
+          BRANCH=chore/build-skill-list
+
+          {
+            echo "data: スキル一覧の表を作り直す"
+            echo
+            cat /tmp/skill-list-summary.txt
+          } > /tmp/commit-message.txt
+
+          if [ "$HAS_PAT" = "true" ]; then
+            CI_NOTE="SYNC_PAT を設定してあるので、この PR の CI は普段どおり自動で走る。"
+          else
+            CI_NOTE="**この PR の CI は自動では走らない。** GITHUB_TOKEN で作った PR は pull_request のワークフローを起こさない。マージする前に手動で走らせること。"
+          fi
+
+          {
+            echo "スキル一覧（#83）の事前計算した表を作り直した。"
+            echo
+            echo '```'
+            cat /tmp/skill-list-summary.txt
+            echo '```'
+            echo
+            echo "## なぜ走ったか"
+            echo
+            echo "版を決める 4 つ（skills.json / courses.json / race-manifest.json / 相手の束の作り方）のどれかが main で動いたためである。起こした変更は ${{ github.sha }} にある。"
+            echo
+            echo "## 見るところ"
+            echo
+            echo "- **表の値は相手の分布に依る。** 相手の作り方を変えた回は、値がまとめて動くのが正しい。"
+            echo "- **「単体」であって「限界」ではない。** 何も持っていない構成へ 1 つ足したときの差なので、食い合うスキルは過大に出る。"
+            echo "- 行が無いことには「発動しない」と「測っていない」の 2 通りがある。落とした数は JSON の screenedOut にある。"
+            if [ -n "$REMOVED" ]; then
+              echo
+              echo "古い世代を落とした（リポジトリには $KEEP 世代だけ残す。理由は docs/deploy.md 6 節）:"
+              echo
+              for path in $REMOVED; do echo "- \`$path\`"; done
+            fi
+            echo
+            echo ".github/workflows/build-skill-list.yml が自動で作った。毎回 main の最新から作り直すので、このブランチへの手動コミットは次回の実行で消える。"
+            echo
+            echo "$CI_NOTE"
+          } > /tmp/pr-body.md
+
+          # main から毎回作り直す。積み重ねると、消したはずの古い世代が
+          # ブランチの履歴に残り続けて PR が重くなる。
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git checkout -B "$BRANCH"
+          # -A で、消した世代も一緒に載せる。
+          git add -A "$OUT_DIR"
+          git commit -F /tmp/commit-message.txt
+          git push --force origin "$BRANCH"
+
+          existing=$(gh pr list --head "$BRANCH" --state open --json number -q '.[0].number')
+          if [ -z "$existing" ]; then
+            gh pr create --draft --base main --head "$BRANCH" \
+              --title "data: スキル一覧の表を作り直す" \
+              --body-file /tmp/pr-body.md
+          else
+            gh pr edit "$existing" --body-file /tmp/pr-body.md
+          fi

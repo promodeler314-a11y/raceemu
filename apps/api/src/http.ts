@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { extname, join, normalize, resolve, sep } from 'node:path';
+import { createGzip } from 'node:zlib';
 import type { GameData } from '../../../packages/data/src/index.ts';
 import type { Config } from './config.ts';
 import { SkillMatcher, type SkillMatch } from '../../../packages/data/src/skill-match.ts';
@@ -95,7 +96,26 @@ function toView(job: Job) {
   };
 }
 
-async function serveStatic(root: string, pathname: string, res: ServerResponse): Promise<boolean> {
+/**
+ * その場で縮める下限。これより小さいと縮めても効かず、CPU だけ使う。
+ *
+ * スキル一覧の表（apps/web/public/skill-list/<版>.json、issue #83）は数 MB ある。
+ * 縮めずに出すと、ここだけで他の資産を全部合わせたより大きくなる。
+ * 数字の並びなので gzip がよく効く。
+ */
+const GZIP_MIN_BYTES = 64 * 1024;
+
+/**
+ * 縮めて効く型。画像とフォント（woff2）は既に圧縮済みなので触らない。
+ */
+const GZIP_TYPES = new Set(['.html', '.js', '.css', '.json', '.svg']);
+
+async function serveStatic(
+  root: string,
+  pathname: string,
+  req: IncomingMessage,
+  res: ServerResponse,
+): Promise<boolean> {
   // パスを正規化してから根の下にあることを確かめる。
   // "../" を含む要求で外に出られると、コンテナの中身が読めてしまう。
   const rootPath = resolve(root);
@@ -106,13 +126,32 @@ async function serveStatic(root: string, pathname: string, res: ServerResponse):
   try {
     const info = await stat(target);
     if (!info.isFile()) return false;
+    const head = req.method === 'HEAD';
+    const gzip =
+      !head &&
+      info.size >= GZIP_MIN_BYTES &&
+      GZIP_TYPES.has(extname(target)) &&
+      /\bgzip\b/.test(req.headers['accept-encoding'] ?? '');
     res.writeHead(200, {
       'content-type': CONTENT_TYPES[extname(target)] ?? 'application/octet-stream',
-      'content-length': info.size,
+      // 縮めると長さが先に分からない。chunked で流す。
+      ...(gzip ? { 'content-encoding': 'gzip' } : { 'content-length': info.size }),
       // 名前にハッシュが付く資産は長く持たせ、index.html は持たせない。
+      // スキル一覧の表は名前に版が入るので、こちらも不変として持たせてよい。
       'cache-control': target.endsWith('index.html') ? 'no-cache' : 'public, max-age=31536000, immutable',
+      // 縮めた応答と縮めていない応答が同じ URL で出る。手前に proxy を置いたときに
+      // 取り違えられないようにする。
+      vary: 'accept-encoding',
     });
-    createReadStream(target).pipe(res);
+    if (head) {
+      res.end();
+      return true;
+    }
+    const file = createReadStream(target);
+    // 探索の Worker と同じコアを使うので、圧縮率より速さを取る。
+    // 数字の並びなので、いちばん弱い段でも 10 分の 1 以下になる。
+    if (gzip) file.pipe(createGzip({ level: 1 })).pipe(res);
+    else file.pipe(res);
     return true;
   } catch {
     return false;
@@ -374,15 +413,23 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
     }
 
     if (config.staticRoot !== null && (method === 'GET' || method === 'HEAD')) {
-      if (await serveStatic(config.staticRoot, path, res)) return;
+      if (await serveStatic(config.staticRoot, path, req, res)) return;
       // サブパスに置いたとき、手前の reverse proxy がその接頭辞を外さずに
       // 転送してくる場合がある（例 "/raceemu/assets/x.js" をそのまま渡す）。
       // 資産はこの階層に無いので、先頭の 1 段を外した経路でも試す。
       const stripped = path.replace(/^\/[^/]+/, '') || '/';
-      if (stripped !== path && (await serveStatic(config.staticRoot, stripped, res))) return;
-      // 見つからないものは index.html に落とす。共有 URL はハッシュなので
-      // 本来は要らないが、後で経路を足したときに 404 で詰まらないようにする。
-      if (await serveStatic(config.staticRoot, '/index.html', res)) return;
+      if (stripped !== path && (await serveStatic(config.staticRoot, stripped, req, res))) return;
+      // **データを求める経路は index.html に落とさない。**
+      // スキル一覧の表（/skill-list/<版>.json、issue #83）のように取りに行く JSON は、
+      // 無いときに HTML が 200 で返ると、読む側は JSON.parse が投げるまで気付けない。
+      // 版を取り違えたのか配り忘れたのかも分からなくなるので、ここで 404 にする。
+      if (extname(path) === '.json') {
+        sendJson(res, 404, { error: '見つからない' });
+        return;
+      }
+      // 残りは index.html に落とす。共有 URL はハッシュなので本来は要らないが、
+      // 後で経路を足したときに 404 で詰まらないようにする。
+      if (await serveStatic(config.staticRoot, '/index.html', req, res)) return;
     }
 
     sendJson(res, 404, { error: '見つからない' });
