@@ -3,6 +3,7 @@ import type { Style } from '../../../packages/sim/src/data/constants.ts';
 import { worseFidelity, type Fidelity } from '../../../packages/sim/src/skill/classify.ts';
 import {
   isSkillListFile,
+  isSkillListIndex,
   type SkillListCategory,
   type SkillListCourse,
   type SkillListFile,
@@ -27,20 +28,6 @@ import {
 
 /** 版の一覧。ここを最初に見る。 */
 export const SKILL_LIST_INDEX_URL = 'skill-list/index.json';
-
-/**
- * 版の一覧の形。
- *
- * issue #83 は置き場を `skill-list/<版>.json` と決めており、版はデータと
- * 計算式の指紋から決まる。**読む側はその名前を当てられない**ので、
- * 名前を教える 1 枚をあいだに置く。`index.json` がそのまま
- * `SkillListFile` であっても読めるようにしてあるのは、生成側が 1 枚しか
- * 置かない作りを選んだときに壊れないようにするためである。
- */
-export interface SkillListIndex {
-  /** 最新の版のファイル名。`skill-list/` からの相対。 */
-  readonly latest: string;
-}
 
 /**
  * 配り先にスキル一覧が無いこと。画面はこれを見て「置いていない」と言う。
@@ -92,16 +79,16 @@ export async function fetchSkillList(
   signal?: AbortSignal,
 ): Promise<SkillListFile> {
   const first = await fetchJson(indexUrl, signal);
+  // 版を教える 1 枚か、表そのものか。見分けは契約側（`isSkillListIndex`）に任せる。
   if (isSkillListFile(first)) return first;
-  const latest = (first as Partial<SkillListIndex>).latest;
-  if (typeof latest !== 'string' || latest === '') {
+  if (!isSkillListIndex(first)) {
     throw new SkillListBroken(
       'スキル一覧の形が読めない。配ってある版が古いか、別のファイルが置かれている。',
     );
   }
-  const body = await fetchJson(indexUrl.replace(/[^/]*$/, latest), signal);
+  const body = await fetchJson(indexUrl.replace(/[^/]*$/, first.latest), signal);
   if (!isSkillListFile(body)) {
-    throw new SkillListBroken(`版 ${latest} の形が読めない。配ってある版が古い。`);
+    throw new SkillListBroken(`版 ${first.latest} の形が読めない。配ってある版が古い。`);
   }
   return body;
 }
@@ -134,7 +121,14 @@ export interface SkillListFilter {
   readonly style: Style | 'ALL';
   /** バ場。0 は全部、1 は芝、2 はダート。 */
   readonly surface: 0 | 1 | 2;
-  /** 基準になる個体の `id`。空なら先頭。 */
+  /**
+   * 基準になる個体の**段**（`normal` / `strong`）。空なら先頭の段。
+   *
+   * **個体そのものではなく段である。** 生成側は距離帯とバ場ごとに別の個体を
+   * 置いている（長距離の基準個体は短距離のそれよりスタミナが多い）ので、
+   * `baselines` は段の数より多い。どの個体が使われるかはコースから決まるので、
+   * 利用者が選ぶのは段だけでよい。`baselineTier` を参照。
+   */
   readonly baseline: string;
 }
 
@@ -191,6 +185,44 @@ export function secondsToBashin(seconds: number, distance: number): number {
   return (seconds * baseSpeed) / bashinMeters;
 }
 
+/**
+ * 基準個体の id から**段**を取り出す。
+ *
+ * 生成側は `<段>:<バ場>:<距離帯>`（例 `normal:1:MIDDLE`）という複合の id を
+ * 使っているが、**契約（`packages/solver/src/skill-list.ts`）はこの形を強制して
+ * いない。** 例示は `normal` / `strong` のままである。だから画面は形を決め打ちせず、
+ * 「区切りがあればその手前、無ければ全体」とだけ決める。
+ * 生成側が 1 段 1 個体に戻しても、そのまま動く。
+ */
+export function baselineTier(id: string): string {
+  const separator = id.indexOf(':');
+  return separator < 0 ? id : id.slice(0, separator);
+}
+
+/** 選択欄に出す段。`label` は同じ段の最初の個体のものを使う。 */
+export interface SkillListTier {
+  readonly id: string;
+  readonly label: string;
+}
+
+/**
+ * 段の一覧。重複を落として、`baselines` に出てくる順に返す。
+ *
+ * 16 件の `baselines` をそのまま選択欄に出すと「普通」が 8 個並んで区別できない。
+ * 出すべきは段の 2 つである。
+ */
+export function baselineTiers(file: SkillListFile): readonly SkillListTier[] {
+  const out: SkillListTier[] = [];
+  const seen = new Set<string>();
+  for (const baseline of file.baselines) {
+    const tier = baselineTier(baseline.id);
+    if (seen.has(tier)) continue;
+    seen.add(tier);
+    out.push({ id: tier, label: baseline.label });
+  }
+  return out;
+}
+
 /** 絞り込みに当たるかどうかを、列の添字だけで判定できる形に畳んだもの。 */
 interface CourseFacts {
   readonly category: SkillListCategory;
@@ -206,15 +238,36 @@ function courseFacts(file: SkillListFile): readonly CourseFacts[] {
   }));
 }
 
-/** 走る前に決まる、絞り込みの当たり判定。 */
+/**
+ * 走る前に決まる、絞り込みの当たり判定。
+ *
+ * **基準個体は段で絞る。** 個体 1 つに固定すると、その個体が割り当てられた
+ * 距離帯とバ場の行しか当たらない。生成側は距離帯とバ場ごとに別の個体を置いて
+ * いるので、「全距離帯」を選んでいるのに芝短距離の行しか出ない、という壊れ方を
+ * した（実データで 4 通りのうち 3 通りが 0 件になった）。
+ * 距離帯とバ場はコースの側で絞れば足りる。
+ */
 function matcher(file: SkillListFile, filter: SkillListFilter) {
   const facts = courseFacts(file);
-  const baselineIndex = file.baselines.findIndex(
-    (b) => b.id === (filter.baseline === '' ? file.baselines[0]?.id : filter.baseline),
-  );
+  const tiers = baselineTiers(file);
+  // 知らない段を渡されたら先頭に落とす。選択欄には在るものしか出さないので、
+  // ここに来るのは版が入れ替わった直後くらいである。黙って全段を混ぜるより、
+  // 1 段に寄せたほうが読み手を欺かない。
+  const wanted = tiers.some((tier) => tier.id === filter.baseline) ? filter.baseline : tiers[0]?.id;
+  const allowedBaselines =
+    wanted === undefined
+      ? null
+      : new Set(
+          file.baselines
+            .map((baseline, index) => [baselineTier(baseline.id), index] as const)
+            .filter(([tier]) => tier === wanted)
+            .map(([, index]) => index),
+        );
   const styleIndex = filter.style === 'ALL' ? -1 : file.styles.indexOf(filter.style);
   return (row: number): boolean => {
-    if (baselineIndex >= 0 && file.columns.baseline[row] !== baselineIndex) return false;
+    if (allowedBaselines !== null && !allowedBaselines.has(file.columns.baseline[row]!)) {
+      return false;
+    }
     if (filter.style !== 'ALL' && file.columns.style[row] !== styleIndex) return false;
     const course = facts[file.columns.course[row]!];
     if (course === undefined) return false;
