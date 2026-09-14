@@ -196,6 +196,29 @@ export function skillListRowAt(file: SkillListFile, index: number): SkillListRow
   };
 }
 
+/**
+ * 版を教える 1 枚。`skill-list/index.json` に置く。
+ *
+ * **読む側は版を当てられない。** 版はデータと計算式と相手の分布の指紋から決まるので、
+ * 画面がファイル名を組み立てることはできない。名前を教える 1 枚をあいだに置く。
+ *
+ * `index.json` がそのまま `SkillListFile` でも読めるようにしてある
+ * （1 枚しか置かない作りを選んだとき用）。読む側は `latest` の有無で見分ける。
+ */
+export interface SkillListIndex {
+  /** いまの版のファイル名（`skill-list/` から見た相対。例 `a1b2c3-d4e5f6.json`） */
+  readonly latest: string;
+  /** 置いてある版。新しい順。入れ替えの最中に古い画面が取りに来るので 1 世代前まで残す。 */
+  readonly generations: readonly string[];
+}
+
+/** `index.json` が版を教える 1 枚かを見分ける。`latest` が無ければ表そのものである。 */
+export function isSkillListIndex(value: unknown): value is SkillListIndex {
+  if (typeof value !== 'object' || value === null) return false;
+  const index = value as Partial<SkillListIndex>;
+  return typeof index.latest === 'string' && index.latest !== '';
+}
+
 /** 読んだ JSON がこの形かを確かめる。配る先が古い版を持っていることがある。 */
 export function isSkillListFile(value: unknown): value is SkillListFile {
   if (typeof value !== 'object' || value === null) return false;
