@@ -1,4 +1,14 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 /**
@@ -13,6 +23,9 @@ import { describe, expect, it } from 'vitest';
  * また現れる。ここで一括して見ておく。
  */
 const DIR = '.github/workflows';
+
+/** 掃除と `index.json` の整合を持つスクリプト。 */
+const PRUNE = 'scripts/prune-skill-list.mjs';
 
 function steps(body: string): string[] {
   // `run: |` から、次の同じ深さの項目までを 1 つの塊として取る。
@@ -106,5 +119,266 @@ describe('本家の計算式の見張り', () => {
     ]) {
       expect(Object.keys(manifest.files)).toContain(kotlin + name);
     }
+  });
+});
+
+/**
+ * スキル一覧の表の作り直し（build-skill-list）の配線を見る。
+ *
+ * この仕組みも check-race-model と同じ形で 3 つに分かれている。表の版を決める
+ * 契約（`packages/solver/src/skill-list.ts` の `SkillListDataset`）、表を書く CLI、
+ * 版が動いたことを見て作り直すワークフローである。
+ *
+ * **契約に材料が 1 つ増えても、ワークフローは落ちない。** 増えた材料が動いた週に
+ * 何も起きず、古い表がそのまま配られ続ける。値が古いことは表を見ても分からない
+ * （もっともらしい数字が並ぶ）ので、ここで件数を結んでおく。
+ *
+ * 場所についても同じで、生成・差分・掃除・commit のどれかが別の場所を見ると
+ * 毎回「差分なし」で緑になる。ワークフローは `OUT_DIR` の 1 か所だけで場所を
+ * 決めているので、それが実際に使い回されていることを見る。
+ */
+describe('スキル一覧の表の作り直し', () => {
+  const workflow = readFileSync(`${DIR}/build-skill-list.yml`, 'utf8');
+  const contract = readFileSync('packages/solver/src/skill-list.ts', 'utf8');
+
+  /** 生成先。ワークフローの `env:` に 1 か所だけ書いてある。 */
+  const outDir = /^\s*OUT_DIR:\s*(\S+)\s*$/m.exec(workflow)?.[1] ?? '';
+  /** リポジトリに残す世代数。 */
+  const keep = Number(/^\s*KEEP:\s*'(\d+)'\s*$/m.exec(workflow)?.[1]);
+
+  /** `on: push: paths:` が見張っているファイルの一覧。 */
+  const watched = [
+    ...(/^\s*paths:\n((?:[ \t]*(?:#[^\n]*|- \S+)\n)+)/m.exec(workflow)?.[1] ?? '').matchAll(
+      /^\s*- (\S+)$/gm,
+    ),
+  ].map((match) => match[1]!);
+
+  /** `SkillListDataset` が持つ材料の数。 */
+  const datasetFields = [
+    ...(/export interface SkillListDataset \{\n([\s\S]*?)\n\}/.exec(contract)?.[1] ?? '').matchAll(
+      /^\s*readonly (\w+):/gm,
+    ),
+  ].map((match) => match[1]!);
+
+  it('ワークフローの置き場と世代数を読めている', () => {
+    expect(outDir).toMatch(/^apps\/web\/public\//);
+    expect(keep).toBeGreaterThanOrEqual(1);
+  });
+
+  it('生成・差分・掃除・commit が同じ場所を見ている', () => {
+    expect(workflow).toContain('mkdir -p "$OUT_DIR"');
+    expect(workflow).toContain('git ls-files --others --exclude-standard -- "$OUT_DIR"');
+    expect(workflow).toContain('for f in "$OUT_DIR"/*.json');
+    expect(workflow).toContain('git add -A "$OUT_DIR"');
+    // 場所を書くのは `env:` の 1 行だけにする。段の中に素のパスを書くと、
+    // 置き場を移したときに片方だけが残って黙ってズレる（コメントは数えない）。
+    const bare = workflow
+      .split('\n')
+      .filter((line) => line.includes(outDir) && !/^\s*#/.test(line));
+    expect(bare).toHaveLength(1);
+  });
+
+  it('版を決める材料が 1 つ残らず見張られている', () => {
+    // 契約の材料は 4 つ（skills / courses / raceModel / fieldProfile）。
+    // 増やしたらワークフローの paths も増やす。
+    expect(datasetFields.length).toBeGreaterThanOrEqual(4);
+    expect(watched).toHaveLength(datasetFields.length);
+    for (const path of watched) {
+      // 綴りを間違えても GitHub は黙って「一致しない」と答えるだけなので、
+      // 実在することをここで見る。
+      expect(existsSync(path), `${path} が無い`).toBe(true);
+    }
+  });
+
+  it('材料のそれぞれに対応する道がある', () => {
+    for (const path of [
+      'packages/data/assets/skills.json',
+      'packages/data/assets/courses.json',
+      'packages/sim/upstream/race-manifest.json',
+      // 相手の束の作り方（defaultFieldProfile）
+      'packages/sim/src/field/field.ts',
+    ]) {
+      expect(watched).toContain(path);
+    }
+  });
+
+  it('生成が何も書かなかったときに赤で落ちる', () => {
+    // 「差分なしで緑」の事故はここでも起こりうる。CLI が黙って終わったら、
+    // 次の段は差分が無いと判断して何もせずに終わる。
+    expect(workflow).toContain('if ! ls "$OUT_DIR"/*.json >/dev/null 2>&1; then');
+    expect(workflow).toMatch(/JSON が 1 つも無い[\s\S]*?exit 1/);
+  });
+
+  it('残す世代数の理由が docs にある', () => {
+    expect(readFileSync('docs/deploy.md', 'utf8')).toContain(`${keep} 世代`);
+  });
+
+  it('版を教える 1 枚が無ければ赤で落ちる', () => {
+    // index.json が無いと、画面はどの版を取ればよいか分からない。
+    // 表があっても配れていないのと同じである。
+    expect(workflow).toContain('if [ ! -f "$OUT_DIR/index.json" ]; then');
+    expect(workflow).toMatch(/index\.json が無い[\s\S]*?exit 1/);
+  });
+
+  it('掃除がスクリプトを呼んでいる', () => {
+    expect(workflow).toContain(`node ${PRUNE} "$OUT_DIR" "$KEEP"`);
+  });
+});
+
+/**
+ * 掃除と、版を教える 1 枚（`index.json`）の整合を見る。
+ *
+ * **食い違っても誰も落ちない。** `generations` に消した版の名前が残っても
+ * `index.json` は正しい JSON のままで、画面は取りに行って初めて 404 を引く。
+ * 表が出ないのがネットワークのせいなのか配り方のせいなのかも区別が付かない。
+ * pipefail の事故や check-race-model のパスの食い違いと同じ形（壊れているのに静か）
+ * なので、**実際に走らせて**確かめる。
+ */
+describe('スキル一覧の掃除', () => {
+  const script = readFileSync(PRUNE, 'utf8');
+
+  /**
+   * 見本を作って掃除を走らせ、あとに残ったものと `index.json` を返す。
+   *
+   * ワークフローと同じように子プロセスで呼ぶ。引数と標準入力の読み方まで含めて
+   * 通しで見たいからである（呼び出しの形が変わると、本番でだけ壊れる）。
+   */
+  function run(
+    files: readonly string[],
+    index: unknown,
+    keep: number,
+    ages: readonly string[] = [],
+  ) {
+    const dir = mkdtempSync(join(tmpdir(), 'raceemu-prune-'));
+    try {
+      for (const name of files) writeFileSync(join(dir, name), '{"format":1}');
+      writeFileSync(join(dir, 'index.json'), JSON.stringify(index));
+      const run = spawnSync('node', [PRUNE, dir, String(keep)], {
+        input: `${ages.join('\n')}\n`,
+        encoding: 'utf8',
+      });
+      const left = readdirSync(dir).sort();
+      const after =
+        run.status === 0
+          ? (JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8')) as {
+              latest: string;
+              generations: string[];
+            })
+          : { latest: '', generations: [] };
+      return { status: run.status, stdout: run.stdout, stderr: run.stderr, left, after };
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  // 古い順に a → b、いちばん新しい c はまだ commit されていない（行が無い）。
+  const AGES = ['1700000000 a.json', '1800000000 b.json'];
+
+  it('掃除のあとに index.json が指す版が実在する', () => {
+    const { status, left, after } = run(
+      ['a.json', 'b.json', 'c.json'],
+      { latest: 'c.json', generations: ['c.json', 'b.json', 'a.json'] },
+      2,
+      AGES,
+    );
+    expect(status).toBe(0);
+    expect(left).toContain(after.latest);
+    for (const name of after.generations) expect(left).toContain(name);
+  });
+
+  it('generations に消した版が残らない', () => {
+    const { left, after, stdout } = run(
+      ['a.json', 'b.json', 'c.json'],
+      { latest: 'c.json', generations: ['c.json', 'b.json', 'a.json'] },
+      2,
+      AGES,
+    );
+    // 新しい 2 世代（c と b）が残り、いちばん古い a が落ちる。
+    expect(after.generations).toEqual(['c.json', 'b.json']);
+    expect(left).toEqual(['b.json', 'c.json', 'index.json']);
+    // ワークフローが PR 本文に載せる行。
+    expect(stdout).toMatch(/^removed: .*a\.json$/m);
+  });
+
+  it('index.json そのものは版として数えない', () => {
+    // 残す世代数が 1 でも、index.json は消えない。並べて数えていると、
+    // 版として落ちるか、いちばん古いものとして最初に消える。
+    const { left, after } = run(
+      ['a.json', 'b.json'],
+      { latest: 'b.json', generations: ['b.json', 'a.json'] },
+      1,
+      AGES,
+    );
+    expect(left).toEqual(['b.json', 'index.json']);
+    expect(after.generations).toEqual(['b.json']);
+  });
+
+  it('latest は残す世代数によらず必ず残る', () => {
+    // 版が変わらなかった回に force で作り直すと、latest が指す版が
+    // 「commit の時刻がいちばん古い」側に来ることがありうる。
+    const { left, after } = run(
+      ['a.json', 'b.json'],
+      { latest: 'a.json', generations: ['a.json'] },
+      1,
+      AGES,
+    );
+    expect(left).toEqual(['a.json', 'index.json']);
+    expect(after.latest).toBe('a.json');
+    expect(after.generations).toEqual(['a.json']);
+  });
+
+  it('index.json が指す版が無ければ赤で落ちる', () => {
+    // 掃除の前から食い違っている場合。このまま配ると画面は 404 を引く。
+    const { status, stderr } = run(
+      ['a.json'],
+      { latest: 'gone.json', generations: ['gone.json'] },
+      2,
+      AGES,
+    );
+    expect(status).toBe(1);
+    expect(stderr).toContain('::error::');
+    expect(stderr).toContain('gone.json');
+  });
+
+  it('版を教える 1 枚が読めなければ赤で落ちる', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'raceemu-prune-'));
+    try {
+      writeFileSync(join(dir, 'a.json'), '{"format":1}');
+      const result = spawnSync('node', [PRUNE, dir, '2'], { input: '', encoding: 'utf8' });
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('::error::');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('使い方が書いてある', () => {
+    expect(script).toContain('node scripts/prune-skill-list.mjs');
+  });
+});
+
+/**
+ * 生成の CLI が入っていれば、ワークフローとの配線も見る。
+ *
+ * CLI（`packages/solver/src/skill-list-cli.ts`）はワークフローとは別に入る。
+ * **CLI が別の場所へ書くと、ワークフローは毎回「差分なし」で緑になる。**
+ * 手元の材料に依るテスト（読み取りの 7 件など）と同じで、無ければ静かに飛ばす。
+ */
+const SKILL_LIST_CLI = 'packages/solver/src/skill-list-cli.ts';
+describe.skipIf(!existsSync(SKILL_LIST_CLI))('スキル一覧の CLI とワークフローの配線', () => {
+  const workflow = readFileSync(`${DIR}/build-skill-list.yml`, 'utf8');
+  const outDir = /^\s*OUT_DIR:\s*(\S+)\s*$/m.exec(workflow)?.[1] ?? '';
+
+  it('ワークフローが呼ぶ pnpm のスクリプトが package.json にある', () => {
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+      scripts: Record<string, string>;
+    };
+    expect(workflow).toContain('pnpm skill-list |');
+    expect(Object.keys(pkg.scripts)).toContain('skill-list');
+    expect(pkg.scripts['skill-list']).toContain('skill-list-cli.ts');
+  });
+
+  it('CLI が書く場所とワークフローが見る場所が同じ', () => {
+    expect(readFileSync(SKILL_LIST_CLI, 'utf8')).toContain(outDir);
   });
 });

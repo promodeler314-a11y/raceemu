@@ -35,6 +35,7 @@ pnpm plan --chara スペシャルウィーク --budget 600
 pnpm run multi --trials 500    # 全頭同時（multi は pnpm の下位コマンドと衝突するので run を挟む）
 pnpm order-field --trials 200  # 順位条件の判定が相手の作り方でどう変わるか
 pnpm cross --surface 1 --category MIDDLE --count 500   # コース横断（--distance 2000 でぴったりの距離、--field で順位条件あり）
+pnpm skill-list --trials 200   # 全スキル × 代表コースの単体評価を事前計算して apps/web/public/skill-list に置く（数時間かかる。--calibrate で基準個体のスタミナを測り直す）
 ```
 
 テスト名で絞るときは `pnpm exec vitest` を直に呼ぶ。`pnpm test -t '...'` は `-t` が転送されず、**黙って全件走る**。

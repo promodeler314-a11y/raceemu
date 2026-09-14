@@ -229,7 +229,7 @@ export const DEFAULT_PLAN: PlanSetting = {
 };
 
 /** ヘッダのタブ。共有 URL には載せない（見ている面は設定の一部ではない）。 */
-export const TABS = ['settings', 'summary', 'compare', 'detail', 'solve', 'field'] as const;
+export const TABS = ['settings', 'summary', 'compare', 'detail', 'solve', 'field', 'skills'] as const;
 export type Tab = (typeof TABS)[number];
 
 /** ハッシュに書いてあった面の名前を検証する。知らない名前なら null。 */

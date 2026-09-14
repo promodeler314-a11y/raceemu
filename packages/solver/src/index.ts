@@ -6,3 +6,4 @@ export * from './optimize.ts';
 export * from './sensitivity.ts';
 export * from './screen.ts';
 export * from './candidates.ts';
+export * from './skill-list.ts';
