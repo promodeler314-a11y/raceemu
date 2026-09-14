@@ -14,6 +14,7 @@ import { CrossPanel } from './components/Cross.tsx';
 import { InversePanel } from './components/Inverse.tsx';
 import { OptimizePanel } from './components/Optimize.tsx';
 import { SensitivityPanel } from './components/Sensitivity.tsx';
+import { SkillListPanel } from './components/SkillList.tsx';
 import { FieldPanel } from './components/Field.tsx';
 import { ImportPanel, StatusImportPanel } from './components/Import.tsx';
 import { TransferPanel } from './components/Transfer.tsx';
@@ -97,6 +98,7 @@ export default function App() {
             )}
             {tab === 'detail' && <FrameCharts />}
             {tab === 'field' && <FieldPanel />}
+            {tab === 'skills' && <SkillListPanel />}
             {tab === 'solve' && (
               <>
                 <InversePanel />
