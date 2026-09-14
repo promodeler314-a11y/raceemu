@@ -3,6 +3,7 @@ import { costModelFor, gameData, skillFidelities, useStore } from '../store.ts';
 import { countFidelity, FidelityLegend, SkillNameWithMark } from './Fidelity.tsx';
 import { Panel } from './Inputs.tsx';
 import { PlanInput, ROUTE_LABEL } from './Plan.tsx';
+import { ServerSearchInput } from './ServerSearch.tsx';
 
 const fieldCls =
   'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
@@ -28,6 +29,8 @@ export function OptimizePanel() {
 
   const plan = useStore((s) => s.plan);
   const planCandidates = useStore((s) => s.planCandidates);
+  // 直前の探索がどちらで回ったか。落ちたときに気付けるよう、結果に添える。
+  const ranOnServer = useStore((s) => s.ranOnServer);
 
   // 近似の印。値は個別に選び、組み立ては useMemo で行う。
   // セレクタの中で組み立てると毎回新しい参照が返り、描画が止まる。
@@ -50,8 +53,24 @@ export function OptimizePanel() {
   );
   const bestFidelity = result === null ? null : countFidelity(result.best, fidelities);
 
+  /*
+    近似の感度分析の結果。印（△ / ▲）とは別に添える。
+    印は「どれだけ怪しいか」を発動条件の型から言い、感度分析は「どれだけ結果が動くか」を
+    実測で言う。どちらも近似の話だが、出どころも要る手間も違うので混ぜない。
+    docs/solver-design.md 4.1 節を参照。
+  */
+  const sensitivity = useStore((s) => s.sensitivityResult);
+  const sensitivityAxis = useStore((s) => s.sensitivityAxis);
+  const shakyInBest = useMemo(() => {
+    if (result === null || sensitivity === null) return [];
+    const best = new Set(result.best);
+    return sensitivity.skills.filter(
+      (skill) => best.has(skill.skillId) && skill.widthPerError >= 1,
+    );
+  }, [result, sensitivity]);
+
   // 結果の表示に使う費用は、育成計画のときはヒントの割引を含む。
-  const levels = plan.enabled && planCandidates !== null ? planCandidates.hintLevels : hintLevels;
+  const levels = plan.source !== 'selected' && planCandidates !== null ? planCandidates.hintLevels : hintLevels;
   const costModel = useMemo(() => costModelFor(levels), [levels]);
   const poolCost = costModel.totalCost(skillIds);
   const routeOf = (id: string) =>
@@ -62,12 +81,19 @@ export function OptimizePanel() {
 
   return (
     <Panel title="組み合わせ探索">
-      {plan.enabled ? (
+      {plan.source === 'plan' && (
         <p className="text-xs text-ink3">
           育成ウマ娘とデッキ、それに継承から候補を組み立て、予算に収まる範囲で最もタイムを縮める
           組み合わせを探す。固有の継承版は 6 つまでしか積めない。
         </p>
-      ) : (
+      )}
+      {plan.source === 'all' && (
+        <p className="text-xs text-ink3">
+          買えるスキル全体を候補として、予算に収まる範囲で最もタイムを縮める組み合わせを探す。
+          入手経路は問わないので、これは「取れるとしたら何が効くか」への答えである。
+        </p>
+      )}
+      {plan.source === 'selected' && (
         <p className="text-xs text-ink3">
           いま選んでいる {skillIds.length} 個を候補として、予算に収まる範囲で最もタイムを縮める組み合わせを探す。
           候補をすべて取ると {poolCost} pt かかる。
@@ -76,6 +102,7 @@ export function OptimizePanel() {
       <div className="mt-3">
         <PlanInput />
       </div>
+      <ServerSearchInput />
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="block text-xs text-ink3">
@@ -96,7 +123,7 @@ export function OptimizePanel() {
             type="button"
             className="rounded-sm bg-primary-bg px-4 py-1.5 text-sm text-primary-fg disabled:opacity-50"
             onClick={() => void run()}
-            disabled={running || busy || (!plan.enabled && skillIds.length < 2)}
+            disabled={running || busy || (plan.source === 'selected' && skillIds.length < 2)}
           >
             {running ? '探索中' : '探索する'}
           </button>
@@ -110,9 +137,9 @@ export function OptimizePanel() {
             </button>
           )}
           {result !== null && !running && (
-            <span className="num text-xs text-ink3">
-              レース {result.races.toLocaleString()} 本 ・ 構成の評価 {result.evaluations} 回 ・{' '}
-              {(result.elapsedMs / 1000).toFixed(1)} 秒 ・ {result.rounds} 巡
+            <span className="num text-xs text-ink3" data-testid="optimize-stats">
+              {ranOnServer ? 'サーバ' : 'ブラウザ'} ・ レース {result.races.toLocaleString()} 本 ・ 構成の評価{' '}
+              {result.evaluations} 回 ・ {(result.elapsedMs / 1000).toFixed(1)} 秒 ・ {result.rounds} 巡
             </span>
           )}
         </div>
@@ -200,6 +227,23 @@ export function OptimizePanel() {
                 この構成の {result.best.length} 個のうち、{bestFidelity.approximate} 個は発動条件に
                 近似を含み、{bestFidelity.dropped} 個は条件を落としている。
                 落としているものが多いほど、短縮量は本来より大きく出ている。
+              </p>
+            )}
+            {/*
+              感度分析を走らせてあれば、その解の短縮量が近似の置き方でどれだけ動くかを添える。
+              上の印は型から言う話、こちらは実測から言う話である。
+            */}
+            {shakyInBest.length > 0 && (
+              <p className="mt-1 text-xs text-warn-ink" data-testid="optimize-sensitivity">
+                {sensitivityAxis === 'near' ? '「近く」の距離' : '近似確率の倍率'}
+                を振った結果では、この構成の {shakyInBest.length} 個は短縮量が誤差より
+                大きく動く（
+                {shakyInBest
+                  .slice(0, 3)
+                  .map((skill) => name(skill.skillId))
+                  .join('、')}
+                {shakyInBest.length > 3 && ' ほか'}
+                ）。この差は近似の中に消えるので、近い順位の構成どうしはここでは決められない。
               </p>
             )}
           </div>

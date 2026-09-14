@@ -7,6 +7,7 @@ import {
   distanceFitSpeedCoef,
   framePerSecond,
   getWisdomSkillBuff,
+  nearLaneMeters,
   positionCompetitionDistanceCoef,
   positionCompetitionSpeedCoef,
   positionCompetitionStaminaCoef,
@@ -150,6 +151,16 @@ export interface RaceSetting {
    * docs/solver-design.md 4 節と docs/roadmap.md 3.7 節を参照。
    */
   readonly approximateRateScale?: number;
+  /**
+   * 「近く」と見なす前後の距離（メートル）。省くと `nearLaneMeters`（1 バ身）になる。
+   *
+   * フィールドを渡したときだけ効く。前後にウマ娘がいるか、近くに何人いるか、
+   * 追い抜こうとしているかは、確率ではなく位置の差から決める（`field/conditions.ts`）。
+   * その境目が何メートルなのかはゲームと突き合わせていないので、
+   * 振って結果の幅を見られるようにしてある。数値 1 つなので Worker 境界を越えられる。
+   * docs/order-condition.md 5.3 節を参照。
+   */
+  readonly nearLaneMeters?: number;
   readonly virtualLeader?: UmaStatus;
   readonly virtualLeaderSkills?: readonly SkillData[];
 }
@@ -196,6 +207,8 @@ export class DerivedSetting {
   readonly fixRandom: boolean;
   /** 近似条件の確率に掛ける倍率。負の指定は 0 に丸める。 */
   readonly approximateRateScale: number;
+  /** 「近く」と見なす前後の距離（メートル）。負の指定は 0 に丸める。 */
+  readonly nearLaneMeters: number;
 
   readonly phase0Half: number;
   readonly phase1Start: number;
@@ -263,6 +276,8 @@ export class DerivedSetting {
     this.fixRandom = base.skillActivateAdjustment === 'ALL';
     // 倍率は確率に掛けるので負にはできない。未指定は 1.0 で、掛けても値が変わらない。
     this.approximateRateScale = Math.max(0, base.approximateRateScale ?? 1.0);
+    // 距離なので負にはできない。未指定は 1 バ身（constants.ts の nearLaneMeters）。
+    this.nearLaneMeters = Math.max(0, base.nearLaneMeters ?? nearLaneMeters);
     this.oonige =
       uma.style === 'NIGE' && base.skills.some((skill) => skill.invokes.some((inv) => inv.oonige));
     this.runningStyle = this.oonige ? 'OONIGE' : uma.style;

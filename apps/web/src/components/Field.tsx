@@ -4,6 +4,7 @@ import { listIndividuals, type Individual } from '../individualsApi.ts';
 import { defaultOpponents, estimateMulti, gameData, skillChoices, useStore } from '../store.ts';
 import { formatDuration } from '../format.ts';
 import { Panel } from './Inputs.tsx';
+import { MultiRaceDetail, MultiTrialPicker } from './MultiRace.tsx';
 
 const fieldCls = 'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
 const STYLES: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
@@ -350,8 +351,12 @@ export function FieldPanel() {
           <p className="mt-2 text-xs text-ink3">
             {result.trials} 試行 / {(result.elapsedMs / 1000).toFixed(1)} 秒
           </p>
+          {/* 勝率の次に来る問いは「なぜこの試行で負けたのか」である。#57 */}
+          <MultiTrialPicker />
         </Panel>
       )}
+
+      <MultiRaceDetail />
     </>
   );
 }

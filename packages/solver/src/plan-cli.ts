@@ -103,6 +103,7 @@ const routeLabel: Record<Route, string> = {
   hint: 'ヒント',
   inherit: '継承（白）',
   inheritedUnique: '継承（固有）',
+  any: '経路不問',
 };
 
 const label = (value: number, names: readonly string[]) => (value ? (names[value - 1] ?? String(value)) : '指定なし');

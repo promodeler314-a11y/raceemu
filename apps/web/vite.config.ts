@@ -1,6 +1,31 @@
+import { execFileSync } from 'node:child_process';
 import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+
+/**
+ * 組んだ版のコミット。フッタに出す。
+ *
+ * AGPL v3 の 13 条が実際に効くのは、他人にネットワーク越しに使わせるときである。
+ * ソースへのリンクは前からあるが、**動かしている版と push してある版がズレると
+ * リンクがあっても意味がない**（docs/server-design.md 6 節）。自前ホストは
+ * 手で入れ替えられるぶんズレやすいので、どの版が動いているかを埋めておく。
+ *
+ * git の無い所で組んでも壊れないようにする。CI は `GITHUB_SHA` を持っているので
+ * そちらを先に見て、どちらも取れなければ空にする（空ならフッタは何も出さない）。
+ */
+function commitSha(): string {
+  const fromEnv = process.env['RACEEMU_COMMIT'] ?? process.env['GITHUB_SHA'];
+  if (fromEnv !== undefined && fromEnv !== '') return fromEnv.slice(0, 12);
+  try {
+    return execFileSync('git', ['rev-parse', '--short=12', 'HEAD'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return '';
+  }
+}
 
 /**
  * スキルデータから、計算にも画面にも使っていない項目を落とす。
@@ -37,6 +62,7 @@ function trimSkillData(dropped: readonly string[]): Plugin {
 
 export default defineConfig({
   plugins: [trimSkillData(MAIN_DROPPED), react(), tailwindcss()],
+  define: { __COMMIT_SHA__: JSON.stringify(commitSha()) },
   base: './',
   build: { target: 'es2022' },
   worker: { format: 'es', plugins: () => [trimSkillData([...MAIN_DROPPED, 'holder'])] },

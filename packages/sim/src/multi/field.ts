@@ -1,4 +1,4 @@
-import type { FieldView } from '../field/field.ts';
+import type { FieldView, NearCount } from '../field/field.ts';
 import type { RaceState } from '../state.ts';
 
 /**
@@ -58,6 +58,21 @@ export class LiveField implements FieldView {
       if (gap > 0 && gap < best) best = gap;
     }
     return best;
+  }
+
+  countNear(_frameElapsed: number, position: number, distance: number): NearCount {
+    let front = 0;
+    let behind = 0;
+    for (let i = 0; i < this.states.length; i++) {
+      if (i === this.selfIndex) continue;
+      const gap = this.states[i]!.simulation.startPosition - position;
+      if (gap > 0) {
+        if (gap <= distance) front++;
+      } else if (-gap <= distance) {
+        behind++;
+      }
+    }
+    return { front, behind };
   }
 
   spread(_frameElapsed: number, position: number): number {
