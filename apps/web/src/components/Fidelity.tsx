@@ -40,6 +40,26 @@ export function FidelityMark({ fidelity }: { fidelity: SkillFidelity | undefined
   );
 }
 
+/**
+ * 印だけを出す。理由の一覧を持たない場合に使う。
+ *
+ * 事前計算のスキル一覧（#83）は JSON に印そのものしか持っていない。
+ * 理由は生成時の設定に対して決まったものなので、いまの設定から組み直すと
+ * 表の値と食い違う。そこで印だけを出し、意味は凡例に任せる。
+ */
+export function PlainFidelityMark({ fidelity }: { fidelity: Fidelity }) {
+  if (fidelity === 'exact') return null;
+  return (
+    <span
+      className={`ml-1 ${MARK_CLASS[fidelity]}`}
+      title={FIDELITY_LABEL[fidelity]}
+      aria-label={FIDELITY_LABEL[fidelity]}
+    >
+      {FIDELITY_MARK[fidelity]}
+    </span>
+  );
+}
+
 /** スキル名と印。表の中で何度も使う。 */
 export function SkillNameWithMark({
   name,

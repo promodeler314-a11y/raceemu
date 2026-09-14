@@ -18,6 +18,8 @@ const TABS: readonly { readonly id: Tab; readonly label: string }[] = [
   { id: 'detail', label: '詳細' },
   { id: 'field', label: '勝率' },
   { id: 'solve', label: '探索' },
+  // 事前に計算した表を読むだけの面。走らせないので実行バーの下流ではない。
+  { id: 'skills', label: 'スキル表' },
 ];
 
 function surfaceName(surface: number): string {
