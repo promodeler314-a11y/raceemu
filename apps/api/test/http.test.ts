@@ -99,6 +99,10 @@ describe('静的ファイルの配信', () => {
     beforeAll(() => {
       mkdirSync(join(root, 'skill-list'), { recursive: true });
       writeFileSync(join(root, 'skill-list', 'abc123.json'), body);
+      writeFileSync(
+        join(root, 'skill-list', 'index.json'),
+        JSON.stringify({ latest: 'abc123.json', generations: ['abc123.json'] }),
+      );
     });
 
     it('版をパスに含んだまま取れる', async () => {
@@ -111,6 +115,18 @@ describe('静的ファイルの配信', () => {
     it('版がパスに入るので、いつまでも持っていてよいと言う', async () => {
       const res = await fetch(`${base}/skill-list/abc123.json`);
       expect(res.headers.get('cache-control')).toContain('immutable');
+    });
+
+    /**
+     * **版を教える 1 枚だけは名前が変わらない。**
+     * 不変として配ると、新しい版を置いても画面は古い名前を取りに行き続ける。
+     * 版がパスに入っている効き目が、入口のところで消える。
+     */
+    it('版を教える 1 枚は不変にしない', async () => {
+      const res = await fetch(`${base}/skill-list/index.json`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('cache-control')).toBe('no-cache');
+      expect(((await res.json()) as { latest: string }).latest).toBe('abc123.json');
     });
 
     /**
