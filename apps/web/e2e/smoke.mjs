@@ -15,76 +15,16 @@ const fail = (message) => {
   process.exitCode = 1;
 };
 
-/**
- * 事前計算したスキル一覧（#83）の見本。
+/*
+ * 事前計算したスキル一覧（#83）は `apps/web/public/skill-list/` にあり、
+ * ビルドがそのまま dist へ運ぶので、この偽サーバは何も足さずに配る。
+ * **見本を手で作って返すのはやめた。** 手書きの見本は書いた人が思っている形に
+ * なるので、生成側が実際に出した形とズレていても気付けない。実際、基準個体が
+ * 距離帯ごとに分かれたことに画面が追随できておらず、距離帯とバ場の絞り込みが
+ * 実データで全滅していたのに、見本の検査は緑だった。
  *
- * 本物は `pnpm skill-list` が作って `apps/web/public/skill-list/` に置く。
- * ここでは**偽サーバが返す手書きの見本**で足りる。見たいのは、置いてある版で
- * 表が出ること、絞り込みと内訳が動くこと、そして**置いていない版で倒れないこと**
- * の 3 つだからである。dist に置いてしまうと、置いていない版を突けなくなる。
+ * 置いていない配布物のほうは、下の段で `page.route` を使って突く。
  */
-function sampleSkillList() {
-  const courses = [
-    { location: 10006, course: 10606, locationName: '中山', courseName: '芝2000m（内）', distance: 2000, surface: 1, category: 'MIDDLE' },
-    { location: 10005, course: 10505, locationName: '東京', courseName: '芝1600m', distance: 1600, surface: 1, category: 'MILE' },
-    { location: 10001, course: 10101, locationName: '札幌', courseName: 'ダート1200m', distance: 1200, surface: 2, category: 'SHORT' },
-  ];
-  // スキル ID / 総額 / 単体の短縮量 / 印
-  const skills = [
-    ['200331', 360, 0.3, 1],
-    ['200351', 340, 0.25, 0],
-    ['200011', 200, 0.18, 0],
-    ['201102', 100, 0.12, 0],
-    ['200012', 90, 0.09, 0],
-    ['201641', 70, 0.05, 2],
-  ];
-  const columns = {
-    length: 0, skill: [], baseline: [], style: [], course: [],
-    mean: [], stdError: [], triggerRate: [], meanWhenTriggered: [], cost: [], fidelity: [],
-  };
-  for (let s = 0; s < skills.length; s++) {
-    for (let st = 0; st < 2; st++) {
-      for (let c = 0; c < courses.length; c++) {
-        const mean = skills[s][2] * (1 + 0.1 * st) + 0.01 * c;
-        const rate = 0.6 - 0.05 * c;
-        columns.skill.push(s);
-        columns.baseline.push(0);
-        columns.style.push(st);
-        columns.course.push(c);
-        columns.mean.push(mean);
-        columns.stdError.push(0.004);
-        columns.triggerRate.push(rate);
-        columns.meanWhenTriggered.push(mean / rate);
-        columns.cost.push(skills[s][1]);
-        columns.fidelity.push(skills[s][3]);
-        columns.length++;
-      }
-    }
-  }
-  return {
-    format: 1,
-    version: 'e2e-0001',
-    generatedAt: '2026-09-14T00:00:00.000Z',
-    dataset: { skills: 'aaaaaa', courses: 'bbbbbb', raceModel: 'cccccc', fieldProfile: 'dddddd' },
-    settings: { trials: 200, useField: true, gateCount: 9, seed: 1, trackCondition: 1 },
-    baselines: [{ id: 'strong', label: '強い', speed: 1200, stamina: 1000, power: 900, guts: 600, wisdom: 900 }],
-    courses,
-    skillIds: skills.map((skill) => skill[0]),
-    styles: ['NIGE', 'SEN'],
-    fidelities: ['exact', 'approximate', 'dropped'],
-    columns,
-    screenedOut: 123,
-    races: 3600,
-    elapsedMs: 9000,
-  };
-}
-
-const skillListPages = {
-  // 版の一覧。issue #83 の置き場は `skill-list/<版>.json` なので、
-  // 読む側は名前を当てられない。名前を教える 1 枚をあいだに置いてある。
-  '/skill-list/index.json': JSON.stringify({ latest: 'e2e-0001.json' }),
-  '/skill-list/e2e-0001.json': JSON.stringify(sampleSkillList()),
-};
 
 const server = createServer(async (req, res) => {
   // 静的配信だけの環境と同じ振る舞いにする。POST は受け付けず、本文は HTML で返す。
@@ -94,16 +34,6 @@ const server = createServer(async (req, res) => {
     res.writeHead(405, { 'content-type': 'text/html; charset=utf-8' });
     res.end('<!DOCTYPE html><html><body><h1>405</h1></body></html>');
     return;
-  }
-  // スキル一覧だけは dist ではなくここから返す。
-  // dist に置くと、置いていない配布物を突けなくなる（上の注記）。
-  {
-    const path = decodeURIComponent(new URL(req.url, 'http://x').pathname);
-    if (Object.hasOwn(skillListPages, path)) {
-      res.writeHead(200, { 'content-type': 'application/json; charset=utf-8' });
-      res.end(skillListPages[path]);
-      return;
-    }
   }
   try {
     // normalize は Windows で区切りを '\' に変えるため、既定のページに落とす判定は
@@ -636,82 +566,164 @@ await page.locator('section:has(h2:text("コース横断"))').screenshot({
 });
 
 // スキル一覧（#83）: 事前に計算した表を読んで並べる面。
-// ここでは 1 レースも走らせない。偽サーバが上の見本を返す。
+// **配ってある実データ（apps/web/public/skill-list/）をそのまま読む。**
+// ここでは 1 レースも走らせない。
 await goTab('スキル表');
-await page.waitForSelector('[data-testid=skill-list-table]', { timeout: 20000 });
+await page.waitForSelector('[data-testid=skill-list-table]', { timeout: 60000 });
 const skillListSection = 'section:has(h2:text("スキル一覧"))';
+const skillListCount = async () => {
+  const text = (await page.textContent('[data-testid=skill-list-count]')).trim();
+  return Number(/^([\d,]+) 件中/.exec(text)[1].replace(/,/g, ''));
+};
+const defaultCount = await skillListCount();
+console.log('--- スキル一覧（実データ）:', defaultCount, 'スキル');
+if (!(defaultCount > 100)) fail(`スキル一覧の件数が少なすぎる: ${defaultCount}`);
 const skillListRows = await readTestTable('skill-list-table');
-console.log('--- スキル一覧');
-for (const row of skillListRows) console.log(' ', row.join(' | '));
-if (skillListRows.length !== 6) fail(`スキル一覧の行数が想定と違う: ${skillListRows.length}`);
+for (const row of skillListRows.slice(0, 3)) console.log(' ', row.join(' | '));
+// 一度に出すのは 50 行まで。全スキルを一度に描くと絞り込みのたびに固まる。
+if (skillListRows.length !== 50) fail(`スキル一覧の行数が想定と違う: ${skillListRows.length}`);
 // 列は スキル / 短縮 / バ身 / 発動率 / 発動時 / pt / ミリ秒/pt
 if (skillListRows[0].length !== 7) fail(`スキル一覧の列数が想定と違う: ${skillListRows[0].length}`);
-// 短縮量の大きい順。先頭は 0.30 秒の弧線のプロフェッサー。
-if (!skillListRows[0][0].startsWith('弧線のプロフェッサー')) {
-  fail(`短縮量の順に並んでいない: ${skillListRows[0][0]}`);
-}
-// バ身は秒から換算している。中山 2000m で 1 秒 = 8 バ身なので、0 にはならない。
+// バ身は秒から換算している。0 にはならない。
 if (!(Number.parseFloat(skillListRows[0][2]) > 0)) fail('バ身が出ていない');
-// 設定の面で持っているもの（円弧のマエストロ）に印が付く
-const checked = skillListRows.find((row) => row[0].includes('✓'));
-if (checked === undefined || !checked[0].startsWith('円弧のマエストロ')) {
-  fail(`持っているスキルに印が付いていない: ${skillListRows.map((r) => r[0]).join(' / ')}`);
-}
 // 版と、何から作ったかが画面に出ていること（値は相手の分布に依る）
 const skillListVersion = (await page.textContent('[data-testid=skill-list-version]')).trim();
-console.log('--- スキル一覧の版:', skillListVersion.replace(/\s+/g, ' ').slice(0, 80));
-if (!skillListVersion.includes('e2e-0001')) fail(`版が出ていない: ${skillListVersion}`);
-if (!skillListVersion.includes('dddddd')) fail('相手の分布の指紋が出ていない');
+console.log('--- スキル一覧の版:', skillListVersion.replace(/\s+/g, ' ').slice(0, 90));
+if (!/版 \S+/.test(skillListVersion)) fail(`版が出ていない: ${skillListVersion}`);
+if (!skillListVersion.includes('指紋')) fail('何から作ったかの指紋が出ていない');
 // 表の読み方。単体であって限界ではないこと、バ身が裏取り前であること、
 // 行が無いことに 2 通りあることを、画面が言っていること。
 const skillListNotes = (await page.textContent(skillListSection)).replace(/\s+/g, '');
-for (const phrase of ['「単体」であって「限界」ではない', 'バ身は目安である', '行が無いことには2通りある', '123']) {
+for (const phrase of ['「単体」であって「限界」ではない', 'バ身は目安である', '行が無いことには2通りある', '段だけを選ぶ']) {
   if (!skillListNotes.includes(phrase)) fail(`スキル一覧に「${phrase}」が書かれていない`);
 }
+
+// 絞り込み。**ここが実データで全滅していた。**
+// 基準個体は距離帯とバ場ごとに別なので、個体 1 つに固定すると
+// その個体が割り当てられた行しか当たらず、距離帯を選ぶと 0 件になっていた。
+for (const [value, label] of [['SHORT', '短距離'], ['MILE', 'マイル'], ['MIDDLE', '中距離'], ['LONG', '長距離']]) {
+  await page.selectOption('[data-testid=skill-list-category]', value);
+  await page.waitForTimeout(250);
+  const count = await skillListCount();
+  console.log(`--- 距離帯 ${label}:`, count, 'スキル');
+  if (!(count > 0)) fail(`距離帯 ${label} で 0 件になった`);
+}
+await page.selectOption('[data-testid=skill-list-category]', 'ALL');
+await page.waitForTimeout(250);
+for (const [value, label] of [['1', '芝'], ['2', 'ダート']]) {
+  await page.selectOption('[data-testid=skill-list-surface]', value);
+  await page.waitForTimeout(250);
+  const count = await skillListCount();
+  console.log(`--- バ場 ${label}:`, count, 'スキル');
+  if (!(count > 0)) fail(`バ場 ${label} で 0 件になった`);
+}
+await page.selectOption('[data-testid=skill-list-surface]', '0');
+await page.waitForTimeout(250);
+// 「すべて」がいちばん狭い絞り込みより広いこと。
+// 壊れていたときは「すべて」＝芝短距離だけで、数が一致していた。
+await page.selectOption('[data-testid=skill-list-category]', 'SHORT');
+await page.selectOption('[data-testid=skill-list-surface]', '1');
+await page.waitForTimeout(250);
+const narrowCount = await skillListCount();
+console.log('--- 芝 × 短距離:', narrowCount, 'スキル（すべては', defaultCount, '）');
+if (!(defaultCount > narrowCount)) fail('「すべて」が芝短距離と同じ数になっている');
+await page.selectOption('[data-testid=skill-list-category]', 'ALL');
+await page.selectOption('[data-testid=skill-list-surface]', '0');
+await page.waitForTimeout(250);
+// 基準の個体は段（普通／強い）だけを選ぶ。16 件の個体を並べない。
+const tierOptions = await page.$$eval('[data-testid=skill-list-baseline] option', (os) =>
+  os.map((o) => `${o.value}:${o.textContent?.trim()}`),
+);
+console.log('--- 基準の個体の選択欄:', tierOptions.join(' / '));
+if (tierOptions.length !== 2) fail(`段が 2 つでない: ${tierOptions.join(' / ')}`);
+if (new Set(tierOptions.map((o) => o.split(':')[1])).size !== 2) {
+  fail(`同じ語が並んでいて区別できない: ${tierOptions.join(' / ')}`);
+}
+const normalTop = (await readTestTable('skill-list-table'))[0];
+await page.selectOption('[data-testid=skill-list-baseline]', tierOptions[1].split(':')[0]);
+await page.waitForTimeout(300);
+const strongCount = await skillListCount();
+const strongTop = (await readTestTable('skill-list-table'))[0];
+console.log('--- 段を強いに切り替え:', strongCount, 'スキル / 先頭', strongTop.slice(0, 2).join(' | '));
+if (!(strongCount > 0)) fail('段を切り替えると 0 件になる');
+if (normalTop[1] === strongTop[1] && normalTop[0] === strongTop[0]) {
+  fail('段を切り替えても値が変わらない');
+}
+await page.selectOption('[data-testid=skill-list-baseline]', tierOptions[0].split(':')[0]);
+await page.waitForTimeout(300);
+
 // 持っていないもののうち効率の高いものを勧める（探索の面への入口）
 const recommendCount = await page.locator('[data-testid=skill-list-recommend] button').count();
 console.log('--- 勧めているスキル:', recommendCount, '件');
 if (recommendCount !== 5) fail(`勧めの件数が想定と違う: ${recommendCount}`);
-// 上位互換のグループ（右回り○ → 右回り◎）は差額と効果差で並ぶ
+// 上位互換のグループは差額と効果差で並ぶ
 const groupRows = await readTestTable('skill-list-groups');
-for (const row of groupRows) console.log('  グループ', row.join(' | '));
-if (groupRows.length !== 2) fail(`上位互換のグループの行数が想定と違う: ${groupRows.length}`);
-if (!groupRows[1][1].startsWith('+')) fail(`上位が差額で出ていない: ${groupRows[1][1]}`);
+for (const row of groupRows.slice(0, 4)) console.log('  グループ', row.join(' | '));
+if (groupRows.length < 2) fail(`上位互換のグループが出ていない: ${groupRows.length}`);
+if (!groupRows.some((row) => (row[1] ?? '').startsWith('+'))) fail('上位が差額で出ていない');
+
+// 設定の面で持っているスキル（円弧のマエストロ）に印が付く
+await page.fill('input[aria-label="スキル名で絞る"]', '円弧のマエストロ');
+await page.waitForTimeout(250);
+const heldRows = await readTestTable('skill-list-table');
+console.log('--- 持っているスキルの行:', heldRows.map((r) => r[0]).join(' / '));
+if (!heldRows.some((row) => row[0].includes('✓'))) {
+  fail(`持っているスキルに印が付いていない: ${heldRows.map((r) => r[0]).join(' / ')}`);
+}
+// 持っていないものだけに絞ると、その行が落ちる
+await page.check('[data-testid=skill-list-only-missing]');
+await page.waitForTimeout(250);
+if ((await skillListCount()) !== 0) fail('持っていないものだけに絞れていない');
+await page.uncheck('[data-testid=skill-list-only-missing]');
+await page.fill('input[aria-label="スキル名で絞る"]', '');
+await page.waitForTimeout(250);
+
 // 行を押すとコースごとの内訳に降りる
-await page.click('button[aria-label="弧線のプロフェッサー のコースごとの内訳"]');
+const firstRowButton = page.locator('[data-testid=skill-list-table] tbody tr th button').first();
+const firstLabel = await firstRowButton.getAttribute('aria-label');
+const firstName = firstLabel.replace(' のコースごとの内訳', '');
+if ((await readTestTable('skill-list-table'))[0][0].includes('✓')) {
+  fail(`先頭のスキルを既に持っている（この段の前提が崩れた）: ${firstName}`);
+}
+await firstRowButton.click();
 await page.waitForSelector('[data-testid=skill-list-breakdown]', { timeout: 10000 });
 const breakdownRows = await page.$$eval('[data-testid=skill-list-breakdown] tbody tr', (trs) =>
   trs.map((tr) => [...tr.querySelectorAll('th,td')].map((c) => c.textContent?.trim())),
 );
-for (const row of breakdownRows) console.log('  内訳', row.join(' | '));
-if (breakdownRows.length !== 3) fail(`内訳のコース数が想定と違う: ${breakdownRows.length}`);
+console.log('--- 内訳:', firstName);
+for (const row of breakdownRows) console.log('  ', row.join(' | '));
+if (breakdownRows.length === 0) fail('コースごとの内訳が出ていない');
 const breakdownNote = await page.textContent('[data-testid=skill-list-breakdown]');
 if (!breakdownNote.includes('発動位置の分布はここには出せない')) {
   fail('発動位置を出せないことが書かれていない');
 }
-// 絞り込みは表にも内訳にも効く
-await page.selectOption('[data-testid=skill-list-category]', 'MIDDLE');
-await page.waitForTimeout(200);
-await page.click('button[aria-label="弧線のプロフェッサー のコースごとの内訳"]');
-await page.waitForSelector('[data-testid=skill-list-breakdown]', { timeout: 10000 });
-const middleBreakdown = await page.$$eval('[data-testid=skill-list-breakdown] tbody tr', (trs) => trs.length);
-console.log('--- 中距離で絞ったときの内訳:', middleBreakdown, 'コース');
-if (middleBreakdown !== 1) fail(`距離帯で絞れていない: ${middleBreakdown} コース`);
-// 内訳を閉じてから数える。開いたままだと内訳の行も数に入る。
-await page.click('button[aria-label="弧線のプロフェッサー のコースごとの内訳"]');
-await page.waitForTimeout(150);
-// 持っていないものだけに絞ると、印の付いた 1 件が落ちる
-await page.check('[data-testid=skill-list-only-missing]');
-await page.waitForTimeout(200);
-const missingRows = await readTestTable('skill-list-table');
-if (missingRows.length !== 5) fail(`持っていないものだけに絞れていない: ${missingRows.length}`);
-await page.uncheck('[data-testid=skill-list-only-missing]');
-await page.waitForTimeout(150);
-await page.locator(skillListSection).screenshot({ path: 'docs/images/skill-list.png' });
+// 絞り込みは内訳にも効く。
+// **スキル名で 1 行に絞ってから**バ場を切り替える。絞り込みで並びが変わっても、
+// 同じスキルを見続けられるようにするためである（先頭のスキルがその距離帯を
+// 持っているとは限らない）。
+const breakdownSurfaces = new Set(breakdownRows.map((row) => (row[0].includes('ダート') ? 2 : 1)));
+if (breakdownSurfaces.size > 1) {
+  await page.fill('input[aria-label="スキル名で絞る"]', firstName);
+  await page.selectOption('[data-testid=skill-list-surface]', '1');
+  await page.waitForTimeout(250);
+  await page.click(`button[aria-label="${firstName} のコースごとの内訳"]`);
+  await page.waitForSelector('[data-testid=skill-list-breakdown]', { timeout: 10000 });
+  const turfBreakdown = await page.$$eval('[data-testid=skill-list-breakdown] tbody tr', (trs) => trs.length);
+  console.log('--- 芝だけに絞ったときの内訳:', turfBreakdown, 'コース（すべては', breakdownRows.length, '）');
+  if (!(turfBreakdown > 0)) fail('バ場で絞ると内訳が空になる');
+  if (!(turfBreakdown < breakdownRows.length)) fail('バ場で絞っても内訳が減らない');
+  await page.selectOption('[data-testid=skill-list-surface]', '0');
+  await page.fill('input[aria-label="スキル名で絞る"]', '');
+  await page.waitForTimeout(250);
+} else {
+  console.log('--- 先頭のスキルの内訳が 1 つのバ場に寄っているので、内訳の絞り込みは飛ばす');
+}
+
 // 探索の面への入口。押すと所持に加わり、面が移る。
-await page.click('button[aria-label="弧線のプロフェッサー のコースごとの内訳"]');
+await page.click(`button[aria-label="${firstName} のコースごとの内訳"]`);
 await page.waitForSelector('[data-testid=skill-list-breakdown]', { timeout: 10000 });
-await page.click('[data-testid=skill-list-breakdown] button[aria-label="弧線のプロフェッサー を所持に加えて探索の面へ"]');
+await page.locator(skillListSection).screenshot({ path: 'docs/images/skill-list.png' });
+await page.click(`[data-testid=skill-list-breakdown] button[aria-label="${firstName} を所持に加えて探索の面へ"]`);
 await page.waitForTimeout(300);
 const movedTo = await page.evaluate(
   () => document.querySelector('nav button[aria-current="page"]')?.textContent?.trim() ?? '',
@@ -720,11 +732,11 @@ console.log('--- 勧めから移った先の面:', movedTo);
 if (!movedTo.includes('探索')) fail(`探索の面へ移らない: ${movedTo}`);
 await goTab('設定');
 const addedNames = await heldNames();
-if (!addedNames.some((name) => name.startsWith('弧線のプロフェッサー'))) {
+if (!addedNames.some((name) => name.startsWith(firstName))) {
   fail(`スキル一覧から所持に加わらない: ${addedNames.join(' / ')}`);
 }
 // あとの段のために戻しておく
-await page.click('button[aria-label="弧線のプロフェッサー を外す"]');
+await page.click(`button[aria-label="${firstName} を外す"]`);
 
 // スキル一覧が置いていない配布物で倒れないこと。
 // 静的配信だけの版には数 MB の表を載せないことがあり、そこでは 404 か、
