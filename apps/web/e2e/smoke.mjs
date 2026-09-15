@@ -729,9 +729,16 @@ const breakdownRows = await page.$$eval('[data-testid=skill-list-breakdown] tbod
 );
 console.log('--- 内訳:', firstName);
 for (const row of breakdownRows) console.log('  ', row.join(' | '));
-// 脚質は 4 つ。絞り込みで 1 つに決めていても、比べられるように全部出す。
+// 脚質は 4 つとも並ぶ。絞り込みで 1 つに決めていても、比べられるように全部出す。
+// **測った行が無い脚質も並ぶ。** 脚質の条件を持つスキルは、当たらない脚質では
+// 走らせる前に落としてあり、そう書いてある（0 と書き分ける）。
 if (breakdownRows.length !== styleOptions.length - 1) {
   fail(`脚質ごとの内訳の行数が想定と違う: ${breakdownRows.length}`);
+}
+const dropped = breakdownRows.filter((row) => (row[1] ?? '').includes('走らせずに落とした'));
+console.log('--- 内訳のうち走らせずに落とした脚質:', dropped.length, '件');
+if (!breakdownRows.some((row) => !(row[1] ?? '').includes('走らせずに落とした'))) {
+  fail('内訳がすべて「落とした」になっている');
 }
 const breakdownNote = await page.textContent('[data-testid=skill-list-breakdown]');
 if (!breakdownNote.includes('発動位置の分布はここには出せない')) {

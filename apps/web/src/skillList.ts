@@ -230,6 +230,15 @@ export interface SkillListAggregate {
 export interface SkillListStyleRow {
   readonly style: Style;
   readonly label: string;
+  /**
+   * 測った行があるか。
+   *
+   * **false は「走らせずに落とした」である。** その脚質では確かに発動しないと
+   * `screen.ts` が判定したので、行そのものが無い（`screen.ts` の判定は片側だけ
+   * 確かで、落としたものは確かに発動しない）。数値の側を 0 で埋めて黙って並べると、
+   * 「測ったら 0 だった」と読まれる。**この 2 つは別のことである。**
+   */
+  readonly measured: boolean;
   readonly mean: number;
   readonly stdError: number;
   readonly triggerRate: number;
@@ -357,6 +366,10 @@ export function aggregate(
  * 表がコースごとになったので、内訳はコースではなく脚質である。
  * 絞り込みで脚質を 1 つに決めているときも、比べられるように全脚質を出す。
  *
+ * **測った行が無い脚質も並べる**（`measured: false`）。脚質の条件を持つスキルは、
+ * 当たらない脚質では `screen.ts` が走らせる前に落としており、行そのものが無い。
+ * 黙って行を減らすと「逃げでは効かない」のか「逃げは測っていない」のかが分からない。
+ *
  * **発動位置の分布はここに出せない。** JSON が持っていないからである
  * （docs/webapp-design.md 6.6 節）。
  */
@@ -371,22 +384,34 @@ export function styleBreakdown(
   const wanted = baselineIndex < 0 ? 0 : baselineIndex;
   const out: SkillListStyleRow[] = [];
   for (const [styleIdx, style] of file.styles.entries()) {
+    const empty: SkillListStyleRow = {
+      style,
+      label: styleLabel[style],
+      measured: false,
+      mean: 0,
+      stdError: 0,
+      triggerRate: 0,
+      meanWhenTriggered: 0,
+      bashin: 0,
+    };
+    let found: SkillListStyleRow | null = null;
     for (let row = 0; row < file.columns.length; row += 1) {
       if (file.columns.skill[row] !== skillIndex) continue;
       if (file.columns.baseline[row] !== wanted) continue;
       if (file.columns.style[row] !== styleIdx) continue;
       const mean = file.columns.mean[row]!;
-      out.push({
-        style,
-        label: styleLabel[style],
+      found = {
+        ...empty,
+        measured: true,
         mean,
         stdError: file.columns.stdError[row]!,
         triggerRate: file.columns.triggerRate[row]!,
         meanWhenTriggered: file.columns.meanWhenTriggered[row]!,
         bashin: secondsToBashin(mean, file.course.distance),
-      });
+      };
       break;
     }
+    out.push(found ?? empty);
   }
   return out;
 }

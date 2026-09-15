@@ -623,18 +623,35 @@ function Breakdown({
                 <th scope="row" className="py-1 pr-2 text-left font-normal">
                   {style.label}
                 </th>
-                <td className="num py-1 pr-2 text-right">
-                  {seconds(style.mean)}
-                  <span className="text-ink3"> ± {(2 * style.stdError).toFixed(3)}</span>
-                </td>
-                <td className="num py-1 pr-2 text-right text-ink3">{style.bashin.toFixed(2)}</td>
-                <td className="num py-1 pr-2 text-right">{percent(style.triggerRate)}</td>
-                <td className="num py-1 text-right">{seconds(style.meanWhenTriggered)}</td>
+                {style.measured ? (
+                  <>
+                    <td className="num py-1 pr-2 text-right">
+                      {seconds(style.mean)}
+                      <span className="text-ink3"> ± {(2 * style.stdError).toFixed(3)}</span>
+                    </td>
+                    <td className="num py-1 pr-2 text-right text-ink3">
+                      {style.bashin.toFixed(2)}
+                    </td>
+                    <td className="num py-1 pr-2 text-right">{percent(style.triggerRate)}</td>
+                    <td className="num py-1 text-right">{seconds(style.meanWhenTriggered)}</td>
+                  </>
+                ) : (
+                  // 0 を並べると「測ったら 0 だった」と読まれる。走らせる前に落とした
+                  // ものは**確かに発動しない**ので、そう書く。
+                  <td className="py-1 text-ink3" colSpan={4}>
+                    この脚質では発動しないので、走らせずに落とした
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      <p className="mt-1 text-xs text-ink3">
+        脚質の条件を持つスキルは、当たらない脚質では走らせる前に落としてある
+        （<code>screen.ts</code>）。落としたものは<strong>確かに発動しない</strong>ので、
+        値の 0 とは別のこととして書き分けている。
+      </p>
       <p className="mt-1 text-xs text-ink3">
         <strong>発動位置の分布はここには出せない。</strong>
         配っている JSON が持っているのは 1 行ぶんの平均までで、位置は入っていない。

@@ -334,7 +334,41 @@ describe('脚質ごとの内訳', () => {
     const rows = styleBreakdown(sampleCourse(), { ...ALL, style: 'SEN' }, '201022');
     expect(rows.map((row) => row.style)).toEqual(['NIGE', 'SEN']);
     expect(rows.map((row) => row.label)).toEqual(['逃げ', '先行']);
+    expect(rows.every((row) => row.measured)).toBe(true);
     expect(rows[1]!.mean - rows[0]!.mean).toBeCloseTo(0.01, 12);
+  });
+
+  it('測った行が無い脚質も並べる。0 と書き分ける', () => {
+    // 脚質の条件を持つスキルは、当たらない脚質では走らせる前に落としてある。
+    // 黙って行を減らすと「逃げでは効かない」と「逃げは測っていない」が区別できない。
+    const file = sampleCourse();
+    const onlySen: SkillListCourseFile = {
+      ...file,
+      columns: {
+        ...file.columns,
+        // 逃げ（添字 0）の行を落とす
+        ...(() => {
+          const keep = file.columns.style.map((value) => value === 1);
+          const pick = <T,>(column: readonly T[]) => column.filter((_, i) => keep[i]!);
+          return {
+            length: keep.filter(Boolean).length,
+            skill: pick(file.columns.skill),
+            baseline: pick(file.columns.baseline),
+            style: pick(file.columns.style),
+            mean: pick(file.columns.mean),
+            stdError: pick(file.columns.stdError),
+            triggerRate: pick(file.columns.triggerRate),
+            meanWhenTriggered: pick(file.columns.meanWhenTriggered),
+            cost: pick(file.columns.cost),
+            fidelity: pick(file.columns.fidelity),
+          };
+        })(),
+      },
+    };
+    const rows = styleBreakdown(onlySen, ALL, '201022');
+    expect(rows.map((row) => row.style)).toEqual(['NIGE', 'SEN']);
+    expect(rows.map((row) => row.measured)).toEqual([false, true]);
+    expect(rows[0]!.mean).toBe(0);
   });
 
   it('段は内訳にも効く', () => {
