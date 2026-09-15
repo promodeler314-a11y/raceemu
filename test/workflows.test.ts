@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -168,7 +169,8 @@ describe('スキル一覧の表の作り直し', () => {
   it('生成・差分・掃除・commit が同じ場所を見ている', () => {
     expect(workflow).toContain('mkdir -p "$OUT_DIR"');
     expect(workflow).toContain('git ls-files --others --exclude-standard -- "$OUT_DIR"');
-    expect(workflow).toContain('for f in "$OUT_DIR"/*.json');
+    // 版はディレクトリである（1 コース 1 枚を並べたもの）。掃除もその単位で数える。
+    expect(workflow).toContain('for d in "$OUT_DIR"/*/');
     expect(workflow).toContain('git add -A "$OUT_DIR"');
     // 場所を書くのは `env:` の 1 行だけにする。段の中に素のパスを書くと、
     // 置き場を移したときに片方だけが残って黙ってズレる（コメントは数えない）。
@@ -202,19 +204,51 @@ describe('スキル一覧の表の作り直し', () => {
     }
   });
 
-  it('生成が何も書かなかったときに赤で落ちる', () => {
+  it('分片が何も書かなかったときに赤で落ちる', () => {
     // 「差分なしで緑」の事故はここでも起こりうる。CLI が黙って終わったら、
-    // 次の段は差分が無いと判断して何もせずに終わる。
-    expect(workflow).toContain('if ! ls "$OUT_DIR"/*.json >/dev/null 2>&1; then');
-    expect(workflow).toMatch(/JSON が 1 つも無い[\s\S]*?exit 1/);
+    // まとめる段は「そのコースは測っていない」と判断して緑で終わる。
+    expect(workflow).toMatch(/コースを 1 枚も書いていない[\s\S]*?exit 1/);
+    // 分片が全部こけた回も、表が無いまま PR を出してはならない。
+    expect(workflow).toMatch(/分片の成果が 1 つも無い[\s\S]*?exit 1/);
+  });
+
+  it('全 137 コースを分けて回し、分片の数が matrix と合っている', () => {
+    // **食い違うと、測られないコースが黙って出る。**
+    // 分片 i は i, i+N, i+2N ... を取るので、N が matrix より大きければ
+    // 上のほうの分片が 1 本も走らず、そのコースは永久に測られない。
+    const shards = Number(/^\s*SHARDS:\s*'(\d+)'\s*$/m.exec(workflow)?.[1]);
+    const matrix = /^\s*shard: \[([^\]]*)\]\s*$/m
+      .exec(workflow)?.[1]
+      ?.split(',')
+      .map((value) => Number(value.trim()));
+    expect(shards).toBeGreaterThan(1);
+    expect(matrix).toEqual(Array.from({ length: shards }, (_, i) => i));
+    expect(workflow).toContain('--shard "${{ matrix.shard }}/$SHARDS"');
+  });
+
+  it('1 ジョブの上限（6 時間）に収まる時間で切ってある', () => {
+    const limits = [...workflow.matchAll(/^\s*timeout-minutes:\s*(\d+)\s*$/gm)].map((m) =>
+      Number(m[1]),
+    );
+    expect(limits.length).toBeGreaterThan(0);
+    for (const limit of limits) expect(limit).toBeLessThanOrEqual(360);
+  });
+
+  it('分片が 1 本こけても、測れたぶんは配る', () => {
+    // 表はコースごとに 1 枚なので、こけた分片のコースが載らないだけである。
+    // fail-fast で全部捨てると、何十時間かけた他の分片まで無駄になる。
+    expect(workflow).toContain('fail-fast: false');
+    expect(workflow).toContain('if: ${{ always() }}');
+    // こけたことは PR 本文に出す。黙って少ないコースを配ってはならない。
+    expect(workflow).toContain('needs.measure.result');
   });
 
   it('残す世代数の理由が docs にある', () => {
     expect(readFileSync('docs/deploy.md', 'utf8')).toContain(`${keep} 世代`);
   });
 
-  it('版を教える 1 枚が無ければ赤で落ちる', () => {
-    // index.json が無いと、画面はどの版を取ればよいか分からない。
+  it('版とコースの一覧が無ければ赤で落ちる', () => {
+    // index.json が無いと、画面はどの版のどのコースを取ればよいか分からない。
     // 表があっても配れていないのと同じである。
     expect(workflow).toContain('if [ ! -f "$OUT_DIR/index.json" ]; then');
     expect(workflow).toMatch(/index\.json が無い[\s\S]*?exit 1/);
@@ -242,16 +276,21 @@ describe('スキル一覧の掃除', () => {
    *
    * ワークフローと同じように子プロセスで呼ぶ。引数と標準入力の読み方まで含めて
    * 通しで見たいからである（呼び出しの形が変わると、本番でだけ壊れる）。
+   *
+   * **版はディレクトリである。** 1 コース 1 枚を並べたものが 1 つの版になる。
    */
   function run(
-    files: readonly string[],
+    versions: readonly string[],
     index: unknown,
     keep: number,
     ages: readonly string[] = [],
   ) {
     const dir = mkdtempSync(join(tmpdir(), 'raceemu-prune-'));
     try {
-      for (const name of files) writeFileSync(join(dir, name), '{"format":1}');
+      for (const name of versions) {
+        mkdirSync(join(dir, name), { recursive: true });
+        writeFileSync(join(dir, name, '10006-10606.json'), '{"format":2}');
+      }
       writeFileSync(join(dir, 'index.json'), JSON.stringify(index));
       const run = spawnSync('node', [PRUNE, dir, String(keep)], {
         input: `${ages.join('\n')}\n`,
@@ -261,89 +300,95 @@ describe('スキル一覧の掃除', () => {
       const after =
         run.status === 0
           ? (JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8')) as {
-              latest: string;
+              version: string;
               generations: string[];
+              courses: unknown[];
             })
-          : { latest: '', generations: [] };
+          : { version: '', generations: [], courses: [] };
       return { status: run.status, stdout: run.stdout, stderr: run.stderr, left, after };
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   }
 
+  /** コースが 1 本載った一覧。掃除はコースの中身を見ないので、1 本あれば足りる。 */
+  const withCourses = (version: string, generations: readonly string[]) => ({
+    format: 2,
+    version,
+    generations,
+    courses: [{ course: { location: 10006, course: 10606 }, file: `${version}/10006-10606.json` }],
+  });
+
   // 古い順に a → b、いちばん新しい c はまだ commit されていない（行が無い）。
-  const AGES = ['1700000000 a.json', '1800000000 b.json'];
+  const AGES = ['1700000000 v2-a', '1800000000 v2-b'];
 
   it('掃除のあとに index.json が指す版が実在する', () => {
     const { status, left, after } = run(
-      ['a.json', 'b.json', 'c.json'],
-      { latest: 'c.json', generations: ['c.json', 'b.json', 'a.json'] },
+      ['v2-a', 'v2-b', 'v2-c'],
+      withCourses('v2-c', ['v2-c', 'v2-b', 'v2-a']),
       2,
       AGES,
     );
     expect(status).toBe(0);
-    expect(left).toContain(after.latest);
+    expect(left).toContain(after.version);
     for (const name of after.generations) expect(left).toContain(name);
   });
 
   it('generations に消した版が残らない', () => {
     const { left, after, stdout } = run(
-      ['a.json', 'b.json', 'c.json'],
-      { latest: 'c.json', generations: ['c.json', 'b.json', 'a.json'] },
+      ['v2-a', 'v2-b', 'v2-c'],
+      withCourses('v2-c', ['v2-c', 'v2-b', 'v2-a']),
       2,
       AGES,
     );
     // 新しい 2 世代（c と b）が残り、いちばん古い a が落ちる。
-    expect(after.generations).toEqual(['c.json', 'b.json']);
-    expect(left).toEqual(['b.json', 'c.json', 'index.json']);
+    expect(after.generations).toEqual(['v2-c', 'v2-b']);
+    expect(left).toEqual(['index.json', 'v2-b', 'v2-c']);
     // ワークフローが PR 本文に載せる行。
-    expect(stdout).toMatch(/^removed: .*a\.json$/m);
+    expect(stdout).toMatch(/^removed: .*v2-a$/m);
   });
 
   it('index.json そのものは版として数えない', () => {
     // 残す世代数が 1 でも、index.json は消えない。並べて数えていると、
     // 版として落ちるか、いちばん古いものとして最初に消える。
-    const { left, after } = run(
-      ['a.json', 'b.json'],
-      { latest: 'b.json', generations: ['b.json', 'a.json'] },
-      1,
-      AGES,
-    );
-    expect(left).toEqual(['b.json', 'index.json']);
-    expect(after.generations).toEqual(['b.json']);
+    const { left, after } = run(['v2-a', 'v2-b'], withCourses('v2-b', ['v2-b', 'v2-a']), 1, AGES);
+    expect(left).toEqual(['index.json', 'v2-b']);
+    expect(after.generations).toEqual(['v2-b']);
   });
 
-  it('latest は残す世代数によらず必ず残る', () => {
-    // 版が変わらなかった回に force で作り直すと、latest が指す版が
+  it('いまの版は残す世代数によらず必ず残る', () => {
+    // 版が変わらなかった回に force で作り直すと、いまの版が
     // 「commit の時刻がいちばん古い」側に来ることがありうる。
-    const { left, after } = run(
-      ['a.json', 'b.json'],
-      { latest: 'a.json', generations: ['a.json'] },
-      1,
-      AGES,
-    );
-    expect(left).toEqual(['a.json', 'index.json']);
-    expect(after.latest).toBe('a.json');
-    expect(after.generations).toEqual(['a.json']);
+    const { left, after } = run(['v2-a', 'v2-b'], withCourses('v2-a', ['v2-a']), 1, AGES);
+    expect(left).toEqual(['index.json', 'v2-a']);
+    expect(after.version).toBe('v2-a');
+    expect(after.generations).toEqual(['v2-a']);
   });
 
   it('index.json が指す版が無ければ赤で落ちる', () => {
     // 掃除の前から食い違っている場合。このまま配ると画面は 404 を引く。
+    const { status, stderr } = run(['v2-a'], withCourses('v2-gone', ['v2-gone']), 2, AGES);
+    expect(status).toBe(1);
+    expect(stderr).toContain('::error::');
+    expect(stderr).toContain('v2-gone');
+  });
+
+  it('コースが 1 本も載っていない一覧は赤で落ちる', () => {
+    // 画面から見れば「表が無い」のと同じである。緑で配ってはならない。
     const { status, stderr } = run(
-      ['a.json'],
-      { latest: 'gone.json', generations: ['gone.json'] },
+      ['v2-a'],
+      { format: 2, version: 'v2-a', generations: ['v2-a'], courses: [] },
       2,
       AGES,
     );
     expect(status).toBe(1);
     expect(stderr).toContain('::error::');
-    expect(stderr).toContain('gone.json');
   });
 
-  it('版を教える 1 枚が読めなければ赤で落ちる', () => {
+  it('版とコースの一覧が読めなければ赤で落ちる', () => {
     const dir = mkdtempSync(join(tmpdir(), 'raceemu-prune-'));
     try {
-      writeFileSync(join(dir, 'a.json'), '{"format":1}');
+      mkdirSync(join(dir, 'v2-a'), { recursive: true });
       const result = spawnSync('node', [PRUNE, dir, '2'], { input: '', encoding: 'utf8' });
       expect(result.status).toBe(1);
       expect(result.stderr).toContain('::error::');
@@ -373,12 +418,24 @@ describe.skipIf(!existsSync(SKILL_LIST_CLI))('スキル一覧の CLI とワー�
     const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
       scripts: Record<string, string>;
     };
-    expect(workflow).toContain('pnpm skill-list |');
+    expect(workflow).toContain('pnpm skill-list \\');
+    expect(workflow).toContain('pnpm skill-list-collect');
     expect(Object.keys(pkg.scripts)).toContain('skill-list');
     expect(pkg.scripts['skill-list']).toContain('skill-list-cli.ts');
+    expect(pkg.scripts['skill-list-collect']).toContain('skill-list-collect-cli.ts');
   });
 
   it('CLI が書く場所とワークフローが見る場所が同じ', () => {
     expect(readFileSync(SKILL_LIST_CLI, 'utf8')).toContain(outDir);
+  });
+
+  it('分片の取りまとめと生成が同じ版を計算する', () => {
+    // **ここが食い違うと、置いてあるコースを 1 本も見つけられない。**
+    // 画面からは「表が無い」と区別が付かないまま緑で終わる。
+    const collect = readFileSync('packages/solver/src/skill-list-collect-cli.ts', 'utf8');
+    for (const source of [readFileSync(SKILL_LIST_CLI, 'utf8'), collect]) {
+      expect(source).toContain('readSkillListDataset');
+      expect(source).toContain('skillListVersion');
+    }
   });
 });

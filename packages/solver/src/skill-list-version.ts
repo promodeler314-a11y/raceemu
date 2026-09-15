@@ -12,8 +12,10 @@
  * 画面は配られた JSON の `version` を読むだけなので、ここを import してはならない。
  */
 import { createHash } from 'node:crypto';
-import type { FieldProfile } from '../../sim/src/field/field.ts';
-import type { SkillListDataset } from './skill-list.ts';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { defaultFieldProfile, type FieldProfile } from '../../sim/src/field/field.ts';
+import { SKILL_LIST_FORMAT, type SkillListDataset } from './skill-list.ts';
 
 /**
  * git の blob オブジェクト ID。`sha1("blob <長さ>\0" + 中身)`。
@@ -84,13 +86,36 @@ export function stableStringify(value: unknown): string {
 /**
  * 4 つの指紋から版の文字列を作る。
  *
- * ファイル名になるので短くする。衝突の心配は要らない（表は週に 1 つ増える程度で、
+ * 版のディレクトリの名前になるので短くする。衝突の心配は要らない（表は週に 1 つ増える程度で、
  * 12 桁の 16 進は 48 ビットある）。頭に形の版を付けるのは、形が変わったときに
  * 古い版と並べても取り違えないようにするためである。
  */
-export function skillListVersion(dataset: SkillListDataset, format = 1): string {
+export function skillListVersion(
+  dataset: SkillListDataset,
+  format: number = SKILL_LIST_FORMAT,
+): string {
   const digest = gitBlobSha1(
     [dataset.skills, dataset.courses, dataset.raceModel, dataset.fieldProfile].join('\n'),
   );
   return `v${format}-${digest.slice(0, 12)}`;
+}
+
+/**
+ * リポジトリの中の材料から 4 つの指紋を取る。
+ *
+ * **生成と取りまとめの両方がこれを呼ぶ。** 別々に書くと、分けて回した成果を
+ * まとめる側だけが違う版を計算し、置いてあるコースを 1 本も見つけられなくなる
+ * （画面からは「表が無い」と区別が付かない）。
+ */
+export function readSkillListDataset(root: string, gateCount: number): SkillListDataset {
+  return {
+    skills: gitBlobSha1(readFileSync(join(root, 'packages/data/assets/skills.json'))),
+    courses: gitBlobSha1(readFileSync(join(root, 'packages/data/assets/courses.json'))),
+    raceModel: raceModelFingerprint(
+      JSON.parse(
+        readFileSync(join(root, 'packages/sim/upstream/race-manifest.json'), 'utf8'),
+      ) as RaceManifest,
+    ),
+    fieldProfile: fieldProfileFingerprint(defaultFieldProfile(gateCount)),
+  };
 }

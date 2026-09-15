@@ -3,16 +3,23 @@ import { styleLabel, type Style } from '../../../../packages/sim/src/data/consta
 import { FIDELITY_MARK } from '../../../../packages/sim/src/skill/classify.ts';
 import type {
   SkillListCategory,
-  SkillListFile,
+  SkillListCourseFile,
+  SkillListIndex,
+  SkillListIndexEntry,
+  SkillListTier,
 } from '../../../../packages/solver/src/skill-list.ts';
 import {
   DEFAULT_SKILL_LIST_FILTER,
   FIXED_AXES,
   aggregate,
-  baselineTiers,
-  courseBreakdown,
+  courseLabel,
+  defaultCourseEntry,
+  entryKey,
   explainSkillListError,
-  fetchSkillList,
+  fetchSkillListCourse,
+  fetchSkillListIndex,
+  groupCoursesByLocation,
+  styleBreakdown,
   upgradeGroups,
   type SkillListAggregate,
   type SkillListFilter,
@@ -25,9 +32,13 @@ import { Panel } from './Inputs.tsx';
 /**
  * スキル一覧の面（[#83](https://github.com/promodeler314-a11y/raceemu/issues/83)）。
  *
- * 全スキル × 全コースの**単体評価を事前に計算した表**を読んで並べる。
+ * 全スキルの**単体評価をコースごとに事前計算した表**を読んで並べる。
  * ここでは 1 レースも走らせない。走らせる版は探索の面の「単体で足したときの効き」で、
  * あちらはいまの設定に縛られたその場の計算である。
+ *
+ * **軸はコースであって距離帯ではない。** 同じ距離帯でもコースが違えば直線の長さも
+ * 坂も違い、効くスキルが変わる。距離帯で畳んだ表はその違いを消してしまう。
+ * 表は 1 コース 1 枚で配られ、この面は選ばれた 1 枚だけを取りに行く。
  *
  * 置き場と絞り込みの軸、バ身の扱い、取れなかったときの振る舞いは
  * docs/webapp-design.md 6.6 節に書いた。
@@ -57,32 +68,63 @@ const seconds = (value: number) => `${value >= 0 ? '' : '-'}${Math.abs(value).to
 const percent = (value: number) => `${(value * 100).toFixed(1)} %`;
 
 /**
- * 表の取得は 1 回でよい。面を開き直すたびに数 MB を取り直さない。
+ * 取ったものを覚えておく。面を開き直すたびに取り直さない。
  *
  * 中身は版が変わらないかぎり変わらないので、読み込んだものを持っておく。
- * 失敗も覚える。置いていない配布物で、面を開くたびに取りに行っても
- * 結果は変わらない。
+ * 失敗も覚える。置いていない配布物で、面を開くたびに取りに行っても結果は変わらない。
+ * **コースごとに別の約束を持つ。** コースを行き来しても 1 度ずつしか取らない。
  */
-let cached: Promise<SkillListFile> | null = null;
-function loadSkillList(): Promise<SkillListFile> {
-  cached ??= fetchSkillList();
-  return cached;
+let cachedIndex: Promise<SkillListIndex> | null = null;
+const cachedCourses = new Map<string, Promise<SkillListCourseFile>>();
+
+function loadIndex(): Promise<SkillListIndex> {
+  cachedIndex ??= fetchSkillListIndex();
+  return cachedIndex;
+}
+
+function loadCourse(entry: SkillListIndexEntry): Promise<SkillListCourseFile> {
+  const key = entryKey(entry);
+  let promise = cachedCourses.get(key);
+  if (promise === undefined) {
+    promise = fetchSkillListCourse(entry);
+    cachedCourses.set(key, promise);
+  }
+  return promise;
 }
 
 /** テストと `pnpm e2e` から握り直せるようにする。画面からは呼ばない。 */
 export function resetSkillListCache(): void {
-  cached = null;
+  cachedIndex = null;
+  cachedCourses.clear();
+}
+
+function Unavailable({ message }: { message: string }) {
+  return (
+    <Panel title="スキル一覧">
+      <p
+        className="rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink"
+        data-testid="skill-list-error"
+        role="status"
+      >
+        {message}
+      </p>
+      <p className="mt-2 text-xs text-ink3">
+        他の面はこの表に依っていないので、そのまま使える。いまの設定でのスキルの効きは、
+        探索の面の「単体で足したときの効き」が実際に走らせて出す。
+      </p>
+    </Panel>
+  );
 }
 
 export function SkillListPanel() {
-  const [file, setFile] = useState<SkillListFile | null>(null);
+  const [index, setIndex] = useState<SkillListIndex | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let alive = true;
-    loadSkillList().then(
+    loadIndex().then(
       (loaded) => {
-        if (alive) setFile(loaded);
+        if (alive) setIndex(loaded);
       },
       (reason: unknown) => {
         if (alive) setError(explainSkillListError(reason));
@@ -93,43 +135,116 @@ export function SkillListPanel() {
     };
   }, []);
 
-  if (error !== null) {
+  if (error !== null) return <Unavailable message={error} />;
+  if (index === null) {
     return (
       <Panel title="スキル一覧">
+        <p className="text-xs text-ink3" data-testid="skill-list-loading">
+          事前に計算した表の一覧を読み込んでいる。
+        </p>
+      </Panel>
+    );
+  }
+  if (index.courses.length === 0) {
+    return (
+      <Unavailable message="表の一覧は取れたが、測ってあるコースが 1 つも無い。生成（pnpm skill-list）がまだ 1 コースも回っていない。" />
+    );
+  }
+  return <SkillListCoursePicker index={index} />;
+}
+
+/** コースを選び、選ばれた 1 枚を取ってくる。 */
+function SkillListCoursePicker({ index }: { index: SkillListIndex }) {
+  const [selected, setSelected] = useState<string>(
+    () => entryKey(defaultCourseEntry(index)!),
+  );
+  const [file, setFile] = useState<SkillListCourseFile | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const entry = useMemo(
+    () => index.courses.find((candidate) => entryKey(candidate) === selected) ?? index.courses[0]!,
+    [index, selected],
+  );
+  const groups = useMemo(() => groupCoursesByLocation(index.courses), [index]);
+
+  useEffect(() => {
+    let alive = true;
+    setFile(null);
+    setError(null);
+    loadCourse(entry).then(
+      (loaded) => {
+        if (alive) setFile(loaded);
+      },
+      (reason: unknown) => {
+        if (alive) setError(explainSkillListError(reason));
+      },
+    );
+    return () => {
+      alive = false;
+    };
+  }, [entry]);
+
+  return (
+    <Panel title="スキル一覧">
+      <p className="text-xs text-ink3">
+        全スキルを、決めておいた基準の個体で、<strong>コースごとに</strong> 1 つずつ足して測った表である。
+        ここでは走らせない。事前に計算したものを読んでいるだけなので、いまの設定は効かない。
+      </p>
+      <p className="mt-1 rounded-sm border border-rule bg-sunken px-3 py-2 text-xs text-ink2">
+        <strong>「単体」であって「限界」ではない。</strong>
+        何も持っていない構成へ 1 つだけ足したときの差なので、食い合うスキル
+        （最終直線の加速どうしなど）は過大に出る。既に何か持っている状態での効きは、
+        探索の面の「限界」の列が出す。
+      </p>
+
+      <div className="mt-3 flex flex-wrap items-end gap-3">
+        <label className="block">
+          <span className="block text-xs text-ink3">コース</span>
+          <select
+            className={`${selectCls} max-w-[16rem]`}
+            value={selected}
+            aria-label="コース（スキル一覧）"
+            data-testid="skill-list-course"
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            {groups.map((group) => (
+              <optgroup key={group.locationName} label={group.locationName}>
+                {group.entries.map((candidate) => (
+                  <option key={entryKey(candidate)} value={entryKey(candidate)}>
+                    {candidate.course.courseName}（{CATEGORY_LABEL[candidate.course.category]}）
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        <p className="pb-1 text-xs text-ink3" data-testid="skill-list-coverage">
+          測ってあるのは <span className="num">{index.courses.length}</span> コースである。
+          {' '}表はコースごとに 1 枚ずつ作るので、まだ回していないコースはここに出ない。
+        </p>
+      </div>
+
+      {error !== null && (
         <p
-          className="rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink"
+          className="mt-3 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink"
           data-testid="skill-list-error"
           role="status"
         >
           {error}
         </p>
-        <p className="mt-2 text-xs text-ink3">
-          他の面はこの表に依っていないので、そのまま使える。いまの設定でのスキルの効きは、
-          探索の面の「単体で足したときの効き」が実際に走らせて出す。
+      )}
+      {error === null && file === null && (
+        <p className="mt-3 text-xs text-ink3" data-testid="skill-list-loading">
+          {courseLabel(entry.course)} の表を読み込んでいる。
         </p>
-      </Panel>
-    );
-  }
-  if (file === null) {
-    return (
-      <Panel title="スキル一覧">
-        <p className="text-xs text-ink3" data-testid="skill-list-loading">
-          事前に計算した表を読み込んでいる。数 MB あるので少しかかる。
-        </p>
-      </Panel>
-    );
-  }
-  return <SkillListTable file={file} />;
+      )}
+      {file !== null && <SkillListTable file={file} index={index} />}
+    </Panel>
+  );
 }
 
-function SkillListTable({ file }: { file: SkillListFile }) {
-  // 基準個体は「段」で選ぶ。個体 1 つに固定すると、その個体が割り当てられた
-  // 距離帯とバ場の行しか当たらない（skillList.ts の matcher の注記）。
-  const tiers = useMemo(() => baselineTiers(file), [file]);
-  const [filter, setFilter] = useState<SkillListFilter>({
-    ...DEFAULT_SKILL_LIST_FILTER,
-    baseline: tiers[0]?.id ?? '',
-  });
+function SkillListTable({ file, index }: { file: SkillListCourseFile; index: SkillListIndex }) {
+  const [filter, setFilter] = useState<SkillListFilter>(DEFAULT_SKILL_LIST_FILTER);
   const [query, setQuery] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
   const [limit, setLimit] = useState(PAGE);
@@ -163,13 +278,13 @@ function SkillListTable({ file }: { file: SkillListFile }) {
     [shown],
   );
 
-  const categories = useMemo(
-    () => [...new Set(file.courses.map((course) => course.category))],
-    [file],
-  );
-  const surfaces = useMemo(() => [...new Set(file.courses.map((c) => c.surface))], [file]);
+  // 表が入れ替わったら先頭から見せ直す。開いた行も閉じる。
+  useEffect(() => {
+    setLimit(PAGE);
+    setOpened(null);
+  }, [file]);
 
-  // 絞り込みを変えたら先頭から見せ直す。開いた行も閉じる。
+  // 絞り込みを変えたときも同じ。
   const update = (patch: Partial<SkillListFilter>) => {
     setFilter((current) => ({ ...current, ...patch }));
     setLimit(PAGE);
@@ -181,39 +296,14 @@ function SkillListTable({ file }: { file: SkillListFile }) {
     setTab('solve');
   };
 
-  return (
-    <Panel title="スキル一覧">
-      <p className="text-xs text-ink3">
-        全スキルを、決めておいた基準の個体で、コースと脚質ごとに 1 つずつ足して測った表である。
-        ここでは走らせない。事前に計算したものを読んでいるだけなので、いまの設定は効かない。
-      </p>
-      <p className="mt-1 rounded-sm border border-rule bg-sunken px-3 py-2 text-xs text-ink2">
-        <strong>「単体」であって「限界」ではない。</strong>
-        何も持っていない構成へ 1 つだけ足したときの差なので、食い合うスキル
-        （最終直線の加速どうしなど）は過大に出る。既に何か持っている状態での効きは、
-        探索の面の「限界」の列が出す。
-      </p>
+  const baseline = file.baselines.find((candidate) => candidate.id === filter.baseline)
+    ?? file.baselines[0];
 
-      <Provenance file={file} />
+  return (
+    <>
+      <Provenance file={file} index={index} />
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
-        <label className="block">
-          <span className="block text-xs text-ink3">距離帯</span>
-          <select
-            className={selectCls}
-            value={filter.category}
-            aria-label="距離帯"
-            data-testid="skill-list-category"
-            onChange={(e) => update({ category: e.target.value as SkillListCategory | 'ALL' })}
-          >
-            <option value="ALL">すべて</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {CATEGORY_LABEL[category]}
-              </option>
-            ))}
-          </select>
-        </label>
         <label className="block">
           <span className="block text-xs text-ink3">脚質</span>
           <select
@@ -231,23 +321,7 @@ function SkillListTable({ file }: { file: SkillListFile }) {
             ))}
           </select>
         </label>
-        {surfaces.length > 1 && (
-          <label className="block">
-            <span className="block text-xs text-ink3">バ場</span>
-            <select
-              className={selectCls}
-              value={filter.surface}
-              aria-label="バ場（スキル一覧）"
-              data-testid="skill-list-surface"
-              onChange={(e) => update({ surface: Number(e.target.value) as 0 | 1 | 2 })}
-            >
-              <option value={0}>すべて</option>
-              <option value={1}>芝</option>
-              <option value={2}>ダート</option>
-            </select>
-          </label>
-        )}
-        {tiers.length > 1 && (
+        {file.baselines.length > 1 && (
           <label className="block">
             <span className="block text-xs text-ink3">基準の個体</span>
             <select
@@ -255,11 +329,11 @@ function SkillListTable({ file }: { file: SkillListFile }) {
               value={filter.baseline}
               aria-label="基準の個体"
               data-testid="skill-list-baseline"
-              onChange={(e) => update({ baseline: e.target.value })}
+              onChange={(e) => update({ baseline: e.target.value as SkillListTier })}
             >
-              {tiers.map((tier) => (
-                <option key={tier.id} value={tier.id}>
-                  {tier.label}
+              {file.baselines.map((candidate) => (
+                <option key={candidate.id} value={candidate.id}>
+                  {candidate.label}（スタミナ {candidate.stamina}）
                 </option>
               ))}
             </select>
@@ -293,18 +367,22 @@ function SkillListTable({ file }: { file: SkillListFile }) {
       </div>
 
       <p className="mt-2 text-xs text-ink3">
-        基準の個体は<strong>段だけを選ぶ</strong>。中身（とくにスタミナ）は距離帯とバ場で
-        変えてあり、どれが使われるかはコースから決まるためである（この版は{' '}
-        {file.baselines.length} 個体を {tiers.length} 段に分けて持っている）。
-        {FIXED_AXES.join('、')}の選択欄は出していない。この版が 1 通りしか測っておらず、
+        基準の個体のスタミナは<strong>このコースで実測した値</strong>である。
+        「普通」は最大スパートが五分五分で出る量（50 パーセンタイル）、「強い」はほぼ確実に出る量
+        （90 パーセンタイル）で、そのぶん速度・パワー・根性・賢さも上げてある
+        {baseline !== undefined && (
+          <>
+            （いまは {baseline.label}：スピード {baseline.speed} ・ スタミナ {baseline.stamina} ・
+            パワー {baseline.power} ・ 根性 {baseline.guts} ・ 賢さ {baseline.wisdom}）
+          </>
+        )}
+        。{FIXED_AXES.join('、')}の選択欄は出していない。この版が 1 通りしか測っておらず、
         選べても何も変わらないからである（バ場状態は
         {TRACK_CONDITION_LABEL[file.settings.trackCondition] ?? `不明（${file.settings.trackCondition}）`}
         で固定）。測る軸が増えれば選択欄も増える。
       </p>
 
-      {recommended.length > 0 && (
-        <Recommend rows={recommended} onPick={addAndSolve} />
-      )}
+      {recommended.length > 0 && <Recommend rows={recommended} onPick={addAndSolve} />}
 
       <div className="mt-4 overflow-x-auto">
         <table className="w-full min-w-[34rem] text-xs" data-testid="skill-list-table">
@@ -341,7 +419,7 @@ function SkillListTable({ file }: { file: SkillListFile }) {
                     <button
                       type="button"
                       className="text-left underline decoration-rule2 underline-offset-2"
-                      aria-label={`${nameOf(row.skillId)} のコースごとの内訳`}
+                      aria-label={`${nameOf(row.skillId)} の脚質ごとの内訳`}
                       onClick={() =>
                         setOpened((current) => (current === row.skillId ? null : row.skillId))
                       }
@@ -410,32 +488,35 @@ function SkillListTable({ file }: { file: SkillListFile }) {
         >
           #52
         </a>
-        ）、1 秒が何メートルかも走っている速度に依る。ここではコースの基準速度
-        （2000 m で 20.0 m/s）で置いているので、終盤の速い区間で稼いだぶんは小さめに出る。
+        ）、1 秒が何メートルかも走っている速度に依る。ここではこのコースの基準速度
+        （{file.course.distance} m なので{' '}
+        {(20.0 - (file.course.distance - 2000) / 1000).toFixed(1)} m/s）で置いているので、
+        終盤の速い区間で稼いだぶんは小さめに出る。
         <strong>秒のほうを見ること。</strong>
       </p>
       <p className="mt-1 text-xs text-ink3">
-        <strong>行が無いことには 2 通りある。</strong>走らせる前に落とした組（この条件では
-        確かに発動しない）が {file.screenedOut.toLocaleString('ja-JP')} 件あり、それとは別に、
-        この版がそもそも測っていない組がある。表に出ているのは測った組だけである。
+        <strong>行が無いことには 2 通りある。</strong>走らせる前に落とした組（このコースの
+        この条件では確かに発動しない）が {file.screenedOut.toLocaleString('ja-JP')} 件あり、
+        それとは別に、この版がそもそも測っていない組がある。表に出ているのは測った組だけである。
       </p>
 
       {groups.length > 0 && <UpgradeGroups groups={groups} />}
-    </Panel>
+    </>
   );
 }
 
 /** どの版の、何から作った表かを出す。値は相手の分布に依るので、版は隠さない。 */
-function Provenance({ file }: { file: SkillListFile }) {
+function Provenance({ file, index }: { file: SkillListCourseFile; index: SkillListIndex }) {
   return (
     <div
       className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink3"
       data-testid="skill-list-version"
     >
+      <span className="font-semibold text-ink2">{courseLabel(file.course)}</span>
       <span className="num">版 {file.version}</span>
       <span className="num">
-        {file.skillIds.length.toLocaleString('ja-JP')} スキル ・ {file.courses.length} コース ・{' '}
-        {file.columns.length.toLocaleString('ja-JP')} 行
+        {file.skillIds.length.toLocaleString('ja-JP')} スキル ・{' '}
+        {file.columns.length.toLocaleString('ja-JP')} 行 ・ 一覧に {index.courses.length} コース
       </span>
       <span className="num">{file.settings.trials.toLocaleString('ja-JP')} 試行 / 行</span>
       <span>{file.settings.useField ? '順位条件を判定した' : '順位条件は満たしている前提'}</span>
@@ -460,7 +541,7 @@ function Recommend({
     <div className="mt-3 rounded-sm border border-rule bg-surface p-3" data-testid="skill-list-recommend">
       <h3 className="text-xs font-semibold">持っていないもののうち、効率の高い順</h3>
       <p className="mt-1 text-xs text-ink3">
-        この絞り込みでの 1 ポイントあたりの短縮量が大きい順である。単体の評価なので、
+        このコースでの 1 ポイントあたりの短縮量が大きい順である。単体の評価なので、
         <strong>まとめて取ると足し算にはならない</strong>。組み合わせは探索の面で決める。
       </p>
       <div className="mt-2 flex flex-wrap gap-1">
@@ -484,28 +565,27 @@ function Recommend({
   );
 }
 
-/** 1 スキルのコースごとの内訳。行を押すとここに降りる。 */
+/** 1 スキルの脚質ごとの内訳。行を押すとここに降りる。 */
 function Breakdown({
   file,
   filter,
   row,
   onPick,
 }: {
-  file: SkillListFile;
+  file: SkillListCourseFile;
   filter: SkillListFilter;
   row: SkillListAggregate;
   onPick: (skillId: string) => void;
 }) {
-  const courses = useMemo(
-    () => courseBreakdown(file, filter, row.skillId),
+  const styles = useMemo(
+    () => styleBreakdown(file, filter, row.skillId),
     [file, filter, row.skillId],
   );
   return (
     <div data-testid="skill-list-breakdown">
       <div className="mb-1 flex flex-wrap items-center gap-2">
         <span className="text-xs font-semibold">
-          {nameOf(row.skillId)} ・ コースごとの内訳（{courses.length} コース ・ 平均に入った行{' '}
-          {row.rows}）
+          {nameOf(row.skillId)} ・ {courseLabel(file.course)} の脚質ごとの内訳
         </span>
         <button
           type="button"
@@ -521,7 +601,7 @@ function Breakdown({
           <thead className="text-ink3">
             <tr>
               <th scope="col" className="pb-1 pr-2 text-left font-normal">
-                コース
+                脚質
               </th>
               <th scope="col" className="pb-1 pr-2 text-right font-normal">
                 短縮（秒）
@@ -529,23 +609,27 @@ function Breakdown({
               <th scope="col" className="pb-1 pr-2 text-right font-normal">
                 バ身
               </th>
-              <th scope="col" className="pb-1 text-right font-normal">
+              <th scope="col" className="pb-1 pr-2 text-right font-normal">
                 発動率
+              </th>
+              <th scope="col" className="pb-1 text-right font-normal">
+                発動時（秒）
               </th>
             </tr>
           </thead>
           <tbody>
-            {courses.map((course) => (
-              <tr key={course.course.course} className="border-b border-rule last:border-0">
+            {styles.map((style) => (
+              <tr key={style.style} className="border-b border-rule last:border-0">
                 <th scope="row" className="py-1 pr-2 text-left font-normal">
-                  {course.course.locationName} {course.course.courseName}
+                  {style.label}
                 </th>
                 <td className="num py-1 pr-2 text-right">
-                  {seconds(course.mean)}
-                  <span className="text-ink3"> ± {(2 * course.stdError).toFixed(3)}</span>
+                  {seconds(style.mean)}
+                  <span className="text-ink3"> ± {(2 * style.stdError).toFixed(3)}</span>
                 </td>
-                <td className="num py-1 pr-2 text-right text-ink3">{course.bashin.toFixed(2)}</td>
-                <td className="num py-1 text-right">{percent(course.triggerRate)}</td>
+                <td className="num py-1 pr-2 text-right text-ink3">{style.bashin.toFixed(2)}</td>
+                <td className="num py-1 pr-2 text-right">{percent(style.triggerRate)}</td>
+                <td className="num py-1 text-right">{seconds(style.meanWhenTriggered)}</td>
               </tr>
             ))}
           </tbody>
@@ -553,7 +637,7 @@ function Breakdown({
       </div>
       <p className="mt-1 text-xs text-ink3">
         <strong>発動位置の分布はここには出せない。</strong>
-        配っている JSON が持っているのはコースごとの平均までで、位置は入っていない。
+        配っている JSON が持っているのは 1 行ぶんの平均までで、位置は入っていない。
         いまの設定での発動位置は、結果の面と詳細の面が実際に走らせて出す。
       </p>
     </div>

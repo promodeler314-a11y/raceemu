@@ -1,14 +1,16 @@
 # スキル一覧（issue #83）の事前計算した表を作り直す。
 #
-# 全スキル × 代表コース × 脚質 × 基準個体の単体評価は、4 コアで 1 時間を超える。
-# ブラウザでは回らないので、ここで回して apps/web/public/skill-list/<版>.json に
-# 置き、画面は動的に取る。中身は packages/solver/src/skill-list-cli.ts 参照。
+# 全スキル × **全 137 コース** × 脚質 × 基準個体の単体評価である。
+# 距離帯の代表を 1 本ずつ選ぶのはやめた（同じ距離帯でもコースが違えば効くスキルが違う）。
+# ブラウザでは回らないので、ここで回して apps/web/public/skill-list/<版>/<場>-<コース>.json に
+# 置き、画面はコースを選んでから 1 枚だけ動的に取る。
+# 中身は packages/solver/src/skill-list-cli.ts 参照。
 #
 # ## 毎週ではなく、材料が動いたときだけ回す
 #
 # 表の版は packages/solver/src/skill-list.ts の SkillListDataset が決める。
 # スキルデータ、コースデータ、本家の計算式の指紋、相手の束の作り方の 4 つである。
-# **どれも動いていない週に回しても、同じ値を何時間もかけて作り直すだけになる。**
+# **どれも動いていない週に回しても、同じ値を何十時間もかけて作り直すだけになる。**
 # 他の 3 本（sync-game-data / sync-skill-model / check-race-model）が週次なのは、
 # 本家が動いたかどうかを取りに行かないと分からないからで、こちらは 4 つとも
 # このリポジトリの中のファイルである。**動いたことは push で分かる。**
@@ -28,13 +30,19 @@
 #   指紋が動かないので起きない。** そのときは workflow_dispatch に force を付けて回す。
 # - sync-skill-model は読み取り用の分類モデルで、表の値には関わらない。順序は無い。
 #
-# ## 時間
+# ## 時間。だから分けて回す
 #
-# GitHub Actions の 1 ジョブの上限は 6 時間である。手元の 4 コアでの見積もりが約 71 分、
-# ubuntu-latest の 4 vCPU は 1.5〜2 倍遅いと見て 2〜2.5 時間なので、いまの範囲
-# （距離帯ごとの代表コース）なら収まる。timeout-minutes で 4 時間に切ってある。
-# **コース 137 本すべてに広げると 6 時間には収まらない。** そのときは matrix で
-# 距離帯ごとに分けるか、自前のランナーに移す。docs/deploy.md 6 節を参照。
+# GitHub Actions の 1 ジョブの上限は 6 時間である。137 コースを 1 本で回すと
+# 何十時間もかかるので、**コースを SHARDS 本に分けて matrix で同時に回す**。
+# 分片は飛ばし飛ばしに取る（packages/solver/src/skill-list-run.ts の shardCourses）ので、
+# 1 つの分片だけが長距離に偏ることはない。
+#
+# 分片はそれぞれ自分が測ったコースしか知らない。最後に collect が成果を集めて、
+# **置いてあるものを数え直して** index.json を書く（pnpm skill-list-collect）。
+#
+# **1 本こけても他は捨てない**（fail-fast: false）。表はコースごとに 1 枚なので、
+# 測れたコースだけが載った一覧になるだけである。画面はそれを「測っていない」と読む。
+# 何本こけたかは PR 本文に出す。
 name: build-skill-list
 
 on:
@@ -58,7 +66,7 @@ permissions:
   contents: write
   pull-requests: write
 
-# 2 つのマージが続けて入ったときに、数時間の生成が並んで走らないようにする。
+# 2 つのマージが続けて入ったときに、何時間もの生成が並んで走らないようにする。
 concurrency:
   group: build-skill-list
   cancel-in-progress: true
@@ -67,15 +75,68 @@ env:
   # 生成先。**この 1 か所だけが場所を決める。** 生成・差分・掃除・commit のどれかが
   # 別の場所を見ると、毎回「差分なし」で緑になる（check-race-model で実際に起きた形）。
   OUT_DIR: apps/web/public/skill-list
-  # リポジトリに残す世代数。JSON は数 MB あり、git は消しても履歴に残る。
+  # リポジトリに残す世代数。JSON は数十 MB あり、git は消しても履歴に残る。
   # 2 なら「いまの版」と「入れ替えの最中にまだ古い画面が取りに来る版」で足りる。
   # 理由は docs/deploy.md 6 節。
   KEEP: '2'
+  # コースを何本に分けるか。**下の matrix の並びと必ず同じ数にする**
+  # （食い違うと、測られないコースが黙って出る。test/workflows.test.ts が見張っている）。
+  SHARDS: '12'
+  # 1 行あたりの試行数。誤差は 1/sqrt(試行) でしか縮まないので、増やすと時間で効く。
+  TRIALS: '200'
 
 jobs:
-  build:
+  measure:
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 350
+    strategy:
+      # 1 本こけても他の分片は捨てない。測れたコースだけが載る。
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      # onnxruntime-node は Linux 版だけ CUDA 用の追加バイナリを取りに行く。
+      # ここでは使わないので落とす（deploy/Dockerfile と同じ）。
+      - run: pnpm install --frozen-lockfile
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+
+      - name: 分片を測る
+        run: |
+          # tee の終了状態が job の成否になってしまう。pipefail が無いと、
+          # 生成に失敗しても「差分なし」として緑で終わる。
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/shard"
+          pnpm skill-list \
+            --shard "${{ matrix.shard }}/$SHARDS" \
+            --trials "$TRIALS" \
+            --out "$RUNNER_TEMP/shard" | tee "$RUNNER_TEMP/shard-summary.txt"
+          # 生成が黙って何も書かなかった場合、まとめる段は「そのコースは測っていない」
+          # と判断して緑で終わる。1 枚も無い分片は必ず赤にする。
+          if [ -z "$(find "$RUNNER_TEMP/shard" -name '*.json' -not -name index.json -print -quit)" ]; then
+            echo "::error::分片 ${{ matrix.shard }} がコースを 1 枚も書いていない" >&2
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: skill-list-shard-${{ matrix.shard }}
+          path: ${{ runner.temp }}/shard
+          retention-days: 1
+
+  collect:
+    needs: measure
+    # 分片が何本かこけても、測れたぶんは配る。1 本も無ければ collect 自身が赤になる。
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,29 +151,37 @@ jobs:
           node-version: 22
           cache: pnpm
 
-      # onnxruntime-node は Linux 版だけ CUDA 用の追加バイナリを取りに行く。
-      # ここでは使わないので落とす（deploy/Dockerfile と同じ）。
       - run: pnpm install --frozen-lockfile
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
 
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: skill-list-shard-*
+          path: ${{ runner.temp }}/shards
+
       - id: generate
         run: |
-          # tee の終了状態が job の成否になってしまう。pipefail が無いと、
-          # 生成に失敗しても「差分なし」として緑で終わる。
           set -o pipefail
           mkdir -p "$OUT_DIR"
-          pnpm skill-list | tee /tmp/skill-list-summary.txt
-          # 生成が黙って何も書かなかった場合、次の段は「差分なし」と判断して
-          # 緑で終わる。表が 1 つも無い状態は必ず赤にする。
-          if ! ls "$OUT_DIR"/*.json >/dev/null 2>&1; then
-            echo "::error::$OUT_DIR に JSON が 1 つも無い。生成が書いていない" >&2
+          # 分片の成果を取り込んで、置いてあるものから一覧を数え直す。
+          # 分片の index.json は使わない（自分が測ったコースしか知らない）。
+          from=()
+          for dir in "$RUNNER_TEMP"/shards/*/; do
+            [ -d "$dir" ] || continue
+            from+=(--from "$dir")
+          done
+          if [ "${#from[@]}" -eq 0 ]; then
+            echo "::error::分片の成果が 1 つも無い。measure が全部こけている" >&2
             exit 1
           fi
+          echo "分片 ${#from[@]} / $SHARDS 本ぶんを取り込む" | tee /tmp/skill-list-summary.txt
+          pnpm skill-list-collect --trials "$TRIALS" --out "$OUT_DIR" \
+            "${from[@]}" | tee -a /tmp/skill-list-summary.txt
           # 版を教える 1 枚が無いと、画面はどの版を取ればよいか分からない。
-          # 表があっても配れていないのと同じなので、ここでも赤にする。
+          # 表があっても配れていないのと同じなので、ここで赤にする。
           if [ ! -f "$OUT_DIR/index.json" ]; then
-            echo "::error::$OUT_DIR/index.json が無い。生成が版の名前を教えていない" >&2
+            echo "::error::$OUT_DIR/index.json が無い。取りまとめが版の名前を教えていない" >&2
             exit 1
           fi
 
@@ -121,22 +190,31 @@ jobs:
           FORCE: ${{ inputs.force }}
         run: |
           set -o pipefail
-          # 新しい版は新しい名前で出る。追跡されていないファイルがあれば版が変わった。
+          # 新しい版は新しい名前のディレクトリで出る。追跡されていないものがあれば版が変わった。
           new_files=$(git ls-files --others --exclude-standard -- "$OUT_DIR")
           if [ -n "$new_files" ]; then
-            echo "新しい版: $new_files"
+            echo "新しい版がある"
             echo "changed=true" >> "$GITHUB_OUTPUT"
           elif [ "$FORCE" = "true" ]; then
             echo "版は変わらないが force が指定された"
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
-            # 版が同じなら、差分は生成時刻と所要時間だけである。
-            # 残すと中身の変わらない PR が毎回出るので捨てる。
-            echo "版は変わらなかった。生成時刻だけの差分を捨てる"
-            if ! git diff --quiet -- "$OUT_DIR"; then
+            # 版が同じでも、前より多くのコースを測れていれば配る値打ちがある。
+            # 生成時刻だけの差分なら捨てる（中身の変わらない PR が毎回出る）。
+            # index.json 以外が動いていれば、表そのものが変わっている。
+            # grep は当たらないと 1 を返すので、数だけ取って || true で受ける。
+            body=$(git diff --name-only -- "$OUT_DIR" | grep -cv '/index.json$' || true)
+            if git diff --quiet -- "$OUT_DIR"; then
+              echo "版もコースも変わらなかった"
+              echo "changed=false" >> "$GITHUB_OUTPUT"
+            elif [ "$body" -gt 0 ]; then
+              echo "表そのものが動いた（$body 枚）"
+              echo "changed=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "index.json の生成時刻だけの差分を捨てる"
               git checkout -- "$OUT_DIR"
+              echo "changed=false" >> "$GITHUB_OUTPUT"
             fi
-            echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
       - if: steps.diff.outputs.changed == 'true'
@@ -147,12 +225,12 @@ jobs:
           # ファイルの更新時刻が全部同じになるので、ファイルシステムからは決まらない。
           # 今回作ったものはまだ commit されていないので行が出ず、
           # スクリプトがいちばん新しいものとして扱う。
-          for f in "$OUT_DIR"/*.json; do
-            [ -e "$f" ] || continue
-            ts=$(git log -1 --format=%ct -- "$f")
-            if [ -n "$ts" ]; then echo "$ts $(basename "$f")"; fi
+          for d in "$OUT_DIR"/*/; do
+            [ -d "$d" ] || continue
+            ts=$(git log -1 --format=%ct -- "$d")
+            if [ -n "$ts" ]; then echo "$ts $(basename "$d")"; fi
           done > /tmp/skill-list-ages.txt
-          # 掃除そのものと、版を教える 1 枚（index.json）の整合は
+          # 掃除そのものと、版とコースの一覧（index.json）の整合は
           # scripts/prune-skill-list.mjs が持つ。**食い違っても誰も落ちない**ので、
           # 手元で動かせる所に出して test/workflows.test.ts に見張らせている。
           node scripts/prune-skill-list.mjs "$OUT_DIR" "$KEEP" \
@@ -164,6 +242,7 @@ jobs:
           GH_TOKEN: ${{ secrets.SYNC_PAT || github.token }}
           HAS_PAT: ${{ secrets.SYNC_PAT != '' }}
           REMOVED: ${{ steps.prune.outputs.removed }}
+          FAILED: ${{ needs.measure.result }}
         run: |
           BRANCH=chore/build-skill-list
 
@@ -192,13 +271,19 @@ jobs:
             echo
             echo "## 見るところ"
             echo
+            echo "- **表はコースごとに 1 枚である。** 距離帯では畳んでいない。同じ距離帯でもコースが違えば値が違うのが正しい。"
             echo "- **表の値は相手の分布に依る。** 相手の作り方を変えた回は、値がまとめて動くのが正しい。"
             echo "- **「単体」であって「限界」ではない。** 何も持っていない構成へ 1 つ足したときの差なので、食い合うスキルは過大に出る。"
-            echo "- 行が無いことには「発動しない」と「測っていない」の 2 通りがある。落とした数は JSON の screenedOut にある。"
+            echo "- 行が無いことには「発動しない」と「測っていない」の 2 通りがある。落とした数は各コースの JSON の screenedOut にある。"
+            if [ "$FAILED" != "success" ]; then
+              echo
+              echo "> [!WARNING]"
+              echo "> **分片の一部がこけている**（measure の結果は \`$FAILED\`）。載っていないコースがあるはずなので、index.json のコース数を確かめること。"
+            fi
             echo
-            echo "## 版を教える 1 枚"
+            echo "## 版とコースの一覧"
             echo
-            echo "画面は \`skill-list/index.json\` の \`latest\` を見てから本体を取りに行く。掃除のあとに \`generations\` を実際に残っているものへ合わせてある（scripts/prune-skill-list.mjs）。"
+            echo "画面は \`skill-list/index.json\` を見てから、選ばれたコースの 1 枚を取りに行く。掃除のあとに \`generations\` を実際に残っているものへ合わせてある（scripts/prune-skill-list.mjs）。"
             if [ -n "$REMOVED" ]; then
               echo
               echo "古い世代を落とした（リポジトリには $KEEP 世代だけ残す。理由は docs/deploy.md 6.5 節）:"
