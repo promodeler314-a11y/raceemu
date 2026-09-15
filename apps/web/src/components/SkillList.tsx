@@ -9,6 +9,7 @@ import {
   DEFAULT_SKILL_LIST_FILTER,
   FIXED_AXES,
   aggregate,
+  baselineTiers,
   courseBreakdown,
   explainSkillListError,
   fetchSkillList,
@@ -122,9 +123,12 @@ export function SkillListPanel() {
 }
 
 function SkillListTable({ file }: { file: SkillListFile }) {
+  // 基準個体は「段」で選ぶ。個体 1 つに固定すると、その個体が割り当てられた
+  // 距離帯とバ場の行しか当たらない（skillList.ts の matcher の注記）。
+  const tiers = useMemo(() => baselineTiers(file), [file]);
   const [filter, setFilter] = useState<SkillListFilter>({
     ...DEFAULT_SKILL_LIST_FILTER,
-    baseline: file.baselines[0]?.id ?? '',
+    baseline: tiers[0]?.id ?? '',
   });
   const [query, setQuery] = useState('');
   const [onlyMissing, setOnlyMissing] = useState(false);
@@ -234,6 +238,7 @@ function SkillListTable({ file }: { file: SkillListFile }) {
               className={selectCls}
               value={filter.surface}
               aria-label="バ場（スキル一覧）"
+              data-testid="skill-list-surface"
               onChange={(e) => update({ surface: Number(e.target.value) as 0 | 1 | 2 })}
             >
               <option value={0}>すべて</option>
@@ -242,18 +247,19 @@ function SkillListTable({ file }: { file: SkillListFile }) {
             </select>
           </label>
         )}
-        {file.baselines.length > 1 && (
+        {tiers.length > 1 && (
           <label className="block">
             <span className="block text-xs text-ink3">基準の個体</span>
             <select
               className={selectCls}
               value={filter.baseline}
               aria-label="基準の個体"
+              data-testid="skill-list-baseline"
               onChange={(e) => update({ baseline: e.target.value })}
             >
-              {file.baselines.map((baseline) => (
-                <option key={baseline.id} value={baseline.id}>
-                  {baseline.label}
+              {tiers.map((tier) => (
+                <option key={tier.id} value={tier.id}>
+                  {tier.label}
                 </option>
               ))}
             </select>
@@ -287,6 +293,9 @@ function SkillListTable({ file }: { file: SkillListFile }) {
       </div>
 
       <p className="mt-2 text-xs text-ink3">
+        基準の個体は<strong>段だけを選ぶ</strong>。中身（とくにスタミナ）は距離帯とバ場で
+        変えてあり、どれが使われるかはコースから決まるためである（この版は{' '}
+        {file.baselines.length} 個体を {tiers.length} 段に分けて持っている）。
         {FIXED_AXES.join('、')}の選択欄は出していない。この版が 1 通りしか測っておらず、
         選べても何も変わらないからである（バ場状態は
         {TRACK_CONDITION_LABEL[file.settings.trackCondition] ?? `不明（${file.settings.trackCondition}）`}
