@@ -38,6 +38,7 @@ import { canTrigger } from './screen.ts';
 import {
   NORMAL_SKELETON,
   baselinesFor,
+  staminaDemandFor,
   type StaminaTable,
 } from './skill-list-stamina.ts';
 import {
@@ -265,7 +266,7 @@ export function planSkillListCourse(
   let groups = 0;
   let rows = 0;
   let screenedOut = 0;
-  for (const baseline of baselinesFor(course, options.stamina)) {
+  for (const baseline of baselinesFor(course)) {
     if (!wantedBaselineTier(baseline.id, options.baselineIds)) continue;
     for (const style of options.styles) {
       const setting = buildRaceSetting(course, style, baseline, options);
@@ -392,7 +393,7 @@ export async function runSkillListCourse(
   const plan = planSkillListCourse(data, course, options);
   let doneGroups = 0;
 
-  for (const baseline of baselinesFor(course, options.stamina)) {
+  for (const baseline of baselinesFor(course)) {
     if (!wantedBaselineTier(baseline.id, options.baselineIds)) continue;
     const baselineIdx = baselines.length;
     baselines.push(baseline);
@@ -485,6 +486,8 @@ export async function runSkillListCourse(
   return {
     settings,
     course,
+    // 基準個体の値ではなく、表の読み方の説明として持つ（`StaminaDemand`）。
+    staminaDemand: staminaDemandFor(course, options.stamina),
     baselines,
     skillIds,
     styles,

@@ -49,10 +49,10 @@ export type SkillListTier = 'normal' | 'strong';
 export const SKILL_LIST_TIERS: readonly SkillListTier[] = ['normal', 'strong'];
 
 /**
- * 表が何から作られたかの識別子。**版はこの 4 つで決まる。**
+ * 表が何から作られたかの識別子。**版はこの 5 つで決まる。**
  *
  * データだけを見ていると計算式の変更を取りこぼし、計算式だけを見ていると
- * スキルが増えたことに気付けない。相手の分布は表の値そのものを動かす。
+ * スキルが増えたことに気付けない。相手の分布と基準個体は表の値そのものを動かす。
  * どれか 1 つでも動いたら作り直しである。
  */
 export interface SkillListDataset {
@@ -64,6 +64,14 @@ export interface SkillListDataset {
   readonly raceModel: string;
   /** 相手の束の作り方の識別子（`defaultFieldProfile` の中身から作る） */
   readonly fieldProfile: string;
+  /**
+   * 基準個体の決め方の識別子（`baselinePolicy` の中身から作る）。
+   *
+   * **これが無いと、基準を変えても版が同じままになる。** 骨格やスタミナの置き方を
+   * 動かせば表の値は全部変わるのに、スキルデータもコースデータも計算式も動いていない。
+   * 古い基準で測った表を新しい基準の表と取り違えることになる（しかも気付けない）。
+   */
+  readonly baseline: string;
 }
 
 /** 事前計算を回したときの条件。表の読み方がここで決まる。 */
@@ -111,6 +119,69 @@ export interface SkillListCourse {
   readonly surface: number;
   /** 距離帯。**絞り込みの手がかりであって、行を畳む単位ではない。** */
   readonly category: SkillListCategory;
+}
+
+/**
+ * そのコースで最大スパートに要るスタミナ。**基準個体の値ではない。**
+ *
+ * 基準個体のスタミナは育成の上限に置いてある（`skill-list-stamina.ts`）。
+ * これは「そのコースがどれだけスタミナを要るか」の実測で、
+ * **上限でも足りないコースがどれかを画面が言うため**に持つ。
+ * 京都 芝3000m は p50 が 1225 で上限の 1200 を超える。そこで回復スキルが
+ * 上位を占めるのは、モデルの都合ではなくコースの性質である。
+ */
+export interface StaminaDemand {
+  /** 50 パーセンタイル。五分五分で最大スパートが出る量。 */
+  readonly p50: number;
+  /** 90 パーセンタイル。ほぼ確実に出る量。 */
+  readonly p90: number;
+}
+
+/**
+ * 基準個体のスタミナ。**育成が終わった時点のステータスの上限である。**
+ *
+ * 契約の側に置いてあるのは、画面もテストもこの値で「余裕があるか」を判断するからである。
+ */
+export const STAMINA_CAP = 1200;
+
+/**
+ * 「スタミナが縛りになっていない」と言える余裕。**実測で決めた。**
+ *
+ * 最大スパートに要る量の 90 パーセンタイルからどれだけ離れているかで、
+ * 上位 20 に占める回復スキルの割合がこう動く（試行 100、脚質をまとめた平均）。
+ *
+ * | 余裕 | 回復 |
+ * | ---: | ---: |
+ * | 475〜1000 | 0〜5 % |
+ * | 250 | 15 % |
+ * | 50 | 85 % |
+ *
+ * 15 % は買えるスキルに占める回復スキルの割合とほぼ同じなので、250 を境にする。
+ * **連続した量に引いた線であって、ここに段差があるわけではない。**
+ *
+ * スタミナは最大スパートの可否だけでなく、スパートを保てる距離
+ * （`calcSpurtDistance`）にも効く。だから 90 パーセンタイルを超えたくらいでは
+ * まだ足りず、余裕が要る。
+ */
+export const STAMINA_MARGIN = 250;
+
+/** 基準個体のスタミナが、そのコースの要りようからどれだけ離れているか。 */
+export function staminaHeadroom(file: SkillListCourseFile): number | null {
+  const demand = file.staminaDemand;
+  const stamina = file.baselines[0]?.stamina;
+  if (demand === undefined || demand === null || stamina === undefined) return null;
+  return stamina - demand.p90;
+}
+
+/**
+ * このコースではスタミナが縛りになっているか。
+ *
+ * **true のコースで回復スキルが上位を占めるのは正しい。** 基準個体の置き方の
+ * せいではなく、上限まで持たせてもまだ足りないというコースの性質である。
+ */
+export function isStaminaBinding(file: SkillListCourseFile): boolean {
+  const headroom = staminaHeadroom(file);
+  return headroom !== null && headroom < STAMINA_MARGIN;
 }
 
 /** コースを一意に指す鍵。ファイル名にもこれを使う。 */
@@ -184,6 +255,12 @@ export interface SkillListCourseFile {
   readonly settings: SkillListSettings;
   readonly course: SkillListCourse;
   readonly baselines: readonly SkillListBaseline[];
+  /**
+   * そのコースがスタミナをどれだけ要るか。測っていなければ無い。
+   *
+   * 基準個体の値ではなく、**表の読み方の説明**である（`StaminaDemand`）。
+   */
+  readonly staminaDemand?: StaminaDemand | null;
   /** 列の添字が引く一覧 */
   readonly skillIds: readonly string[];
   readonly styles: readonly Style[];

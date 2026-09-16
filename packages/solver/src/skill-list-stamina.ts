@@ -1,29 +1,48 @@
 /**
- * 基準個体のスタミナ。**コースごとに実測した値を持つ。**
+ * 基準個体。**スタミナは足りている前提で置く。**
  *
- * 距離帯ごとに 1 つ置くと、同じ距離帯でもコースが違えば要るスタミナが違うこと
- * （東京 芝2000m と阪神 芝2200m は坂も直線も違う）を表に出せない。
- * スキル一覧の軸をコースにした以上、スタミナもコースごとである。
+ * ## なぜ上限に置くか
  *
- * ## どう決めるか
+ * 以前はコースごとに「最大スパートに要る最小スタミナ」を逆算し、その 50
+ * パーセンタイル（普通）と 90 パーセンタイル（強い）を採っていた。
+ * 「回復と速度のどちらも効く、いちばん読み分けが要る位置」のつもりだった。
  *
- * 逆算器（`critical.ts`、目標は最大スパート）でコースごとに
- * 「最大スパートに要る最小スタミナ」の分布を取り、分位点を採る。
+ * **その表は使いものにならなかった。** 配ってある 137 コースで数えると、
+ * 上位 20 に占める回復スキルは芝マイルで 94 %、芝中距離で 99.8 %、長距離で 100 %
+ * になる（短距離だけが母集団比の 19 % 前後）。ぎりぎり最大スパートに届く個体では
+ * スタミナ 1 点の値打ちが他のどの効果より大きいので、当然そうなる。
+ * 表が「回復を買え」としか言わないなら、読む値打ちが無い。
  *
- * - 普通：**50 パーセンタイル**。五分五分で最大スパートが出る個体になる。
- *   回復と速度のどちらも効く、いちばん読み分けが要る位置である。
- * - 強い：**90 パーセンタイル**。ほぼ確実に最大スパートが出る個体になる。
- *   ここでは回復はほとんど効かず、速度と加速の比べ合いになる。
+ * **そもそも前提が実際と違っていた。** いまのゲームではスタミナは足りるもので、
+ * 回復スキルは超長距離でなければ取らない。表もその前提に合わせる。
  *
- * 脚質でスタミナの要りようが違うが、基準個体は脚質をまたいで同じものを使うので、
- * **4 脚質ぶんをまとめて 1 つの分布**にする。
+ * そこでスタミナは**育成の上限（`STAMINA_CAP`）に置く**。
+ * 東京 芝2400m・先行で測り直すと、上位 20 の回復は次のように動く。
  *
- * ## なぜ JSON に置くか
+ * | スタミナ | 上位 20 の回復 |
+ * | --- | ---: |
+ * | 725（旧・普通 = p50） | 100 % |
+ * | 850（旧・強い = p90） | 85 % |
+ * | 1000 | 60 % |
+ * | 1200（上限） | **15 %** |
  *
- * 137 コースぶんを手でソースに写すことはできない。`pnpm skill-list --calibrate` が
- * この 1 枚を書き、commit する。**表を作るたびに測り直さない**（1 コース 10 秒でも
- * 137 コースで 25 分かかり、そのぶん表の測定が遅れる）。
- * コースのデータが動いたときだけ測り直す。
+ * 15 % は買えるスキルに占める回復スキルの割合とほぼ同じで、つまり回復が
+ * 特別扱いされていない状態である。中山 芝1200m では 0 %、京都 芝3000m では
+ * 上限でも 100 % になる。**「短距離・中距離では回復を取らない、超長距離では取る」
+ * という実際の姿が、そのまま出る。**
+ *
+ * ## 2 段は強さの幅だけを持つ
+ *
+ * スタミナを両段とも上限に置いたので、`normal` と `strong` の違いは
+ * 速さ・パワー・根性・賢さの +150 だけになった。
+ * **スタミナを段の軸に混ぜていたのが、そもそもの取り違えだった。**
+ *
+ * ## 実測は捨てない。読み方の説明に使う
+ *
+ * コースごとの「最大スパートに要るスタミナ」は測ってあり（`pnpm skill-list --calibrate`）、
+ * この 1 枚に残している。**上限でも足りないコースがどれかを言うため**である。
+ * 京都 芝3000m は p50 が 1225 で、上限の 1200 を超える。そこで回復が上位を占めるのは
+ * モデルの都合ではなく、そのコースの性質である。画面はそう書ける（`StaminaDemand`）。
  *
  * **このファイルは Node でしか動かない**（`node:fs` を読む）。画面から import してはならない。
  */
@@ -34,8 +53,9 @@ import type {
   SkillListBaseline,
   SkillListCourse,
   SkillListTier,
+  StaminaDemand,
 } from './skill-list.ts';
-import { skillListCourseKey } from './skill-list.ts';
+import { STAMINA_CAP, skillListCourseKey } from './skill-list.ts';
 
 /** 測ってある 1 コースぶん。値は 25 の倍数に丸めてある（分位点の誤差より細かい桁は意味を持たない）。 */
 export interface StaminaEntry {
@@ -88,52 +108,62 @@ export const NORMAL_SKELETON = { speed: 1100, power: 900, guts: 600, wisdom: 900
 /** 強いほうの上乗せ。勘である（上の注記）。 */
 export const STRONG_OFFSET = 150;
 
-/**
- * 実測の値を挟む上下の限り。
- *
- * - **下限 300**：短距離では逆算が探索の下限（200）に張り付く。スタミナが
- *   縛りになっていないので値そのものに意味が無く、そのまま使うとゲームに出てこない
- *   個体になる。**300 という値は勘である。**
- * - **上限 1200**：育成が終わった時点のステータスの上限である。芝の長距離は
- *   逆算が 1500 を超える値を返すが、そこまで持った個体は基準にならない。
- *   上限に張り付いたコースでは 2 段のスタミナが同じになる。それは
- *   「長距離では上限でも最大スパートが五分」という実測そのものである。
- */
-export const STAMINA_FLOOR = 300;
-export const STAMINA_CAP = 1200;
+// スタミナの上限は契約の側（`skill-list.ts`）にある。画面とテストも同じ値で
+// 「余裕があるか」を判断するからである。ここでは基準個体に置くだけ。
+export { STAMINA_CAP };
 
 const TIER_LABEL: Readonly<Record<SkillListTier, string>> = { normal: '普通', strong: '強い' };
 
-/** 測ってある値が無いときに使う。距離から粗く置くだけで、**実測ではない。** */
-export function fallbackStamina(distance: number): StaminaEntry {
-  // 2000 m でおよそ 600、1000 m ごとに 300 という当て推量である。
-  // ここに落ちるのは「まだ測っていないコース」だけなので、表には
-  // そのコースが載らない（CLI が測っていないコースを弾く）のが普通である。
-  const guess = Math.round(((distance - 1200) * 0.3 + 300) / 25) * 25;
-  return { normal: guess, strong: guess + 150, unreached: Number.NaN };
-}
-
-/** 1 コースぶんの基準個体 2 段を作る。 */
-export function baselinesFor(
-  course: SkillListCourse,
-  table: StaminaTable | null,
-): SkillListBaseline[] {
-  const entry =
-    table?.courses[skillListCourseKey(course.location, course.course)] ??
-    fallbackStamina(course.distance);
-  const clamp = (value: number) => Math.min(STAMINA_CAP, Math.max(STAMINA_FLOOR, value));
-  const normal = clamp(entry.normal);
-  const strong = Math.max(normal, clamp(entry.strong));
-  const make = (id: SkillListTier, offset: number, stamina: number): SkillListBaseline => ({
+/**
+ * 基準個体の 2 段。**スタミナは両段とも上限**で、違いは骨格の +150 だけである。
+ *
+ * コースを受け取るのは呼び出しの形を変えないためで、いまはコースによって変わらない。
+ */
+export function baselinesFor(course: SkillListCourse): SkillListBaseline[] {
+  void course;
+  const make = (id: SkillListTier, offset: number): SkillListBaseline => ({
     id,
     label: TIER_LABEL[id],
     speed: NORMAL_SKELETON.speed + offset,
-    stamina,
+    stamina: STAMINA_CAP,
     power: NORMAL_SKELETON.power + offset,
     guts: NORMAL_SKELETON.guts + offset,
     wisdom: NORMAL_SKELETON.wisdom + offset,
   });
-  return [make('normal', 0, normal), make('strong', STRONG_OFFSET, strong)];
+  return [make('normal', 0), make('strong', STRONG_OFFSET)];
+}
+
+/**
+ * そのコースで最大スパートに要るスタミナを引く。**基準個体には使わない。**
+ *
+ * 画面が「上限でも足りないコースだから回復が上位に来る」と言うために持つ
+ * （型は `skill-list.ts` にある。画面が読むからである）。測っていないコースでは `null`。
+ */
+export function staminaDemandFor(
+  course: SkillListCourse,
+  table: StaminaTable | null,
+): StaminaDemand | null {
+  const entry = table?.courses[skillListCourseKey(course.location, course.course)];
+  if (entry === undefined) return null;
+  // **事実だけを持つ。** 「縛りになっているか」の判断は契約側の
+  // `isStaminaBinding` にある（線の引き方を、表を作り直さずに直せるようにするため）。
+  return { p50: entry.normal, p90: entry.strong };
+}
+
+/**
+ * 基準個体の決め方そのものの指紋。**版に混ぜる。**
+ *
+ * 骨格や上限を動かすと表の値は全部変わるのに、スキルデータもコースデータも
+ * 計算式も動いていないので、これを混ぜないと版が同じままになる。
+ * 古い基準で測った表を新しい基準の表と取り違える（しかも気付けない）。
+ */
+export function baselinePolicy(): string {
+  return JSON.stringify({
+    skeleton: NORMAL_SKELETON,
+    strongOffset: STRONG_OFFSET,
+    stamina: 'cap',
+    cap: STAMINA_CAP,
+  });
 }
 
 /** 測ってあるコースかどうか。**測っていないコースは表に載せない。** */

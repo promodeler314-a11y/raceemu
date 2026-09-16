@@ -56,12 +56,14 @@ on:
   push:
     branches: [main]
     paths:
-      # SkillListDataset の 4 つ。ここを増やすときは test/workflows.test.ts も直す
+      # SkillListDataset の 5 つ。ここを増やすときは test/workflows.test.ts も直す
       # （契約の項目数と食い違うと落ちる）。
       - packages/data/assets/skills.json
       - packages/data/assets/courses.json
       - packages/sim/upstream/race-manifest.json
       - packages/sim/src/field/field.ts
+      # 基準個体の決め方（骨格・スタミナの置き方）。動かすと表の値は全部変わる。
+      - packages/solver/src/skill-list-stamina.ts
   workflow_dispatch:
     inputs:
       force:

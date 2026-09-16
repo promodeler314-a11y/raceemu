@@ -15,6 +15,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { defaultFieldProfile, type FieldProfile } from '../../sim/src/field/field.ts';
+import { baselinePolicy } from './skill-list-stamina.ts';
 import { SKILL_LIST_FORMAT, type SkillListDataset } from './skill-list.ts';
 
 /**
@@ -84,7 +85,7 @@ export function stableStringify(value: unknown): string {
 }
 
 /**
- * 4 つの指紋から版の文字列を作る。
+ * 5 つの指紋から版の文字列を作る。
  *
  * 版のディレクトリの名前になるので短くする。衝突の心配は要らない（表は週に 1 つ増える程度で、
  * 12 桁の 16 進は 48 ビットある）。頭に形の版を付けるのは、形が変わったときに
@@ -95,7 +96,13 @@ export function skillListVersion(
   format: number = SKILL_LIST_FORMAT,
 ): string {
   const digest = gitBlobSha1(
-    [dataset.skills, dataset.courses, dataset.raceModel, dataset.fieldProfile].join('\n'),
+    [
+      dataset.skills,
+      dataset.courses,
+      dataset.raceModel,
+      dataset.fieldProfile,
+      dataset.baseline,
+    ].join('\n'),
   );
   return `v${format}-${digest.slice(0, 12)}`;
 }
@@ -117,5 +124,6 @@ export function readSkillListDataset(root: string, gateCount: number): SkillList
       ) as RaceManifest,
     ),
     fieldProfile: fieldProfileFingerprint(defaultFieldProfile(gateCount)),
+    baseline: gitBlobSha1(baselinePolicy()),
   };
 }

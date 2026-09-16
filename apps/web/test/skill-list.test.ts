@@ -5,6 +5,12 @@ import type {
   SkillListIndex,
   SkillListIndexEntry,
 } from '../../../packages/solver/src/skill-list.ts';
+import { loadGameData } from '../../../packages/data/src/node.ts';
+import {
+  STAMINA_CAP,
+  isStaminaBinding,
+  staminaHeadroom,
+} from '../../../packages/solver/src/skill-list.ts';
 import {
   SkillListBroken,
   SkillListUnavailable,
@@ -39,7 +45,7 @@ import {
  * 面が「置いていない」と言って終わればよい。
  */
 
-const DATASET = { skills: 'aaa', courses: 'bbb', raceModel: 'ccc', fieldProfile: 'ddd' };
+const DATASET = { skills: 'aaa', courses: 'bbb', raceModel: 'ccc', fieldProfile: 'ddd', baseline: 'eee' };
 const SETTINGS = { trials: 200, useField: true, gateCount: 9, seed: 1, trackCondition: 1 } as const;
 
 /**
@@ -418,6 +424,8 @@ describe('バ身の換算', () => {
 const SKILL_LIST_DIR = 'apps/web/public/skill-list';
 const SKILL_LIST_INDEX = `${SKILL_LIST_DIR}/index.json`;
 const HAS_REAL = existsSync(SKILL_LIST_INDEX);
+/** 回復スキルを見分けるために要る。実データを読む一群でしか使わない。 */
+const gameData = loadGameData();
 describe.skipIf(!HAS_REAL)('配ってある実データ', () => {
   // **飛ばす回でも describe の中身は読まれる。** 無いファイルをここで開くと、
   // 表を置いていない枝で「飛ばした」ではなく「集めるのに失敗した」で赤になる。
@@ -500,6 +508,61 @@ describe.skipIf(!HAS_REAL)('配ってある実データ', () => {
     const first = new Map(a.map((row) => [row.skillId, row.mean]));
     const moved = b.filter((row) => first.get(row.skillId) !== row.mean);
     expect(moved.length).toBeGreaterThan(0);
+  });
+
+  it('基準個体はスタミナが足りていて、段で変わらない', () => {
+    for (const entry of index.courses) {
+      const file = load(entry);
+      const stamina = [...new Set(file.baselines.map((b) => b.stamina))];
+      // 段の違いは速さ・パワー・根性・賢さだけである。
+      expect(stamina, `${courseLabel(file.course)} の段でスタミナが違う`).toHaveLength(1);
+      expect(stamina[0]).toBe(STAMINA_CAP);
+    }
+  });
+
+  it('コースが要るスタミナが各コースに載っている', () => {
+    // 「上限でも足りないコースだから回復が上位に来る」と画面が言うために要る。
+    for (const entry of index.courses) {
+      const file = load(entry);
+      expect(file.staminaDemand, `${courseLabel(file.course)}`).toBeTruthy();
+      expect(file.staminaDemand!.p90).toBeGreaterThanOrEqual(file.staminaDemand!.p50);
+      expect(staminaHeadroom(file)).toBe(STAMINA_CAP - file.staminaDemand!.p90);
+    }
+  });
+
+  /**
+   * **上位が回復スキルで埋まっていないこと。**
+   *
+   * ここは一度壊していた。基準個体をぎりぎり最大スパートに届く量にしていたころ、
+   * 上位 20 に占める回復スキルは芝中距離で 99.8 %、長距離で 100 % になり、
+   * 表が「回復を買え」としか言わなくなっていた。スタミナ 1 点の値打ちが
+   * 他のどの効果より大きくなるので当然そうなる。
+   *
+   * 上限でも足りないコース（超長距離）は別で、そこでは回復が上位に来るのが正しい。
+   * だから `overCap` で分けて見る。**分けずに一律で見ると、直っていないのに緑になるか、
+   * 正しいのに赤になるかのどちらかになる。**
+   */
+  it('上限で足りるコースでは、上位が回復スキルで埋まらない', () => {
+    const heal = new Set(
+      gameData.skills
+        .filter((skill) => skill.invokes.some((iv) => iv.effects.some((e) => e.type === 'heal')))
+        .map((skill) => skill.id),
+    );
+    expect(heal.size).toBeGreaterThan(0);
+
+    const worst: string[] = [];
+    let checked = 0;
+    for (const entry of index.courses) {
+      const file = load(entry);
+      // スタミナが縛りになっているコースは外す。そこで回復が上位に来るのは正しい。
+      if (isStaminaBinding(file)) continue;
+      checked += 1;
+      const top = aggregate(file, { style: 'ALL', baseline: 'normal' }).slice(0, 20);
+      const share = top.filter((row) => heal.has(row.skillId)).length / top.length;
+      if (share > 0.5) worst.push(`${courseLabel(file.course)} ${(100 * share).toFixed(0)} %`);
+    }
+    expect(checked).toBeGreaterThan(0);
+    expect(worst).toEqual([]);
   });
 
   it('1 枚は画面が動的に取れる大きさに収まっている', () => {

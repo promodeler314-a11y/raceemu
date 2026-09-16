@@ -121,22 +121,40 @@ if (shardArg !== '') {
 
 const stamina = loadStaminaTable();
 
+/**
+ * いまの材料から決まる版。**--list と --limit の「済」判定に要る。**
+ *
+ * 版が違う表は別の材料（スキルデータ・計算式・相手の分布・基準個体）で測ったもので、
+ * 混ぜてはならない。版を見ずに数えると、基準個体を変えた直後に
+ * **全コースを「測ってある」と誤判定して 1 本も回さない。**
+ */
+const dataset: SkillListDataset = readSkillListDataset(root, gateCount);
+const version = skillListVersion(dataset);
+
+/** この版で既に測ってあるコースの鍵。 */
+function measuredKeys(): Set<string> {
+  const index = readSkillListIndex(outDir);
+  if (index === null || index.version !== version) return new Set();
+  return new Set(
+    index.courses.map((entry) => skillListCourseKey(entry.course.location, entry.course.course)),
+  );
+}
+
 /* ------------------------------------------------------------------ */
 /* --list：走らせずに、何が測ってあるかだけを出す                     */
 /* ------------------------------------------------------------------ */
 
 if (flag('list')) {
   const index = readSkillListIndex(outDir);
-  const done = new Set(
-    (index?.courses ?? []).map((entry) =>
-      skillListCourseKey(entry.course.location, entry.course.course),
-    ),
-  );
+  const done = measuredKeys();
   console.log(`置き場: ${outDir}`);
+  console.log(`いまの材料の版: ${version}`);
   console.log(
     index === null
       ? `${SKILL_LIST_INDEX_NAME} が無い。まだ 1 コースも測っていない。`
-      : `版 ${index.version} ・ 測ってあるコース ${index.courses.length} / ${everyCourse.length}`,
+      : index.version === version
+        ? `置いてある版 ${index.version} ・ 測ってあるコース ${done.size} / ${everyCourse.length}`
+        : `置いてある版 ${index.version} は別の材料のもの。${index.courses.length} コースあるが数えない。`,
   );
   console.log(
     `基準個体のスタミナ: ${Object.keys(stamina?.courses ?? {}).length}` +
@@ -228,8 +246,10 @@ try {
     if (missing.length > 0) {
       // 当て推量のスタミナで測った表は「どの個体の話か」に答えられない。
       // 黙って当て推量に落ちるより、測ってから来いと言うほうがよい。
+      // 基準個体のスタミナは上限に置くのでこの表には依らないが、
+      // 「このコースは上限でも足りない」を画面が言うために要る（StaminaDemand）。
       console.error(
-        `基準個体のスタミナを測っていないコースが ${missing.length} 本ある。` +
+        `コースが要るスタミナを測っていないコースが ${missing.length} 本ある。` +
           `先に pnpm skill-list --calibrate を回すこと。`,
       );
       for (const course of missing.slice(0, 10)) {
@@ -248,14 +268,9 @@ try {
       onProgress: (message) => console.log(message),
     };
 
-    const index = readSkillListIndex(outDir);
     if (limitArg !== '') {
-      // 既に測ってあるコースは飛ばしてから頭を取る。回すたびに先が進む。
-      const done = new Set(
-        (index?.courses ?? []).map((entry) =>
-          skillListCourseKey(entry.course.location, entry.course.course),
-        ),
-      );
+      // **この版で**既に測ってあるコースは飛ばしてから頭を取る。回すたびに先が進む。
+      const done = measuredKeys();
       courses = courses
         .filter((course) => !done.has(skillListCourseKey(course.location, course.course)))
         .slice(0, Number(limitArg));
@@ -273,8 +288,6 @@ try {
     );
     console.log('');
 
-    const dataset: SkillListDataset = readSkillListDataset(root, gateCount);
-    const version = skillListVersion(dataset);
     console.log(`版: ${version}`);
     console.log(`  skills.json      ${dataset.skills}`);
     console.log(`  courses.json     ${dataset.courses}`);
@@ -287,7 +300,7 @@ try {
     const startedAll = performance.now();
 
     for (const [i, course] of courses.entries()) {
-      const baselines = baselinesFor(course, stamina);
+      const baselines = baselinesFor(course);
       console.log(
         `[${i + 1}/${courses.length}] ${course.locationName} ${course.courseName}` +
           `（${course.category} ・ スタミナ ${baselines.map((b) => `${b.label} ${b.stamina}`).join(' / ')}）`,

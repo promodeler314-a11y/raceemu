@@ -9,6 +9,8 @@ import { DerivedSetting, defaultSystemSetting, emptyPassiveBonus } from '../../s
 import { canTrigger } from '../src/screen.ts';
 import {
   SKILL_LIST_FORMAT,
+  STAMINA_CAP,
+  STAMINA_MARGIN,
   isSkillListCourseFile,
   isSkillListIndex,
   skillListCourseKey,
@@ -37,13 +39,12 @@ import {
   type SkillListOptions,
 } from '../src/skill-list-run.ts';
 import {
-  STAMINA_CAP,
-  STAMINA_FLOOR,
+  baselinePolicy,
   baselinesFor,
   hasStamina,
   loadStaminaTable,
   saveStaminaTable,
-  type StaminaTable,
+  staminaDemandFor,
 } from '../src/skill-list-stamina.ts';
 import {
   fieldProfileFingerprint,
@@ -74,10 +75,12 @@ describe('版の識別子', () => {
       courses: 'b'.repeat(40),
       raceModel: 'c'.repeat(40),
       fieldProfile: 'd'.repeat(40),
+      baseline: 'e'.repeat(40),
     };
     expect(skillListVersion(dataset)).toBe(skillListVersion({ ...dataset }));
     // 鍵の並びが違っても同じ
     const reordered = {
+      baseline: dataset.baseline,
       fieldProfile: dataset.fieldProfile,
       raceModel: dataset.raceModel,
       courses: dataset.courses,
@@ -92,10 +95,12 @@ describe('版の識別子', () => {
       courses: 'b'.repeat(40),
       raceModel: 'c'.repeat(40),
       fieldProfile: 'd'.repeat(40),
+      baseline: 'e'.repeat(40),
     };
     const base = skillListVersion(dataset);
-    for (const key of ['skills', 'courses', 'raceModel', 'fieldProfile'] as const) {
-      expect(skillListVersion({ ...dataset, [key]: 'e'.repeat(40) })).not.toBe(base);
+    for (const key of ['skills', 'courses', 'raceModel', 'fieldProfile', 'baseline'] as const) {
+      // 置き換える値は見本のどれとも違うものにする（同じだと差し替えにならない）。
+      expect(skillListVersion({ ...dataset, [key]: 'z'.repeat(40) })).not.toBe(base);
     }
   });
 
@@ -105,6 +110,7 @@ describe('版の識別子', () => {
       courses: 'b'.repeat(40),
       raceModel: 'c'.repeat(40),
       fieldProfile: 'd'.repeat(40),
+      baseline: 'e'.repeat(40),
     };
     expect(skillListVersion(dataset)).toMatch(new RegExp(`^v${SKILL_LIST_FORMAT}-`));
     expect(skillListVersion(dataset, 1)).not.toBe(skillListVersion(dataset, 2));
@@ -202,7 +208,7 @@ describe('対象のコース', () => {
   });
 });
 
-describe('基準個体のスタミナ', () => {
+describe('基準個体', () => {
   const courses = allSkillListCourses(data);
   const tokyo2400 = selectCourses(courses, { keys: ['10006-10606'] })[0]!;
 
@@ -213,31 +219,61 @@ describe('基準個体のスタミナ', () => {
     expect(missing.map((c) => skillListCourseKey(c.location, c.course))).toEqual([]);
   });
 
-  it('段は normal と strong の 2 つだけで、強いほうが全能力で上回る', () => {
-    const [normal, strong] = baselinesFor(tokyo2400, loadStaminaTable());
+  it('段は normal と strong の 2 つだけで、強いほうが速さ・パワー・根性・賢さで上回る', () => {
+    const [normal, strong] = baselinesFor(tokyo2400);
     expect([normal!.id, strong!.id]).toEqual(['normal', 'strong']);
     expect(strong!.speed).toBeGreaterThan(normal!.speed);
     expect(strong!.power).toBeGreaterThan(normal!.power);
-    expect(strong!.stamina).toBeGreaterThanOrEqual(normal!.stamina);
+    expect(strong!.guts).toBeGreaterThan(normal!.guts);
+    expect(strong!.wisdom).toBeGreaterThan(normal!.wisdom);
   });
 
-  it('上下の限りで挟む。上限に張り付いたら 2 段が同じになる', () => {
-    const table: StaminaTable = {
-      generatedAt: '',
-      settings: { trials: 1, seed: 1, gateCount: 9, trackCondition: 1, from: 200, to: 1600, step: 5 },
-      courses: { '10006-10606': { normal: 5, strong: 9999, unreached: 0 } },
-    };
-    const [normal, strong] = baselinesFor(tokyo2400, table);
-    expect(normal!.stamina).toBe(STAMINA_FLOOR);
-    expect(strong!.stamina).toBe(STAMINA_CAP);
+  it('スタミナはどのコースでも両段とも上限である', () => {
+    // **ここが表の読み方を決める。** ぎりぎり最大スパートに届く個体にすると、
+    // スタミナ 1 点の値打ちが他のどの効果より大きくなり、上位が回復スキルで埋まる
+    // （実測で芝中距離 99.8 %）。いまのゲームではスタミナは足りるものなので、
+    // 上限に置いて「足りている個体」の話にする。
+    for (const course of [tokyo2400, ...courses.slice(0, 20)]) {
+      for (const baseline of baselinesFor(course)) {
+        expect(baseline.stamina, `${skillListCourseKey(course.location, course.course)}`).toBe(
+          STAMINA_CAP,
+        );
+      }
+    }
+  });
 
-    const capped: StaminaTable = {
-      ...table,
-      courses: { '10006-10606': { normal: 9999, strong: 9999, unreached: 0 } },
+  it('段はスタミナで分かれない（強さの軸だけを持つ）', () => {
+    const [normal, strong] = baselinesFor(tokyo2400);
+    expect(strong!.stamina).toBe(normal!.stamina);
+  });
+
+  it('コースが要るスタミナは、基準個体とは別に読める', () => {
+    const table = loadStaminaTable();
+    // 京都 芝3000m(外) は上限でも五分に届かない。そこで回復が上位に来るのは
+    // モデルの都合ではなくコースの性質である、と画面が言えるようにしておく。
+    const kyoto3000 = selectCourses(courses, { keys: ['10008-10810'] })[0]!;
+    const long = staminaDemandFor(kyoto3000, table)!;
+    expect(long.p50).toBeGreaterThan(STAMINA_CAP);
+
+    const middle = staminaDemandFor(tokyo2400, table)!;
+    expect(middle.p50).toBeLessThan(STAMINA_CAP);
+    // 上限との余裕で「縛りになっているか」が決まる。上限を超えるかどうかではない
+    // （札幌 芝2600m は p90 が 1150 で上限内だが、余裕は 50 しかなく回復が上位に来る）。
+    expect(STAMINA_CAP - long.p90).toBeLessThan(STAMINA_MARGIN);
+    expect(STAMINA_CAP - middle.p90).toBeGreaterThanOrEqual(STAMINA_MARGIN);
+
+    // 測っていないコースでは無い、と言えること。
+    expect(staminaDemandFor(tokyo2400, null)).toBeNull();
+  });
+
+  it('基準個体の決め方が版に混ざっている', () => {
+    // **混ぜないと、基準を変えても版が同じままになる。** 表の値は全部変わるのに
+    // スキルデータもコースデータも計算式も動いていないので、取り違えに気付けない。
+    const dataset = {
+      skills: 'a', courses: 'b', raceModel: 'c', fieldProfile: 'd', baseline: 'e',
     };
-    const both = baselinesFor(tokyo2400, capped);
-    expect(both[0]!.stamina).toBe(STAMINA_CAP);
-    expect(both[1]!.stamina).toBe(STAMINA_CAP);
+    expect(skillListVersion(dataset)).not.toBe(skillListVersion({ ...dataset, baseline: 'f' }));
+    expect(baselinePolicy()).toContain(String(STAMINA_CAP));
   });
 
   it('書き足しても、前に測ったコースは消えない', () => {
@@ -290,7 +326,7 @@ describe('事前計算', () => {
   };
 
   it('走らせずに落とした数が screen.ts の判定と合う', async () => {
-    const baseline = baselinesFor(course, stamina)[0]!;
+    const baseline = baselinesFor(course)[0]!;
     const setting = buildRaceSetting(course, 'SEN', baseline, options);
     const derived = new DerivedSetting(setting, emptyPassiveBonus(), data.trackData);
     const expected = purchasableSkills(data).filter((skill) => !canTrigger(skill, derived)).length;
@@ -309,7 +345,7 @@ describe('事前計算', () => {
       format: SKILL_LIST_FORMAT,
       version: 'test',
       generatedAt: new Date(0).toISOString(),
-      dataset: { skills: '', courses: '', raceModel: '', fieldProfile: '' },
+      dataset: { skills: '', courses: '', raceModel: '', fieldProfile: '', baseline: '' },
       ...body,
     };
     expect(isSkillListCourseFile(file)).toBe(true);
@@ -371,7 +407,7 @@ describe('事前計算', () => {
 
 describe('版とコースの一覧', () => {
   const dataset: SkillListDataset = {
-    skills: 'a', courses: 'b', raceModel: 'c', fieldProfile: 'd',
+    skills: 'a', courses: 'b', raceModel: 'c', fieldProfile: 'd', baseline: 'e',
   };
   const settings: SkillListSettings = {
     trials: 200, useField: true, gateCount: 9, seed: 1, trackCondition: 1,

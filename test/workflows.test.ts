@@ -202,9 +202,9 @@ describe('スキル一覧の表の作り直し', () => {
   });
 
   it('版を決める材料が 1 つ残らず見張られている', () => {
-    // 契約の材料は 4 つ（skills / courses / raceModel / fieldProfile）。
+    // 契約の材料は 5 つ（skills / courses / raceModel / fieldProfile / baseline）。
     // 増やしたらワークフローの paths も増やす。
-    expect(datasetFields.length).toBeGreaterThanOrEqual(4);
+    expect(datasetFields.length).toBeGreaterThanOrEqual(5);
     expect(watched).toHaveLength(datasetFields.length);
     for (const path of watched) {
       // 綴りを間違えても GitHub は黙って「一致しない」と答えるだけなので、
@@ -220,6 +220,8 @@ describe('スキル一覧の表の作り直し', () => {
       'packages/sim/upstream/race-manifest.json',
       // 相手の束の作り方（defaultFieldProfile）
       'packages/sim/src/field/field.ts',
+      // 基準個体の決め方（baselinePolicy）
+      'packages/solver/src/skill-list-stamina.ts',
     ]) {
       expect(watched).toContain(path);
     }
