@@ -7,21 +7,44 @@ import { nodeWorkerFactory } from '../../sim/src/parallel/node.ts';
 import { WorkerPool } from '../../sim/src/parallel/pool.ts';
 import { DerivedSetting, defaultSystemSetting, emptyPassiveBonus } from '../../sim/src/setting.ts';
 import { canTrigger } from '../src/screen.ts';
-import { isSkillListIndex, skillListRowAt, type SkillListFile } from '../src/skill-list.ts';
+import {
+  SKILL_LIST_FORMAT,
+  isSkillListCourseFile,
+  isSkillListIndex,
+  skillListCourseKey,
+  skillListRowAt,
+  type SkillListCourseFile,
+  type SkillListDataset,
+  type SkillListIndexEntry,
+  type SkillListSettings,
+} from '../src/skill-list.ts';
 import {
   SKILL_LIST_INDEX_NAME,
+  collectSkillListCourses,
   nextSkillListIndex,
+  readSkillListIndex,
   updateSkillListIndex,
+  writeSkillListCourse,
 } from '../src/skill-list-index.ts';
 import {
-  REPRESENTATIVE_COURSES,
-  baselinesFor,
+  allSkillListCourses,
   buildRaceSetting,
-  planSkillList,
+  planSkillListCourse,
   purchasableSkills,
-  runSkillList,
+  runSkillListCourse,
+  selectCourses,
+  shardCourses,
   type SkillListOptions,
 } from '../src/skill-list-run.ts';
+import {
+  STAMINA_CAP,
+  STAMINA_FLOOR,
+  baselinesFor,
+  hasStamina,
+  loadStaminaTable,
+  saveStaminaTable,
+  type StaminaTable,
+} from '../src/skill-list-stamina.ts';
 import {
   fieldProfileFingerprint,
   gitBlobSha1,
@@ -76,6 +99,17 @@ describe('版の識別子', () => {
     }
   });
 
+  it('形の版が変われば版の文字列も変わる。古い版と並べても取り違えない', () => {
+    const dataset = {
+      skills: 'a'.repeat(40),
+      courses: 'b'.repeat(40),
+      raceModel: 'c'.repeat(40),
+      fieldProfile: 'd'.repeat(40),
+    };
+    expect(skillListVersion(dataset)).toMatch(new RegExp(`^v${SKILL_LIST_FORMAT}-`));
+    expect(skillListVersion(dataset, 1)).not.toBe(skillListVersion(dataset, 2));
+  });
+
   it('計算に関わらないファイルが動いても計算側の指紋は変わらない', () => {
     const files = {
       'race/build.gradle.kts': '1'.repeat(40),
@@ -109,10 +143,139 @@ describe('版の識別子', () => {
   });
 });
 
+describe('対象のコース', () => {
+  const courses = allSkillListCourses(data);
+
+  it('距離帯の代表ではなく全コースを数え上げる', () => {
+    // 芝とダートで 137 本ある。距離帯 4 × バ場 2 の 8 本ではない。
+    expect(courses.length).toBe(137);
+    expect(new Set(courses.map((c) => c.location)).size).toBeGreaterThan(1);
+    // 同じ距離帯に複数のコースが並ぶことが、この表の存在理由である。
+    const turfMiddle = courses.filter((c) => c.surface === 1 && c.category === 'MIDDLE');
+    expect(turfMiddle.length).toBeGreaterThan(8);
+  });
+
+  it('並びは場 → バ場 → 距離で、呼ぶたびに変わらない', () => {
+    // 選択欄の並びがここで決まり、分割（shardCourses）もこの並びに乗る。
+    expect(allSkillListCourses(data)).toEqual(courses);
+    const rank = (c: (typeof courses)[number]) => [c.location, c.surface, c.distance, c.course];
+    for (let i = 1; i < courses.length; i++) {
+      const a = rank(courses[i - 1]!);
+      const b = rank(courses[i]!);
+      const first = a.findIndex((value, k) => value !== b[k]);
+      expect(first).toBeGreaterThanOrEqual(0);
+      expect(a[first]!).toBeLessThan(b[first]!);
+    }
+  });
+
+  it('鍵で 1 本だけ指せる', () => {
+    const picked = selectCourses(courses, { keys: ['10006-10606'] });
+    expect(picked.length).toBe(1);
+    expect(picked[0]!.locationName).toBe('東京');
+    expect(picked[0]!.distance).toBe(2400);
+  });
+
+  it('絞り込みは重ねると狭くなる', () => {
+    const turf = selectCourses(courses, { surfaces: [1] });
+    const turfMiddle = selectCourses(courses, { surfaces: [1], categories: ['MIDDLE'] });
+    expect(turf.length).toBeLessThan(courses.length);
+    expect(turfMiddle.length).toBeLessThan(turf.length);
+    expect(turfMiddle.every((c) => c.surface === 1 && c.category === 'MIDDLE')).toBe(true);
+    // 指定しない軸は素通しにする（空配列と undefined を同じに扱う）
+    expect(selectCourses(courses, { surfaces: [] })).toEqual(courses);
+  });
+
+  it('分割は重なりも漏れも無く、どの分片もほぼ同じ本数になる', () => {
+    const count = 8;
+    const shards = Array.from({ length: count }, (_, i) => shardCourses(courses, i, count));
+    const all = shards.flat();
+    expect(all.length).toBe(courses.length);
+    expect(new Set(all.map((c) => skillListCourseKey(c.location, c.course))).size).toBe(
+      courses.length,
+    );
+    const sizes = shards.map((shard) => shard.length);
+    expect(Math.max(...sizes) - Math.min(...sizes)).toBeLessThanOrEqual(1);
+    // 飛ばし飛ばしに取るので、1 つの分片が長距離に偏らない
+    for (const shard of shards) {
+      expect(new Set(shard.map((c) => c.location)).size).toBeGreaterThan(1);
+    }
+  });
+});
+
+describe('基準個体のスタミナ', () => {
+  const courses = allSkillListCourses(data);
+  const tokyo2400 = selectCourses(courses, { keys: ['10006-10606'] })[0]!;
+
+  it('リポジトリに置いてある表が全コースぶんそろっている', () => {
+    const table = loadStaminaTable();
+    expect(table).not.toBeNull();
+    const missing = courses.filter((course) => !hasStamina(course, table));
+    expect(missing.map((c) => skillListCourseKey(c.location, c.course))).toEqual([]);
+  });
+
+  it('段は normal と strong の 2 つだけで、強いほうが全能力で上回る', () => {
+    const [normal, strong] = baselinesFor(tokyo2400, loadStaminaTable());
+    expect([normal!.id, strong!.id]).toEqual(['normal', 'strong']);
+    expect(strong!.speed).toBeGreaterThan(normal!.speed);
+    expect(strong!.power).toBeGreaterThan(normal!.power);
+    expect(strong!.stamina).toBeGreaterThanOrEqual(normal!.stamina);
+  });
+
+  it('上下の限りで挟む。上限に張り付いたら 2 段が同じになる', () => {
+    const table: StaminaTable = {
+      generatedAt: '',
+      settings: { trials: 1, seed: 1, gateCount: 9, trackCondition: 1, from: 200, to: 1600, step: 5 },
+      courses: { '10006-10606': { normal: 5, strong: 9999, unreached: 0 } },
+    };
+    const [normal, strong] = baselinesFor(tokyo2400, table);
+    expect(normal!.stamina).toBe(STAMINA_FLOOR);
+    expect(strong!.stamina).toBe(STAMINA_CAP);
+
+    const capped: StaminaTable = {
+      ...table,
+      courses: { '10006-10606': { normal: 9999, strong: 9999, unreached: 0 } },
+    };
+    const both = baselinesFor(tokyo2400, capped);
+    expect(both[0]!.stamina).toBe(STAMINA_CAP);
+    expect(both[1]!.stamina).toBe(STAMINA_CAP);
+  });
+
+  it('書き足しても、前に測ったコースは消えない', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'skill-list-stamina-'));
+    const path = join(dir, 'stamina.json');
+    const settings = {
+      trials: 200, seed: 1, gateCount: 9, trackCondition: 1, from: 200, to: 1600, step: 5,
+    };
+    try {
+      saveStaminaTable({ 'a-1': { normal: 300, strong: 400, unreached: 0 } }, settings, path);
+      const second = saveStaminaTable(
+        { 'b-2': { normal: 500, strong: 600, unreached: 0 } },
+        settings,
+        path,
+      );
+      expect(Object.keys(second.courses)).toEqual(['a-1', 'b-2']);
+      expect(loadStaminaTable(path)?.courses['a-1']?.normal).toBe(300);
+      // 同じ鍵をもう一度測ったら上書きする
+      const third = saveStaminaTable(
+        { 'a-1': { normal: 999, strong: 999, unreached: 0 } },
+        settings,
+        path,
+      );
+      expect(third.courses['a-1']!.normal).toBe(999);
+      expect(Object.keys(third.courses)).toEqual(['a-1', 'b-2']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('無い・壊れている 1 枚は null として読む', () => {
+    expect(loadStaminaTable(join(tmpdir(), 'ありえないパス.json'))).toBeNull();
+  });
+});
+
 describe('事前計算', () => {
-  const course = REPRESENTATIVE_COURSES.find(
-    (c) => c.surface === 1 && c.category === 'SHORT',
-  )!;
+  const stamina = loadStaminaTable();
+  const course = selectCourses(allSkillListCourses(data), { keys: ['10005-10501'] })[0]!;
   const options: SkillListOptions = {
     trials: 20,
     seed: 1,
@@ -120,39 +283,43 @@ describe('事前計算', () => {
     trackCondition: 1,
     useField: false,
     samples: 16,
-    courses: [course],
     styles: ['SEN'],
     baselineIds: ['normal'],
     maxSkills: 4,
+    stamina,
   };
 
   it('走らせずに落とした数が screen.ts の判定と合う', async () => {
-    const baseline = baselinesFor(course).find((b) => b.id.startsWith('normal'))!;
+    const baseline = baselinesFor(course, stamina)[0]!;
     const setting = buildRaceSetting(course, 'SEN', baseline, options);
     const derived = new DerivedSetting(setting, emptyPassiveBonus(), data.trackData);
     const expected = purchasableSkills(data).filter((skill) => !canTrigger(skill, derived)).length;
 
     // 数え上げだけの口と、実際に走らせた結果の両方が同じ数を返すこと。
-    expect(planSkillList(data, options).screenedOut).toBe(expected);
-    const body = await runSkillList(pool, data, system, options);
+    expect(planSkillListCourse(data, course, options).screenedOut).toBe(expected);
+    const body = await runSkillListCourse(pool, data, system, course, options);
     expect(body.screenedOut).toBe(expected);
     // 打ち切りは「測っていない」であって「発動しない」ではないので、落とした数には入らない。
     expect(body.columns.length).toBe(4);
   });
 
   it('列の形から行に戻せる', async () => {
-    const body = await runSkillList(pool, data, system, options);
-    const file: SkillListFile = {
-      format: 1,
+    const body = await runSkillListCourse(pool, data, system, course, options);
+    const file: SkillListCourseFile = {
+      format: SKILL_LIST_FORMAT,
       version: 'test',
       generatedAt: new Date(0).toISOString(),
       dataset: { skills: '', courses: '', raceModel: '', fieldProfile: '' },
       ...body,
     };
+    expect(isSkillListCourseFile(file)).toBe(true);
     expect(file.columns.length).toBeGreaterThan(0);
+    // 1 枚が 1 コースなので、コースは列ではなく 1 か所に持つ
+    expect(file.course.course).toBe(course.course);
+    expect('course' in file.columns).toBe(false);
     // すべての列が同じ長さである
     for (const column of [
-      file.columns.skill, file.columns.baseline, file.columns.style, file.columns.course,
+      file.columns.skill, file.columns.baseline, file.columns.style,
       file.columns.mean, file.columns.stdError, file.columns.triggerRate,
       file.columns.meanWhenTriggered, file.columns.cost, file.columns.fidelity,
     ]) {
@@ -164,9 +331,8 @@ describe('事前計算', () => {
       const row = skillListRowAt(file, i);
       const skill = skills.find((s) => s.id === row.skillId);
       expect(skill).toBeDefined();
-      expect(row.baseline.startsWith('normal')).toBe(true);
+      expect(row.baseline).toBe('normal');
       expect(row.style).toBe('SEN');
-      expect(row.course).toBe(course.course);
       expect(['exact', 'approximate', 'dropped']).toContain(row.fidelity);
       // 費用は表示どおりの総額。割引は当てていない。
       expect(row.cost).toBe(skill!.sp);
@@ -182,49 +348,130 @@ describe('事前計算', () => {
   });
 
   it('同じ指定なら同じ表になる', async () => {
-    const first = await runSkillList(pool, data, system, options);
-    const second = await runSkillList(pool, data, system, options);
+    const first = await runSkillListCourse(pool, data, system, course, options);
+    const second = await runSkillListCourse(pool, data, system, course, options);
     expect(second.columns.mean).toEqual(first.columns.mean);
     expect(second.columns.triggerRate).toEqual(first.columns.triggerRate);
   });
+
+  it('コースが違えば値も違う。距離帯で畳んではならない', async () => {
+    // 同じ距離帯（芝中距離）の別のコース。畳んでよいなら、ここが同じになるはずである。
+    const [a, b] = [
+      selectCourses(allSkillListCourses(data), { keys: ['10006-10606'] })[0]!,
+      selectCourses(allSkillListCourses(data), { keys: ['10006-10604'] })[0]!,
+    ];
+    expect(a.category).toBe(b.category);
+    expect(a.surface).toBe(b.surface);
+    const wide: SkillListOptions = { ...options, maxSkills: 12 };
+    const first = await runSkillListCourse(pool, data, system, a, wide);
+    const second = await runSkillListCourse(pool, data, system, b, wide);
+    expect(second.columns.mean).not.toEqual(first.columns.mean);
+  });
 });
 
-describe('版を教える 1 枚', () => {
-  it('無いところに作ると、新しい版だけの 1 要素になる', () => {
-    expect(nextSkillListIndex(null, 'v1-aaa.json')).toEqual({
-      latest: 'v1-aaa.json',
-      generations: ['v1-aaa.json'],
+describe('版とコースの一覧', () => {
+  const dataset: SkillListDataset = {
+    skills: 'a', courses: 'b', raceModel: 'c', fieldProfile: 'd',
+  };
+  const settings: SkillListSettings = {
+    trials: 200, useField: true, gateCount: 9, seed: 1, trackCondition: 1,
+  };
+  const entry = (location: number, course: number, version = 'v2-aaa'): SkillListIndexEntry => ({
+    course: {
+      location, course,
+      locationName: '場', courseName: `芝${course}m`,
+      distance: 2000, surface: 1, category: 'MIDDLE',
+    },
+    file: `${version}/${skillListCourseKey(location, course)}.json`,
+    rows: 10,
+    trials: 200,
+    generatedAt: new Date(0).toISOString(),
+  });
+
+  it('無いところに作ると、いま測ったコースだけが載る', () => {
+    const index = nextSkillListIndex(null, {
+      version: 'v2-aaa', dataset, settings, entries: [entry(1, 2)],
     });
+    expect(isSkillListIndex(index)).toBe(true);
+    expect(index.courses.length).toBe(1);
+    expect(index.generations).toEqual(['v2-aaa']);
   });
 
-  it('既にあるなら先頭に足し、2 世代だけ残す', () => {
-    const first = nextSkillListIndex(null, 'v1-aaa.json');
-    const second = nextSkillListIndex(first, 'v1-bbb.json');
-    expect(second).toEqual({ latest: 'v1-bbb.json', generations: ['v1-bbb.json', 'v1-aaa.json'] });
-    const third = nextSkillListIndex(second, 'v1-ccc.json');
-    expect(third).toEqual({ latest: 'v1-ccc.json', generations: ['v1-ccc.json', 'v1-bbb.json'] });
+  it('同じ版なら足していく。分けて回したぶんが積み上がる', () => {
+    const first = nextSkillListIndex(null, {
+      version: 'v2-aaa', dataset, settings, entries: [entry(1, 2)],
+    });
+    const second = nextSkillListIndex(first, {
+      version: 'v2-aaa', dataset, settings, entries: [entry(1, 3)],
+    });
+    expect(second.courses.map((e) => e.course.course)).toEqual([2, 3]);
+    // 同じコースをもう一度測ったら置き換わり、二重に並ばない
+    const again = nextSkillListIndex(second, {
+      version: 'v2-aaa', dataset, settings, entries: [{ ...entry(1, 2), rows: 99 }],
+    });
+    expect(again.courses.length).toBe(2);
+    expect(again.courses.find((e) => e.course.course === 2)!.rows).toBe(99);
   });
 
-  it('同じ版をもう一度作っても二重に並ばない', () => {
-    const first = nextSkillListIndex(null, 'v1-aaa.json');
-    const again = nextSkillListIndex(first, 'v1-aaa.json');
-    expect(again.generations).toEqual(['v1-aaa.json']);
+  it('版が変われば前のコースは引き継がない。値を混ぜてはならない', () => {
+    const first = nextSkillListIndex(null, {
+      version: 'v2-aaa', dataset, settings, entries: [entry(1, 2), entry(1, 3)],
+    });
+    const second = nextSkillListIndex(first, {
+      version: 'v2-bbb', dataset, settings, entries: [entry(1, 4, 'v2-bbb')],
+    });
+    expect(second.courses.map((e) => e.course.course)).toEqual([4]);
+    // 入れ替えの最中に古い画面が取りに来るので、前の版は 1 世代だけ残す
+    expect(second.generations).toEqual(['v2-bbb', 'v2-aaa']);
+    const third = nextSkillListIndex(second, {
+      version: 'v2-ccc', dataset, settings, entries: [],
+    });
+    expect(third.generations).toEqual(['v2-ccc', 'v2-bbb']);
   });
 
   it('壊れた 1 枚は作り直す', () => {
-    expect(nextSkillListIndex({ latest: 42 }, 'v1-aaa.json').generations).toEqual(['v1-aaa.json']);
-    expect(isSkillListIndex(nextSkillListIndex('こわれている', 'v1-aaa.json'))).toBe(true);
+    const next = { version: 'v2-aaa', dataset, settings, entries: [entry(1, 2)] };
+    expect(nextSkillListIndex({ format: 1, latest: 'v1-aaa.json' }, next).courses.length).toBe(1);
+    expect(isSkillListIndex(nextSkillListIndex('こわれている', next))).toBe(true);
+    // format 1 の 1 枚は読まない。中身の作りが違う。
+    expect(isSkillListIndex({ latest: 'v1-aaa.json', generations: [] })).toBe(false);
   });
 
-  it('ファイルに書いて読み直せる', () => {
+  it('コース 1 枚を書いて、置いてあるものから一覧を作り直せる', () => {
     const dir = mkdtempSync(join(tmpdir(), 'skill-list-'));
     try {
-      updateSkillListIndex(dir, 'v1-aaa.json');
-      const written = updateSkillListIndex(dir, 'v1-bbb.json');
-      const read: unknown = JSON.parse(readFileSync(join(dir, SKILL_LIST_INDEX_NAME), 'utf8'));
-      expect(isSkillListIndex(read)).toBe(true);
-      expect(read).toEqual(written);
-      expect(written.generations).toEqual(['v1-bbb.json', 'v1-aaa.json']);
+      const file: SkillListCourseFile = {
+        format: SKILL_LIST_FORMAT,
+        version: 'v2-aaa',
+        generatedAt: new Date(0).toISOString(),
+        dataset,
+        settings,
+        course: {
+          location: 10006, course: 10606,
+          locationName: '東京', courseName: '芝2400m',
+          distance: 2400, surface: 1, category: 'MIDDLE',
+        },
+        baselines: [], skillIds: [], styles: [], fidelities: [],
+        columns: {
+          length: 0, skill: [], baseline: [], style: [], mean: [], stdError: [],
+          triggerRate: [], meanWhenTriggered: [], cost: [], fidelity: [],
+        },
+        screenedOut: 0, races: 0, elapsedMs: 0,
+      };
+      const written = writeSkillListCourse(dir, file);
+      expect(written.file).toBe('v2-aaa/10006-10606.json');
+
+      updateSkillListIndex(dir, {
+        version: 'v2-aaa', dataset, settings, entries: [written],
+      });
+      const read = readSkillListIndex(dir);
+      expect(read?.courses.length).toBe(1);
+      const raw: unknown = JSON.parse(readFileSync(join(dir, SKILL_LIST_INDEX_NAME), 'utf8'));
+      expect(isSkillListIndex(raw)).toBe(true);
+
+      // 分けて回したジョブの成果をまとめるときは、置いてあるものから数え直す
+      expect(collectSkillListCourses(dir, 'v2-aaa')).toEqual([written]);
+      expect(collectSkillListCourses(dir, 'v2-無い')).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

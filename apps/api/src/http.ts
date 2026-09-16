@@ -99,8 +99,8 @@ function toView(job: Job) {
 /**
  * その場で縮める下限。これより小さいと縮めても効かず、CPU だけ使う。
  *
- * スキル一覧の表（apps/web/public/skill-list/<版>.json、issue #83）は数 MB ある。
- * 縮めずに出すと、ここだけで他の資産を全部合わせたより大きくなる。
+ * スキル一覧の表（apps/web/public/skill-list/<版>/<場>-<コース>.json、issue #83）は
+ * 1 コース 200 KB 前後ある。縮めずに出すと、ここだけで他の資産を全部合わせたより大きくなる。
  * 数字の並びなので gzip がよく効く。
  */
 const GZIP_MIN_BYTES = 64 * 1024;
@@ -113,7 +113,7 @@ const GZIP_TYPES = new Set(['.html', '.js', '.css', '.json', '.svg']);
 /**
  * 名前が変わらないまま中身が入れ替わるファイル。**長く持たせてはいけない。**
  *
- * 資産は名前にハッシュが入り、スキル一覧の表は名前に版が入るので、どちらも不変にできる。
+ * 資産は名前にハッシュが入り、スキル一覧の表はパスに版が入るので、どちらも不変にできる。
  * 入口だけが同じ名前のまま差し替わる。`index.html` と、スキル一覧の版を教える
  * `skill-list/index.json`（`SkillListIndex`、issue #83）がそれである。
  * 不変として配ると、**新しい版を置いても画面が古い名前を取りに行き続ける。**
@@ -432,7 +432,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       const stripped = path.replace(/^\/[^/]+/, '') || '/';
       if (stripped !== path && (await serveStatic(config.staticRoot, stripped, req, res))) return;
       // **データを求める経路は index.html に落とさない。**
-      // スキル一覧の表（/skill-list/<版>.json、issue #83）のように取りに行く JSON は、
+      // スキル一覧の表（/skill-list/<版>/<場>-<コース>.json、issue #83）のように取りに行く JSON は、
       // 無いときに HTML が 200 で返ると、読む側は JSON.parse が投げるまで気付けない。
       // 版を取り違えたのか配り忘れたのかも分からなくなるので、ここで 404 にする。
       if (extname(path) === '.json') {

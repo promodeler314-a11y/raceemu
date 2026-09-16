@@ -1,0 +1,699 @@
+{
+  "generatedAt": "2026-09-15T14:14:55.382Z",
+  "settings": {
+    "trials": 200,
+    "seed": 1,
+    "gateCount": 9,
+    "trackCondition": 1,
+    "from": 200,
+    "to": 1600,
+    "step": 5
+  },
+  "courses": {
+    "10001-10101": {
+      "normal": 225,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10001-10102": {
+      "normal": 350,
+      "strong": 425,
+      "unreached": 0
+    },
+    "10001-10103": {
+      "normal": 500,
+      "strong": 575,
+      "unreached": 0
+    },
+    "10001-10104": {
+      "normal": 650,
+      "strong": 725,
+      "unreached": 0
+    },
+    "10001-10105": {
+      "normal": 1025,
+      "strong": 1150,
+      "unreached": 0.006
+    },
+    "10001-10106": {
+      "normal": 200,
+      "strong": 225,
+      "unreached": 0
+    },
+    "10001-10107": {
+      "normal": 475,
+      "strong": 550,
+      "unreached": 0
+    },
+    "10001-10108": {
+      "normal": 850,
+      "strong": 950,
+      "unreached": 0.004
+    },
+    "10002-10201": {
+      "normal": 200,
+      "strong": 200,
+      "unreached": 0
+    },
+    "10002-10202": {
+      "normal": 200,
+      "strong": 275,
+      "unreached": 0
+    },
+    "10002-10203": {
+      "normal": 425,
+      "strong": 500,
+      "unreached": 0
+    },
+    "10002-10204": {
+      "normal": 525,
+      "strong": 625,
+      "unreached": 0
+    },
+    "10002-10205": {
+      "normal": 900,
+      "strong": 1050,
+      "unreached": 0.004
+    },
+    "10002-10206": {
+      "normal": 200,
+      "strong": 225,
+      "unreached": 0
+    },
+    "10002-10207": {
+      "normal": 250,
+      "strong": 375,
+      "unreached": 0
+    },
+    "10002-10208": {
+      "normal": 900,
+      "strong": 1000,
+      "unreached": 0.004
+    },
+    "10003-10301": {
+      "normal": 200,
+      "strong": 250,
+      "unreached": 0
+    },
+    "10003-10302": {
+      "normal": 225,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10003-10303": {
+      "normal": 300,
+      "strong": 400,
+      "unreached": 0
+    },
+    "10003-10304": {
+      "normal": 250,
+      "strong": 350,
+      "unreached": 0
+    },
+    "10003-10305": {
+      "normal": 375,
+      "strong": 475,
+      "unreached": 0
+    },
+    "10003-10306": {
+      "normal": 625,
+      "strong": 725,
+      "unreached": 0
+    },
+    "10003-10307": {
+      "normal": 475,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10003-10308": {
+      "normal": 775,
+      "strong": 875,
+      "unreached": 0
+    },
+    "10003-10309": {
+      "normal": 850,
+      "strong": 950,
+      "unreached": 0.004
+    },
+    "10003-10310": {
+      "normal": 225,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10003-10311": {
+      "normal": 525,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10003-10312": {
+      "normal": 900,
+      "strong": 1025,
+      "unreached": 0.004
+    },
+    "10004-10401": {
+      "normal": 225,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10004-10402": {
+      "normal": 500,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10004-10403": {
+      "normal": 625,
+      "strong": 700,
+      "unreached": 0
+    },
+    "10004-10404": {
+      "normal": 975,
+      "strong": 1075,
+      "unreached": 0.004
+    },
+    "10004-10405": {
+      "normal": 200,
+      "strong": 275,
+      "unreached": 0
+    },
+    "10004-10406": {
+      "normal": 325,
+      "strong": 425,
+      "unreached": 0
+    },
+    "10004-10407": {
+      "normal": 900,
+      "strong": 1000,
+      "unreached": 0.004
+    },
+    "10005-10501": {
+      "normal": 200,
+      "strong": 250,
+      "unreached": 0
+    },
+    "10005-10502": {
+      "normal": 300,
+      "strong": 400,
+      "unreached": 0
+    },
+    "10005-10503": {
+      "normal": 300,
+      "strong": 400,
+      "unreached": 0
+    },
+    "10005-10504": {
+      "normal": 425,
+      "strong": 550,
+      "unreached": 0
+    },
+    "10005-10505": {
+      "normal": 600,
+      "strong": 725,
+      "unreached": 0
+    },
+    "10005-10506": {
+      "normal": 725,
+      "strong": 900,
+      "unreached": 0.003
+    },
+    "10005-10507": {
+      "normal": 1300,
+      "strong": 1550,
+      "unreached": 0.61
+    },
+    "10005-10508": {
+      "normal": 200,
+      "strong": 250,
+      "unreached": 0
+    },
+    "10005-10509": {
+      "normal": 425,
+      "strong": 525,
+      "unreached": 0
+    },
+    "10005-10510": {
+      "normal": 900,
+      "strong": 1000,
+      "unreached": 0.004
+    },
+    "10005-10511": {
+      "normal": 900,
+      "strong": 1025,
+      "unreached": 0.004
+    },
+    "10006-10601": {
+      "normal": 200,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10006-10602": {
+      "normal": 300,
+      "strong": 400,
+      "unreached": 0
+    },
+    "10006-10603": {
+      "normal": 400,
+      "strong": 500,
+      "unreached": 0
+    },
+    "10006-10604": {
+      "normal": 475,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10006-10605": {
+      "normal": 700,
+      "strong": 850,
+      "unreached": 0
+    },
+    "10006-10606": {
+      "normal": 725,
+      "strong": 850,
+      "unreached": 0
+    },
+    "10006-10607": {
+      "normal": 825,
+      "strong": 975,
+      "unreached": 0.004
+    },
+    "10006-10608": {
+      "normal": 1300,
+      "strong": 1550,
+      "unreached": 0.507
+    },
+    "10006-10609": {
+      "normal": 200,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10006-10610": {
+      "normal": 225,
+      "strong": 325,
+      "unreached": 0
+    },
+    "10006-10611": {
+      "normal": 325,
+      "strong": 425,
+      "unreached": 0
+    },
+    "10006-10612": {
+      "normal": 550,
+      "strong": 675,
+      "unreached": 0
+    },
+    "10006-10613": {
+      "normal": 900,
+      "strong": 1000,
+      "unreached": 0.004
+    },
+    "10007-10701": {
+      "normal": 200,
+      "strong": 200,
+      "unreached": 0
+    },
+    "10007-10702": {
+      "normal": 200,
+      "strong": 200,
+      "unreached": 0
+    },
+    "10007-10703": {
+      "normal": 200,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10007-10704": {
+      "normal": 375,
+      "strong": 525,
+      "unreached": 0
+    },
+    "10007-10705": {
+      "normal": 525,
+      "strong": 650,
+      "unreached": 0
+    },
+    "10007-10706": {
+      "normal": 225,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10007-10707": {
+      "normal": 200,
+      "strong": 200,
+      "unreached": 0
+    },
+    "10007-10708": {
+      "normal": 325,
+      "strong": 450,
+      "unreached": 0
+    },
+    "10007-10709": {
+      "normal": 550,
+      "strong": 625,
+      "unreached": 0
+    },
+    "10008-10801": {
+      "normal": 200,
+      "strong": 250,
+      "unreached": 0
+    },
+    "10008-10802": {
+      "normal": 225,
+      "strong": 325,
+      "unreached": 0
+    },
+    "10008-10803": {
+      "normal": 225,
+      "strong": 325,
+      "unreached": 0
+    },
+    "10008-10804": {
+      "normal": 350,
+      "strong": 450,
+      "unreached": 0
+    },
+    "10008-10805": {
+      "normal": 350,
+      "strong": 450,
+      "unreached": 0
+    },
+    "10008-10806": {
+      "normal": 400,
+      "strong": 500,
+      "unreached": 0
+    },
+    "10008-10807": {
+      "normal": 600,
+      "strong": 700,
+      "unreached": 0
+    },
+    "10008-10808": {
+      "normal": 700,
+      "strong": 825,
+      "unreached": 0
+    },
+    "10008-10809": {
+      "normal": 875,
+      "strong": 1000,
+      "unreached": 0.004
+    },
+    "10008-10810": {
+      "normal": 1225,
+      "strong": 1500,
+      "unreached": 0.046
+    },
+    "10008-10811": {
+      "normal": 1225,
+      "strong": 1550,
+      "unreached": 0.274
+    },
+    "10008-10812": {
+      "normal": 200,
+      "strong": 225,
+      "unreached": 0
+    },
+    "10008-10813": {
+      "normal": 200,
+      "strong": 300,
+      "unreached": 0
+    },
+    "10008-10814": {
+      "normal": 425,
+      "strong": 525,
+      "unreached": 0
+    },
+    "10008-10815": {
+      "normal": 500,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10009-10901": {
+      "normal": 200,
+      "strong": 200,
+      "unreached": 0
+    },
+    "10009-10902": {
+      "normal": 200,
+      "strong": 275,
+      "unreached": 0
+    },
+    "10009-10903": {
+      "normal": 375,
+      "strong": 475,
+      "unreached": 0
+    },
+    "10009-10904": {
+      "normal": 500,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10009-10905": {
+      "normal": 525,
+      "strong": 650,
+      "unreached": 0
+    },
+    "10009-10906": {
+      "normal": 625,
+      "strong": 725,
+      "unreached": 0
+    },
+    "10009-10907": {
+      "normal": 850,
+      "strong": 975,
+      "unreached": 0.004
+    },
+    "10009-10908": {
+      "normal": 825,
+      "strong": 975,
+      "unreached": 0.003
+    },
+    "10009-10909": {
+      "normal": 1000,
+      "strong": 1175,
+      "unreached": 0.006
+    },
+    "10009-10910": {
+      "normal": 200,
+      "strong": 200,
+      "unreached": 0
+    },
+    "10009-10911": {
+      "normal": 200,
+      "strong": 200,
+      "unreached": 0
+    },
+    "10009-10912": {
+      "normal": 300,
+      "strong": 400,
+      "unreached": 0
+    },
+    "10009-10913": {
+      "normal": 350,
+      "strong": 475,
+      "unreached": 0
+    },
+    "10009-10914": {
+      "normal": 1175,
+      "strong": 1475,
+      "unreached": 0.056
+    },
+    "10010-11001": {
+      "normal": 225,
+      "strong": 325,
+      "unreached": 0
+    },
+    "10010-11002": {
+      "normal": 475,
+      "strong": 550,
+      "unreached": 0
+    },
+    "10010-11003": {
+      "normal": 625,
+      "strong": 700,
+      "unreached": 0
+    },
+    "10010-11004": {
+      "normal": 1000,
+      "strong": 1125,
+      "unreached": 0.006
+    },
+    "10010-11005": {
+      "normal": 200,
+      "strong": 250,
+      "unreached": 0
+    },
+    "10010-11006": {
+      "normal": 425,
+      "strong": 500,
+      "unreached": 0
+    },
+    "10010-11007": {
+      "normal": 850,
+      "strong": 950,
+      "unreached": 0.004
+    },
+    "10101-11101": {
+      "normal": 250,
+      "strong": 325,
+      "unreached": 0
+    },
+    "10101-11102": {
+      "normal": 525,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10101-11103": {
+      "normal": 625,
+      "strong": 700,
+      "unreached": 0
+    },
+    "10103-11301": {
+      "normal": 325,
+      "strong": 400,
+      "unreached": 0
+    },
+    "10103-11302": {
+      "normal": 425,
+      "strong": 500,
+      "unreached": 0
+    },
+    "10103-11303": {
+      "normal": 700,
+      "strong": 775,
+      "unreached": 0
+    },
+    "10104-11401": {
+      "normal": 200,
+      "strong": 250,
+      "unreached": 0
+    },
+    "10104-11402": {
+      "normal": 400,
+      "strong": 475,
+      "unreached": 0
+    },
+    "10104-11403": {
+      "normal": 500,
+      "strong": 575,
+      "unreached": 0
+    },
+    "10104-11404": {
+      "normal": 900,
+      "strong": 1000,
+      "unreached": 0.004
+    },
+    "10105-11501": {
+      "normal": 200,
+      "strong": 200,
+      "unreached": 0
+    },
+    "10105-11502": {
+      "normal": 325,
+      "strong": 425,
+      "unreached": 0
+    },
+    "10105-11503": {
+      "normal": 300,
+      "strong": 425,
+      "unreached": 0
+    },
+    "10105-11504": {
+      "normal": 575,
+      "strong": 675,
+      "unreached": 0
+    },
+    "10201-11203": {
+      "normal": 550,
+      "strong": 725,
+      "unreached": 0
+    },
+    "10202-11613": {
+      "normal": 200,
+      "strong": 250,
+      "unreached": 0
+    },
+    "10202-11614": {
+      "normal": 425,
+      "strong": 500,
+      "unreached": 0
+    },
+    "10202-11615": {
+      "normal": 600,
+      "strong": 675,
+      "unreached": 0
+    },
+    "10202-11616": {
+      "normal": 800,
+      "strong": 925,
+      "unreached": 0.004
+    },
+    "10202-11617": {
+      "normal": 250,
+      "strong": 325,
+      "unreached": 0
+    },
+    "10202-11618": {
+      "normal": 325,
+      "strong": 400,
+      "unreached": 0
+    },
+    "10202-11619": {
+      "normal": 475,
+      "strong": 575,
+      "unreached": 0
+    },
+    "10202-11620": {
+      "normal": 525,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10202-11621": {
+      "normal": 650,
+      "strong": 725,
+      "unreached": 0
+    },
+    "10203-11701": {
+      "normal": 200,
+      "strong": 250,
+      "unreached": 0
+    },
+    "10203-11702": {
+      "normal": 425,
+      "strong": 500,
+      "unreached": 0
+    },
+    "10203-11703": {
+      "normal": 775,
+      "strong": 875,
+      "unreached": 0
+    },
+    "10203-11704": {
+      "normal": 875,
+      "strong": 1000,
+      "unreached": 0.004
+    },
+    "10203-11705": {
+      "normal": 250,
+      "strong": 325,
+      "unreached": 0
+    },
+    "10203-11706": {
+      "normal": 325,
+      "strong": 400,
+      "unreached": 0
+    },
+    "10203-11707": {
+      "normal": 500,
+      "strong": 575,
+      "unreached": 0
+    },
+    "10203-11708": {
+      "normal": 525,
+      "strong": 600,
+      "unreached": 0
+    },
+    "10203-11709": {
+      "normal": 650,
+      "strong": 725,
+      "unreached": 0
+    }
+  }
+}

@@ -1,12 +1,15 @@
-import { bashinMeters } from '../../../packages/sim/src/data/constants.ts';
+import { bashinMeters, styleLabel } from '../../../packages/sim/src/data/constants.ts';
 import type { Style } from '../../../packages/sim/src/data/constants.ts';
 import { worseFidelity, type Fidelity } from '../../../packages/sim/src/skill/classify.ts';
 import {
-  isSkillListFile,
+  isSkillListCourseFile,
   isSkillListIndex,
-  type SkillListCategory,
+  skillListCourseKey,
   type SkillListCourse,
-  type SkillListFile,
+  type SkillListCourseFile,
+  type SkillListIndex,
+  type SkillListIndexEntry,
+  type SkillListTier,
 } from '../../../packages/solver/src/skill-list.ts';
 
 /**
@@ -17,16 +20,26 @@ import {
  * `apps/web/public/skill-list/` で、どちらも生成側の領分である。
  * 決めたことと理由は docs/webapp-design.md 6.6 節にある。
  *
+ * ## 軸はコースである
+ *
+ * 表は**コースごとに 1 枚**配られる。距離帯で畳んだ表にはしない。
+ * 同じ距離帯でもコースが違えば直線の長さも坂も違い、効くスキルが変わるからである。
+ * 画面はまず `index.json` で「どのコースが置いてあるか」を知り、
+ * 選ばれた 1 コースぶんだけを取りに行く。全部で 25 MB を超えるので、
+ * 全コースをまとめて取ることはしない。
+ *
  * ## 取れないことは普通に起きる
  *
  * 配布物には**静的ファイルだけを置いた版**があり、そこには事前計算の JSON を
- * 載せていないことがある（数 MB あるので、置くかどうかは配る人が決める）。
- * 認証や proxy が 200 で HTML を返す経路もある。`searchApi.ts` と同じく、
- * 状態番号ではなく**中身が JSON かどうか**で判断し、取れなければ日本語で
- * 言い分けて画面は動き続ける。
+ * 載せていないことがある。認証や proxy が 200 で HTML を返す経路もある。
+ * `searchApi.ts` と同じく、状態番号ではなく**中身が JSON かどうか**で判断し、
+ * 取れなければ日本語で言い分けて画面は動き続ける。
+ *
+ * **測ってあるコースが一部だけ、も普通の状態である。** 全 137 コースを回すには
+ * 20 時間を超えるので、置いてあるところまでが表になる。画面はそう書く。
  */
 
-/** 版の一覧。ここを最初に見る。 */
+/** 版とコースの一覧。ここを最初に見る。 */
 export const SKILL_LIST_INDEX_URL = 'skill-list/index.json';
 
 /**
@@ -70,25 +83,32 @@ async function fetchJson(url: string, signal?: AbortSignal): Promise<unknown> {
 }
 
 /**
- * 表を取る。`index.json` が版の一覧なら、そこから本体を取りに行く。
+ * 版とコースの一覧を取る。
  *
- * `base` を引数にしてあるのはテストのためである。画面からは既定のまま呼ぶ。
+ * `indexUrl` を引数にしてあるのはテストのためである。画面からは既定のまま呼ぶ。
  */
-export async function fetchSkillList(
+export async function fetchSkillListIndex(
   indexUrl: string = SKILL_LIST_INDEX_URL,
   signal?: AbortSignal,
-): Promise<SkillListFile> {
-  const first = await fetchJson(indexUrl, signal);
-  // 版を教える 1 枚か、表そのものか。見分けは契約側（`isSkillListIndex`）に任せる。
-  if (isSkillListFile(first)) return first;
-  if (!isSkillListIndex(first)) {
+): Promise<SkillListIndex> {
+  const body = await fetchJson(indexUrl, signal);
+  if (!isSkillListIndex(body)) {
     throw new SkillListBroken(
       'スキル一覧の形が読めない。配ってある版が古いか、別のファイルが置かれている。',
     );
   }
-  const body = await fetchJson(indexUrl.replace(/[^/]*$/, first.latest), signal);
-  if (!isSkillListFile(body)) {
-    throw new SkillListBroken(`版 ${first.latest} の形が読めない。配ってある版が古い。`);
+  return body;
+}
+
+/** コース 1 枚を取る。`entry.file` は `index.json` から見た相対のパスである。 */
+export async function fetchSkillListCourse(
+  entry: SkillListIndexEntry,
+  indexUrl: string = SKILL_LIST_INDEX_URL,
+  signal?: AbortSignal,
+): Promise<SkillListCourseFile> {
+  const body = await fetchJson(indexUrl.replace(/[^/]*$/, entry.file), signal);
+  if (!isSkillListCourseFile(body)) {
+    throw new SkillListBroken(`${entry.file} の形が読めない。配ってある版が古い。`);
   }
   return body;
 }
@@ -103,11 +123,72 @@ export function explainSkillListError(error: unknown): string {
 }
 
 /* ------------------------------------------------------------------ */
-/* 絞り込みと集計。ここから下は純粋な関数で、テストが固定する。        */
+/* コースの選び方。ここから下は純粋な関数で、テストが固定する。        */
+/* ------------------------------------------------------------------ */
+
+/** 「東京 芝2400m」。選択欄にも内訳にも同じ書き方を使う。 */
+export function courseLabel(course: SkillListCourse): string {
+  return `${course.locationName} ${course.courseName}`;
+}
+
+export function entryKey(entry: SkillListIndexEntry): string {
+  return skillListCourseKey(entry.course.location, entry.course.course);
+}
+
+/**
+ * 既定で開くコース。
+ *
+ * **東京 芝2400m があればそれにする。** リポジトリの既定コースであり
+ * （`pnpm sim` も `pnpm cross` もここを既定にしている）、他の実測と並べられる。
+ * 置いていなければ一覧の先頭にする。
+ */
+export const DEFAULT_SKILL_LIST_COURSE = skillListCourseKey(10006, 10606);
+
+export function defaultCourseEntry(
+  index: SkillListIndex,
+): SkillListIndexEntry | undefined {
+  return (
+    index.courses.find((entry) => entryKey(entry) === DEFAULT_SKILL_LIST_COURSE) ??
+    index.courses[0]
+  );
+}
+
+/** 選択欄の入れ子。レース場ごとにまとめる（`optgroup` になる）。 */
+export interface SkillListCourseGroup {
+  readonly locationName: string;
+  readonly entries: readonly SkillListIndexEntry[];
+}
+
+/**
+ * 一覧をレース場ごとにまとめる。並びは `index.json` のままにする。
+ *
+ * 137 本を平らに並べた選択欄からは目当てのコースを見つけられない。
+ * 場でまとめると、ゲームの画面と同じ探し方になる。
+ */
+export function groupCoursesByLocation(
+  entries: readonly SkillListIndexEntry[],
+): readonly SkillListCourseGroup[] {
+  const out: SkillListCourseGroup[] = [];
+  for (const entry of entries) {
+    const last = out.at(-1);
+    if (last !== undefined && last.locationName === entry.course.locationName) {
+      (last.entries as SkillListIndexEntry[]).push(entry);
+    } else {
+      out.push({ locationName: entry.course.locationName, entries: [entry] });
+    }
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* 絞り込みと集計                                                      */
 /* ------------------------------------------------------------------ */
 
 /**
  * 絞り込みの軸。**この版の JSON が持っている軸だけを置く。**
+ *
+ * コースは絞り込みではなく、**どの 1 枚を取るか**である（`SkillListIndexEntry`）。
+ * 距離帯とバ場の選択欄はもう無い。コースを選ぶのだから、距離帯は決まっている。
  *
  * issue は季節と天候とバ場状態でも絞ると書いているが、`SkillListSettings` の
  * とおり、いまの版はそれらを振っていない（固定で 1 通り）。無い軸の選択欄を
@@ -115,28 +196,15 @@ export function explainSkillListError(error: unknown): string {
  * いない」と書く。
  */
 export interface SkillListFilter {
-  /** 距離帯。`ALL` は全部。 */
-  readonly category: SkillListCategory | 'ALL';
   /** 脚質。`ALL` は全部。 */
   readonly style: Style | 'ALL';
-  /** バ場。0 は全部、1 は芝、2 はダート。 */
-  readonly surface: 0 | 1 | 2;
-  /**
-   * 基準になる個体の**段**（`normal` / `strong`）。空なら先頭の段。
-   *
-   * **個体そのものではなく段である。** 生成側は距離帯とバ場ごとに別の個体を
-   * 置いている（長距離の基準個体は短距離のそれよりスタミナが多い）ので、
-   * `baselines` は段の数より多い。どの個体が使われるかはコースから決まるので、
-   * 利用者が選ぶのは段だけでよい。`baselineTier` を参照。
-   */
-  readonly baseline: string;
+  /** 基準になる個体（`normal` / `strong`）。 */
+  readonly baseline: SkillListTier;
 }
 
 export const DEFAULT_SKILL_LIST_FILTER: SkillListFilter = {
-  category: 'ALL',
   style: 'ALL',
-  surface: 0,
-  baseline: '',
+  baseline: 'normal',
 };
 
 /** 1 スキルぶんの集計。絞り込みに当たる行を平均したものである。 */
@@ -152,20 +220,30 @@ export interface SkillListAggregate {
   readonly efficiency: number;
   /** 当たる行の中でいちばん悪い印。 */
   readonly fidelity: Fidelity;
-  /** 平均に入った行数（コース × 脚質）。 */
+  /** 平均に入った行数（= 脚質の数）。 */
   readonly rows: number;
-  /** バ身の目安。`secondsToBashin` を行ごとに掛けて平均したもの。 */
+  /** バ身の目安。`secondsToBashin` で秒から直したもの。 */
   readonly bashin: number;
 }
 
-/** コースごとの内訳。行を押したときに降りる先。 */
-export interface SkillListCourseRow {
-  readonly course: SkillListCourse;
+/** 脚質ごとの内訳。行を押したときに降りる先。 */
+export interface SkillListStyleRow {
+  readonly style: Style;
+  readonly label: string;
+  /**
+   * 測った行があるか。
+   *
+   * **false は「走らせずに落とした」である。** その脚質では確かに発動しないと
+   * `screen.ts` が判定したので、行そのものが無い（`screen.ts` の判定は片側だけ
+   * 確かで、落としたものは確かに発動しない）。数値の側を 0 で埋めて黙って並べると、
+   * 「測ったら 0 だった」と読まれる。**この 2 つは別のことである。**
+   */
+  readonly measured: boolean;
   readonly mean: number;
   readonly stdError: number;
   readonly triggerRate: number;
+  readonly meanWhenTriggered: number;
   readonly bashin: number;
-  readonly rows: number;
 }
 
 /**
@@ -186,93 +264,20 @@ export function secondsToBashin(seconds: number, distance: number): number {
 }
 
 /**
- * 基準個体の id から**段**を取り出す。
+ * 絞り込みに当たるかどうかを、列の添字だけで判定できる形に畳んだもの。
  *
- * 生成側は `<段>:<バ場>:<距離帯>`（例 `normal:1:MIDDLE`）という複合の id を
- * 使っているが、**契約（`packages/solver/src/skill-list.ts`）はこの形を強制して
- * いない。** 例示は `normal` / `strong` のままである。だから画面は形を決め打ちせず、
- * 「区切りがあればその手前、無ければ全体」とだけ決める。
- * 生成側が 1 段 1 個体に戻しても、そのまま動く。
+ * **基準個体は id そのもので絞れる。** 1 枚が 1 コースなので、id は
+ * `normal` / `strong` の 2 つしか無い（format 1 では id に距離帯とバ場が
+ * 混ざっており、画面が段で絞れずに実データで絞り込みが全滅した）。
+ * 知らない id を渡されたら先頭の個体に落とす。
  */
-export function baselineTier(id: string): string {
-  const separator = id.indexOf(':');
-  return separator < 0 ? id : id.slice(0, separator);
-}
-
-/** 選択欄に出す段。`label` は同じ段の最初の個体のものを使う。 */
-export interface SkillListTier {
-  readonly id: string;
-  readonly label: string;
-}
-
-/**
- * 段の一覧。重複を落として、`baselines` に出てくる順に返す。
- *
- * 16 件の `baselines` をそのまま選択欄に出すと「普通」が 8 個並んで区別できない。
- * 出すべきは段の 2 つである。
- */
-export function baselineTiers(file: SkillListFile): readonly SkillListTier[] {
-  const out: SkillListTier[] = [];
-  const seen = new Set<string>();
-  for (const baseline of file.baselines) {
-    const tier = baselineTier(baseline.id);
-    if (seen.has(tier)) continue;
-    seen.add(tier);
-    out.push({ id: tier, label: baseline.label });
-  }
-  return out;
-}
-
-/** 絞り込みに当たるかどうかを、列の添字だけで判定できる形に畳んだもの。 */
-interface CourseFacts {
-  readonly category: SkillListCategory;
-  readonly surface: number;
-  readonly distance: number;
-}
-
-function courseFacts(file: SkillListFile): readonly CourseFacts[] {
-  return file.courses.map((course) => ({
-    category: course.category,
-    surface: course.surface,
-    distance: course.distance,
-  }));
-}
-
-/**
- * 走る前に決まる、絞り込みの当たり判定。
- *
- * **基準個体は段で絞る。** 個体 1 つに固定すると、その個体が割り当てられた
- * 距離帯とバ場の行しか当たらない。生成側は距離帯とバ場ごとに別の個体を置いて
- * いるので、「全距離帯」を選んでいるのに芝短距離の行しか出ない、という壊れ方を
- * した（実データで 4 通りのうち 3 通りが 0 件になった）。
- * 距離帯とバ場はコースの側で絞れば足りる。
- */
-function matcher(file: SkillListFile, filter: SkillListFilter) {
-  const facts = courseFacts(file);
-  const tiers = baselineTiers(file);
-  // 知らない段を渡されたら先頭に落とす。選択欄には在るものしか出さないので、
-  // ここに来るのは版が入れ替わった直後くらいである。黙って全段を混ぜるより、
-  // 1 段に寄せたほうが読み手を欺かない。
-  const wanted = tiers.some((tier) => tier.id === filter.baseline) ? filter.baseline : tiers[0]?.id;
-  const allowedBaselines =
-    wanted === undefined
-      ? null
-      : new Set(
-          file.baselines
-            .map((baseline, index) => [baselineTier(baseline.id), index] as const)
-            .filter(([tier]) => tier === wanted)
-            .map(([, index]) => index),
-        );
+function matcher(file: SkillListCourseFile, filter: SkillListFilter) {
+  const baselineIndex = file.baselines.findIndex((baseline) => baseline.id === filter.baseline);
+  const wanted = baselineIndex < 0 ? 0 : baselineIndex;
   const styleIndex = filter.style === 'ALL' ? -1 : file.styles.indexOf(filter.style);
   return (row: number): boolean => {
-    if (allowedBaselines !== null && !allowedBaselines.has(file.columns.baseline[row]!)) {
-      return false;
-    }
+    if (file.columns.baseline[row] !== wanted) return false;
     if (filter.style !== 'ALL' && file.columns.style[row] !== styleIndex) return false;
-    const course = facts[file.columns.course[row]!];
-    if (course === undefined) return false;
-    if (filter.category !== 'ALL' && course.category !== filter.category) return false;
-    if (filter.surface !== 0 && course.surface !== filter.surface) return false;
     return true;
   };
 }
@@ -283,7 +288,6 @@ interface Accumulator {
   sumVariance: number;
   sumTrigger: number;
   sumWhenTriggered: number;
-  sumBashin: number;
   cost: number;
   fidelity: Fidelity;
   rows: number;
@@ -295,22 +299,19 @@ function emptyAccumulator(): Accumulator {
     sumVariance: 0,
     sumTrigger: 0,
     sumWhenTriggered: 0,
-    sumBashin: 0,
     cost: 0,
     fidelity: 'exact',
     rows: 0,
   };
 }
 
-function add(acc: Accumulator, file: SkillListFile, row: number, distance: number): void {
+function add(acc: Accumulator, file: SkillListCourseFile, row: number): void {
   const c = file.columns;
-  const mean = c.mean[row]!;
   const stdError = c.stdError[row]!;
-  acc.sum += mean;
+  acc.sum += c.mean[row]!;
   acc.sumVariance += stdError * stdError;
   acc.sumTrigger += c.triggerRate[row]!;
   acc.sumWhenTriggered += c.meanWhenTriggered[row]!;
-  acc.sumBashin += secondsToBashin(mean, distance);
   acc.cost = c.cost[row]!;
   acc.fidelity = worseFidelity(acc.fidelity, file.fidelities[c.fidelity[row]!] ?? 'exact');
   acc.rows += 1;
@@ -319,15 +320,14 @@ function add(acc: Accumulator, file: SkillListFile, row: number, distance: numbe
 /**
  * 絞り込みに当たる行を、スキルごとに平均する。
  *
- * **コースどうしと脚質どうしは別々に走らせてある**ので、平均の誤差は
- * 二乗和の平方根を行数で割ったものにする（独立と見なす）。同じ試行番号で
- * 引き算した 1 行ぶんの誤差より、こちらのほうが素直である。
+ * **脚質どうしは別々に走らせてある**ので、平均の誤差は二乗和の平方根を
+ * 行数で割ったものにする（独立と見なす）。同じ試行番号で引き算した 1 行ぶんの
+ * 誤差より、こちらのほうが素直である。
  */
 export function aggregate(
-  file: SkillListFile,
+  file: SkillListCourseFile,
   filter: SkillListFilter,
 ): readonly SkillListAggregate[] {
-  const facts = courseFacts(file);
   const matches = matcher(file, filter);
   const bySkill = new Map<number, Accumulator>();
   for (let row = 0; row < file.columns.length; row += 1) {
@@ -338,7 +338,7 @@ export function aggregate(
       acc = emptyAccumulator();
       bySkill.set(skill, acc);
     }
-    add(acc, file, row, facts[file.columns.course[row]!]!.distance);
+    add(acc, file, row);
   }
   const out: SkillListAggregate[] = [];
   for (const [skill, acc] of bySkill) {
@@ -353,7 +353,7 @@ export function aggregate(
       efficiency: acc.cost === 0 ? 0 : mean / acc.cost,
       fidelity: acc.fidelity,
       rows: acc.rows,
-      bashin: acc.sumBashin / acc.rows,
+      bashin: secondsToBashin(mean, file.course.distance),
     });
   }
   out.sort((a, b) => b.mean - a.mean);
@@ -361,45 +361,58 @@ export function aggregate(
 }
 
 /**
- * 1 スキルのコースごとの内訳。
+ * 1 スキルの**脚質ごと**の内訳。行を押すとここに降りる。
  *
- * 絞り込みで脚質を全部にしているときは、コースの中で脚質を平均する。
+ * 表がコースごとになったので、内訳はコースではなく脚質である。
+ * 絞り込みで脚質を 1 つに決めているときも、比べられるように全脚質を出す。
+ *
+ * **測った行が無い脚質も並べる**（`measured: false`）。脚質の条件を持つスキルは、
+ * 当たらない脚質では `screen.ts` が走らせる前に落としており、行そのものが無い。
+ * 黙って行を減らすと「逃げでは効かない」のか「逃げは測っていない」のかが分からない。
+ *
  * **発動位置の分布はここに出せない。** JSON が持っていないからである
  * （docs/webapp-design.md 6.6 節）。
  */
-export function courseBreakdown(
-  file: SkillListFile,
+export function styleBreakdown(
+  file: SkillListCourseFile,
   filter: SkillListFilter,
   skillId: string,
-): readonly SkillListCourseRow[] {
+): readonly SkillListStyleRow[] {
   const skillIndex = file.skillIds.indexOf(skillId);
   if (skillIndex < 0) return [];
-  const facts = courseFacts(file);
-  const matches = matcher(file, filter);
-  const byCourse = new Map<number, Accumulator>();
-  for (let row = 0; row < file.columns.length; row += 1) {
-    if (file.columns.skill[row] !== skillIndex) continue;
-    if (!matches(row)) continue;
-    const course = file.columns.course[row]!;
-    let acc = byCourse.get(course);
-    if (acc === undefined) {
-      acc = emptyAccumulator();
-      byCourse.set(course, acc);
+  const baselineIndex = file.baselines.findIndex((baseline) => baseline.id === filter.baseline);
+  const wanted = baselineIndex < 0 ? 0 : baselineIndex;
+  const out: SkillListStyleRow[] = [];
+  for (const [styleIdx, style] of file.styles.entries()) {
+    const empty: SkillListStyleRow = {
+      style,
+      label: styleLabel[style],
+      measured: false,
+      mean: 0,
+      stdError: 0,
+      triggerRate: 0,
+      meanWhenTriggered: 0,
+      bashin: 0,
+    };
+    let found: SkillListStyleRow | null = null;
+    for (let row = 0; row < file.columns.length; row += 1) {
+      if (file.columns.skill[row] !== skillIndex) continue;
+      if (file.columns.baseline[row] !== wanted) continue;
+      if (file.columns.style[row] !== styleIdx) continue;
+      const mean = file.columns.mean[row]!;
+      found = {
+        ...empty,
+        measured: true,
+        mean,
+        stdError: file.columns.stdError[row]!,
+        triggerRate: file.columns.triggerRate[row]!,
+        meanWhenTriggered: file.columns.meanWhenTriggered[row]!,
+        bashin: secondsToBashin(mean, file.course.distance),
+      };
+      break;
     }
-    add(acc, file, row, facts[course]!.distance);
+    out.push(found ?? empty);
   }
-  const out: SkillListCourseRow[] = [];
-  for (const [course, acc] of byCourse) {
-    out.push({
-      course: file.courses[course]!,
-      mean: acc.sum / acc.rows,
-      stdError: Math.sqrt(acc.sumVariance) / acc.rows,
-      triggerRate: acc.sumTrigger / acc.rows,
-      bashin: acc.sumBashin / acc.rows,
-      rows: acc.rows,
-    });
-  }
-  out.sort((a, b) => b.mean - a.mean);
   return out;
 }
 
