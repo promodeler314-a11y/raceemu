@@ -2,7 +2,13 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../data/src/node.ts';
 import { RngSet } from '../src/rng.ts';
-import { DerivedSetting, emptyPassiveBonus, type RaceSetting } from '../src/setting.ts';
+import { RaceCalculator } from '../src/calculator.ts';
+import {
+  DerivedSetting,
+  defaultSystemSetting,
+  emptyPassiveBonus,
+  type RaceSetting,
+} from '../src/setting.ts';
 import { compileConditions, newSkillScratch, unsupportedConditions } from '../src/skill/condition.ts';
 import { ignoreConditions, approximateTypeToState } from '../src/skill/approximate.ts';
 import { knownUnsupportedTypes } from '../src/skill/classify.ts';
@@ -108,5 +114,62 @@ describe('スキル条件の網羅', () => {
       }
     }
     expect([...found].sort()).toEqual(['104901311 All-in!! (50)']);
+  });
+});
+
+/**
+ * 助走のあるコースで落ちないこと。
+ *
+ * `trackData` の `runUp` が正のコースは、走り出しの位置がマイナスになる
+ * （`calculator.ts` が `position = -runUp` から始める）。そのあいだ
+ * `RaceState.currentPhase` は -1 で、**どの区間でもない**。
+ *
+ * `phase_firsthalf` / `phase_laterhalf` はそれを `getPhaseStartEnd` に渡していて、
+ * 投げていた（本家の `SkillChecker.kt` も同じ書き方で、同じところで落ちる）。
+ * 該当するのは 137 本のうち 2 本（サンタアニタパーク ダート1600m と
+ * デルマー ダート1600m）だけなので、全コースを 1 本ずつ回すまで踏まなかった。
+ *
+ * **落ちる組み合わせを固定しておく。** 数字が変わったのではなく、
+ * 結果が 1 つも出ないという壊れ方だったので、値の突き合わせではなく
+ * 「最後まで走れること」を見る。
+ */
+describe('助走のあるコース', () => {
+  const runUpCourses = Object.entries(data.trackData).flatMap(([location, track]) =>
+    Object.entries(track.courses)
+      .filter(([, detail]) => detail.runUp > 0)
+      .map(([course, detail]) => ({
+        location: Number(location),
+        course: Number(course),
+        name: `${track.name} ${detail.name}`,
+      })),
+  );
+
+  it('助走のあるコースがデータに残っている', () => {
+    // 0 本になったらこのテストは何も見ていない。データが変わったら気付けるようにする。
+    expect(runUpCourses.length).toBeGreaterThan(0);
+  });
+
+  /** 区間の前半・後半を条件に持つスキル。助走の途中で判定されると落ちていた。 */
+  const PHASE_HALF = new Set(['phase_firsthalf', 'phase_laterhalf']);
+  const phaseHalfSkills = data.skills.filter((skill) =>
+    (skill.invokes ?? []).some((invoke) =>
+      (invoke.conditions ?? []).some((group) => group.some((c) => PHASE_HALF.has(c.type))),
+    ),
+  );
+
+  it('区間の前半・後半を条件に持つスキルが残っている', () => {
+    expect(phaseHalfSkills.length).toBeGreaterThan(0);
+  });
+
+  it.each(runUpCourses)('$name で落ちない', ({ location, course }) => {
+    for (const skill of phaseHalfSkills.slice(0, 5)) {
+      const setting: RaceSetting = {
+        ...baseSetting,
+        track: { ...baseSetting.track, location, course },
+        skills: [skill],
+      };
+      const calculator = new RaceCalculator(defaultSystemSetting(), data.trackData);
+      expect(() => calculator.simulate(setting, { seed: 1, trial: 1 })).not.toThrow();
+    }
   });
 });
