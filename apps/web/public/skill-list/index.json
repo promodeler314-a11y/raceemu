@@ -1,7 +1,7 @@
 {
   "format": 2,
   "version": "v2-e1008c205969",
-  "generatedAt": "2026-09-16T04:53:22.956Z",
+  "generatedAt": "2026-09-16T05:42:15.859Z",
   "dataset": {
     "skills": "e857c6ea0e5e62311bd07c3c2c70a69004beeb44",
     "courses": "0117075b5b318f7039e78ae09818b7f658d69b76",
@@ -900,6 +900,156 @@
       "rows": 4904,
       "trials": 100,
       "generatedAt": "2026-09-15T16:23:20.245Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10701,
+        "locationName": "中京",
+        "courseName": "芝1200m",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10007-10701.json",
+      "rows": 4004,
+      "trials": 100,
+      "generatedAt": "2026-09-16T04:56:25.597Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10702,
+        "locationName": "中京",
+        "courseName": "芝1400m",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10007-10702.json",
+      "rows": 4004,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:00:14.091Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10703,
+        "locationName": "中京",
+        "courseName": "芝1600m",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e1008c205969/10007-10703.json",
+      "rows": 4104,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:04:38.124Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10704,
+        "locationName": "中京",
+        "courseName": "芝2000m",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e1008c205969/10007-10704.json",
+      "rows": 4524,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:10:49.293Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10705,
+        "locationName": "中京",
+        "courseName": "芝2200m",
+        "distance": 2200,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e1008c205969/10007-10705.json",
+      "rows": 4524,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:17:37.567Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10706,
+        "locationName": "中京",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10007-10706.json",
+      "rows": 4368,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:21:12.390Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10707,
+        "locationName": "中京",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10007-10707.json",
+      "rows": 4368,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:25:22.721Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10708,
+        "locationName": "中京",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e1008c205969/10007-10708.json",
+      "rows": 4476,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:30:47.508Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10709,
+        "locationName": "中京",
+        "courseName": "ダート1900m",
+        "distance": 1900,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e1008c205969/10007-10709.json",
+      "rows": 4888,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:36:55.100Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10801,
+        "locationName": "京都",
+        "courseName": "芝1200m(内)",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10008-10801.json",
+      "rows": 4012,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:40:18.211Z"
     }
   ],
   "generations": [
