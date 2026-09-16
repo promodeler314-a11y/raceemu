@@ -41,7 +41,7 @@ function args(name: string): string[] {
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const outDir = arg('out', join(root, 'apps/web/public/skill-list'));
 const gateCount = Number(arg('gate', '9'));
-const trials = Number(arg('trials', '200'));
+const trials = Number(arg('trials', '100'));
 const seed = Number(arg('seed', '1'));
 const trackCondition = Number(arg('condition', '1'));
 const useField = arg('field', 'on') !== 'off';

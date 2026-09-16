@@ -76,7 +76,11 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const data = loadGameData();
 const system = defaultSystemSetting();
 
-const trials = Number(arg('trials', '200'));
+// 既定の試行数。**ワークフローの env.TRIALS と必ず揃える**
+// （手元で回しても CI で回しても同じ表になるように。test/workflows.test.ts が見張っている）。
+// 誤差は 1/sqrt(試行) でしか縮まず、200 にしても「20 位と統計的に区別できない帯」は
+// 31 → 28 スキルにしかならない。この表は段を出す道具なので 100 で止める。
+const trials = Number(arg('trials', '100'));
 const seed = Number(arg('seed', '1'));
 const gateCount = Number(arg('gate', '9'));
 const trackCondition = Number(arg('condition', '1'));
