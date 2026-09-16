@@ -1,7 +1,7 @@
 {
   "format": 2,
   "version": "v2-e1008c205969",
-  "generatedAt": "2026-09-16T05:42:15.859Z",
+  "generatedAt": "2026-09-16T07:09:47.388Z",
   "dataset": {
     "skills": "e857c6ea0e5e62311bd07c3c2c70a69004beeb44",
     "courses": "0117075b5b318f7039e78ae09818b7f658d69b76",
@@ -1050,6 +1050,231 @@
       "rows": 4012,
       "trials": 100,
       "generatedAt": "2026-09-16T05:40:18.211Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10802,
+        "locationName": "京都",
+        "courseName": "芝1400m(内)",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10008-10802.json",
+      "rows": 4012,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:44:12.261Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10803,
+        "locationName": "京都",
+        "courseName": "芝1400m(外)",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10008-10803.json",
+      "rows": 4012,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:48:08.803Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10804,
+        "locationName": "京都",
+        "courseName": "芝1600m(内)",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e1008c205969/10008-10804.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:52:41.678Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10805,
+        "locationName": "京都",
+        "courseName": "芝1600m(外)",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e1008c205969/10008-10805.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-16T05:57:15.916Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10806,
+        "locationName": "京都",
+        "courseName": "芝1800m(外)",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e1008c205969/10008-10806.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:02:21.963Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10807,
+        "locationName": "京都",
+        "courseName": "芝2000m(内)",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e1008c205969/10008-10807.json",
+      "rows": 4540,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:08:45.305Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10808,
+        "locationName": "京都",
+        "courseName": "芝2200m(外)",
+        "distance": 2200,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e1008c205969/10008-10808.json",
+      "rows": 4532,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:15:55.168Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10809,
+        "locationName": "京都",
+        "courseName": "芝2400m(外)",
+        "distance": 2400,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e1008c205969/10008-10809.json",
+      "rows": 4532,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:23:32.992Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10810,
+        "locationName": "京都",
+        "courseName": "芝3000m(外)",
+        "distance": 3000,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e1008c205969/10008-10810.json",
+      "rows": 4242,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:32:45.568Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10811,
+        "locationName": "京都",
+        "courseName": "芝3200m(外)",
+        "distance": 3200,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e1008c205969/10008-10811.json",
+      "rows": 4242,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:42:41.966Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10812,
+        "locationName": "京都",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10008-10812.json",
+      "rows": 4376,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:46:34.499Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10813,
+        "locationName": "京都",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10008-10813.json",
+      "rows": 4376,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:51:01.089Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10814,
+        "locationName": "京都",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e1008c205969/10008-10814.json",
+      "rows": 4484,
+      "trials": 100,
+      "generatedAt": "2026-09-16T06:56:51.093Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10815,
+        "locationName": "京都",
+        "courseName": "ダート1900m",
+        "distance": 1900,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e1008c205969/10008-10815.json",
+      "rows": 4896,
+      "trials": 100,
+      "generatedAt": "2026-09-16T07:03:35.540Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10901,
+        "locationName": "阪神",
+        "courseName": "芝1200m(内)",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e1008c205969/10009-10901.json",
+      "rows": 4004,
+      "trials": 100,
+      "generatedAt": "2026-09-16T07:07:12.312Z"
     }
   ],
   "generations": [
