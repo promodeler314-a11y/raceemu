@@ -295,6 +295,13 @@ function compileCondition(
       );
     case 'phase_firsthalf':
       return checkInRace(condition, (s) => {
+        // **助走の途中は、どの区間の前半でもない。** 助走のあるコース
+        // （`trackData` の `runUp` が正。137 本のうち 2 本ある）では、
+        // 走り出しの位置がマイナスになり `currentPhase` が -1 になる。
+        // そのまま `getPhaseStartEnd` に渡すと投げる（本家も同じ書き方で、
+        // 同じところで落ちる）。-1 は下の「前半ではない」と同じ意味なので、
+        // ここで返す。**値の出る組み合わせは 1 つも変わらない。**
+        if (s.currentPhase < 0) return -1;
         const [start, end] = setting.getPhaseStartEnd(s.currentPhase);
         return s.simulation.startPosition < (start + end) / 2 ? s.currentPhase : -1;
       });
@@ -308,6 +315,8 @@ function compileCondition(
       );
     case 'phase_laterhalf':
       return checkInRace(condition, (s) => {
+        // 助走の途中は、どの区間の後半でもない（`phase_firsthalf` の注記）。
+        if (s.currentPhase < 0) return -1;
         const [start, end] = setting.getPhaseStartEnd(s.currentPhase);
         return s.simulation.startPosition >= (start + end) / 2 ? s.currentPhase : -1;
       });
