@@ -40,6 +40,13 @@
 # 分片はそれぞれ自分が測ったコースしか知らない。最後に collect が成果を集めて、
 # **置いてあるものを数え直して** index.json を書く（pnpm skill-list-collect）。
 #
+# ## 回す前に版を見る
+#
+# 24 分片で 50 ジョブ時間ほどかかる。**それを全部回してから「版は変わらなかった」と
+# 気付くのでは遅い。** 起動条件の 4 パスのうち field.ts は普通の開発で動く一方、
+# 版を決めるのは defaultFieldProfile の**中身**の指紋なので、触っても版が変わらない回が多い。
+# そこで matrix の前に plan を置き、数秒で済む版の計算だけ先にやる。
+#
 # **1 本こけても他は捨てない**（fail-fast: false）。表はコースごとに 1 枚なので、
 # 測れたコースだけが載った一覧になるだけである。画面はそれを「測っていない」と読む。
 # 何本こけたかは PR 本文に出す。
@@ -86,11 +93,62 @@ env:
   # 2〜3 時間で、6 時間の上限に対して十分な余裕がある。12 分片では 4〜5 時間になり、
   # 長いコースを多く引いた分片が上限に当たりうる。**そこで落ちると分片ごと無駄になる。**
   SHARDS: '24'
-  # 1 行あたりの試行数。誤差は 1/sqrt(試行) でしか縮まないので、増やすと時間で効く。
-  TRIALS: '200'
+  # 1 行あたりの試行数。**手元の CLI の既定と必ず揃える**
+  # （packages/solver/src/skill-list-cli.ts。test/workflows.test.ts が見張っている）。
+  #
+  # 誤差は 1/sqrt(試行) でしか縮まない。100 → 200 で 29 % しか減らず、
+  # 実データで測ったところ「20 位と統計的に区別できない帯」は 31 → 28 スキルにしかならない。
+  # **20 時間（CI なら 50 ジョブ時間）を足して曖昧さが 3 個縮むだけ**なので、100 で止める。
+  # この表は順位を 1 つずつ言い当てる道具ではなく、段を出す道具である。
+  TRIALS: '100'
 
 jobs:
+  # 版を計算するだけの関所。**ここが false を返したら 50 ジョブ時間を丸ごと省ける。**
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      changed: ${{ steps.check.outputs.changed }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+
+      - id: check
+        env:
+          FORCE: ${{ inputs.force }}
+        run: |
+          set -o pipefail
+          # CLI は事実だけを出す（version / courses / total / complete）。
+          # 回すかどうかを決めるのはここである。
+          pnpm skill-list-check --out "$OUT_DIR" | tee /tmp/skill-list-check.txt
+          grep -E '^(version|courses|total|complete)=' /tmp/skill-list-check.txt >> "$GITHUB_OUTPUT"
+          complete=$(sed -n 's/^complete=//p' /tmp/skill-list-check.txt)
+          if [ -z "$complete" ]; then
+            echo "::error::版を調べられなかった。pnpm skill-list-check が何も出していない" >&2
+            exit 1
+          fi
+          # **揃っていない版も作り直す。** 前回こけた分片のコースが欠けたままになる。
+          if [ "$FORCE" = "true" ]; then
+            echo "force が指定された"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          elif [ "$complete" = "true" ]; then
+            echo "::notice::版も中身も変わらないので作り直さない"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
   measure:
+    needs: plan
+    if: ${{ needs.plan.outputs.changed == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 350
     strategy:
@@ -137,9 +195,10 @@ jobs:
           retention-days: 1
 
   collect:
-    needs: measure
+    needs: [plan, measure]
     # 分片が何本かこけても、測れたぶんは配る。1 本も無ければ collect 自身が赤になる。
-    if: ${{ always() }}
+    # **関所が止めた回と、関所そのものがこけた回には走らない。**
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.changed == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -291,7 +350,7 @@ jobs:
             echo "画面は \`skill-list/index.json\` を見てから、選ばれたコースの 1 枚を取りに行く。掃除のあとに \`generations\` を実際に残っているものへ合わせてある（scripts/prune-skill-list.mjs）。"
             if [ -n "$REMOVED" ]; then
               echo
-              echo "古い世代を落とした（リポジトリには $KEEP 世代だけ残す。理由は docs/deploy.md 6.5 節）:"
+              echo "古い世代を落とした（リポジトリには $KEEP 世代だけ残す。理由は docs/deploy.md 6.6 節）:"
               echo
               for path in $REMOVED; do echo "- \`$path\`"; done
             fi

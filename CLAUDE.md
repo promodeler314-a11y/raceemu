@@ -13,7 +13,7 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 ```
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
-pnpm test                      # vitest run。33 ファイル 418 件
+pnpm test                      # vitest run。33 ファイル 422 件
 pnpm test packages/sim/test/plan.test.ts    # ファイルを絞る
 pnpm exec vitest run packages/sim/test/optimize.test.ts -t '予算を超える構成は返さない'  # テスト名で絞る
 pnpm dev                       # UI の開発サーバ
@@ -36,7 +36,8 @@ pnpm run multi --trials 500    # 全頭同時（multi は pnpm の下位コマ�
 pnpm order-field --trials 200  # 順位条件の判定が相手の作り方でどう変わるか
 pnpm cross --surface 1 --category MIDDLE --count 500   # コース横断（--distance 2000 でぴったりの距離、--field で順位条件あり）
 pnpm skill-list --courses 10006-10606   # 全スキルの単体評価をコースごとに事前計算して apps/web/public/skill-list に置く
-pnpm skill-list --list         # 137 コースのうち何が測ってあるか。--shard 0/24 で分けて回す（全部で 40 時間超）
+pnpm skill-list --list         # 137 コースのうち何が測ってあるか。--shard 0/24 で分けて回す（全部で 20 時間超）
+pnpm skill-list-check          # 版を計算して、作り直しが要るかだけを見る（走らせない）
 pnpm skill-list --calibrate    # 基準個体のスタミナをコースごとに測り直す（packages/solver/assets/skill-list-stamina.json）
 ```
 
@@ -47,7 +48,7 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 
 ### テストの前提
 
-418 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
+422 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
 
 - 読み取りの 7 件：`.tessdata/jpn.traineddata`（`pnpm fetch-tessdata`）が必要。
 - ステータス読み取りの 6 件：`RACEEMU_REAL_SCREENSHOT_DIR` に実機の写真を置いた場所を指す。写真はゲームの著作物なのでリポジトリに無い。

@@ -17,6 +17,7 @@
     "sensitivity": "tsx packages/solver/src/sensitivity-cli.ts",
     "skill-list": "tsx packages/solver/src/skill-list-cli.ts",
     "skill-list-collect": "tsx packages/solver/src/skill-list-collect-cli.ts",
+    "skill-list-check": "tsx packages/solver/src/skill-list-check-cli.ts",
     "plan": "tsx packages/solver/src/plan-cli.ts",
     "api": "tsx apps/api/src/main.ts",
     "multi": "tsx packages/sim/src/multi/cli.ts",

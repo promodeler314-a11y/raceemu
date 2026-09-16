@@ -28,6 +28,27 @@ const DIR = '.github/workflows';
 /** 掃除と `index.json` の整合を持つスクリプト。 */
 const PRUNE = 'scripts/prune-skill-list.mjs';
 
+/**
+ * `jobs:` の下のジョブを、名前 → その塊の文面に割る。
+ *
+ * YAML のパーサは入れていない（テストのためだけに依存を増やさない）。
+ * 見たいのは `needs` と `if` と `strategy` があるかどうかだけなので、
+ * 2 段字下げの見出しで割れば足りる。
+ */
+function jobBlocks(workflow: string): Record<string, string> {
+  const start = workflow.indexOf('\njobs:\n');
+  if (start < 0) return {};
+  const body = workflow.slice(start + '\njobs:\n'.length);
+  const out: Record<string, string> = {};
+  const heads = [...body.matchAll(/^ {2}([a-z][\w-]*):\s*$/gm)];
+  for (const [i, head] of heads.entries()) {
+    const from = head.index! + head[0].length;
+    const to = i + 1 < heads.length ? heads[i + 1]!.index! : body.length;
+    out[head[1]!] = body.slice(from, to);
+  }
+  return out;
+}
+
 function steps(body: string): string[] {
   // `run: |` から、次の同じ深さの項目までを 1 つの塊として取る。
   return body.split(/^\s*- /m).filter((block) => block.includes('run: |'));
@@ -226,6 +247,46 @@ describe('スキル一覧の表の作り直し', () => {
     expect(workflow).toContain('--shard "${{ matrix.shard }}/$SHARDS"');
   });
 
+  const jobs = jobBlocks(workflow);
+
+  it('matrix を回す前に版を見る関所がある', () => {
+    // **24 分片で 50 ジョブ時間かかる。** それを全部回してから「版は変わらなかった」と
+    // 気付くのでは遅い。起動条件の field.ts は普通の開発で動く一方、版を決めるのは
+    // defaultFieldProfile の中身の指紋なので、触っても版が変わらない回が多い。
+    expect(Object.keys(jobs)).toEqual(['plan', 'measure', 'collect']);
+    // 関所そのものが高くては意味が無い。plan は matrix を持たない。
+    expect(jobs['plan']).not.toContain('strategy:');
+    expect(jobs['measure']).toContain('strategy:');
+    // measure と collect が関所の答えに従っていること。
+    // ここが外れると、関所はあるのに素通りして 50 ジョブ時間を使う。
+    expect(jobs['measure']).toMatch(/^\s*needs: plan\s*$/m);
+    expect(jobs['measure']).toContain("needs.plan.outputs.changed == 'true'");
+    expect(jobs['collect']).toContain("needs.plan.outputs.changed == 'true'");
+    // 関所そのものがこけた回に取りまとめだけ走らないこと。
+    expect(jobs['collect']).toContain("needs.plan.result == 'success'");
+  });
+
+  it('関所は生成と同じ版の計算を使う', () => {
+    // **ここが食い違うと、関所が「変わっていない」と言ったのに実は違う版、が起きる。**
+    // 表は古いまま、作り直しは二度と走らない（しかも緑）。
+    const check = readFileSync('packages/solver/src/skill-list-check-cli.ts', 'utf8');
+    expect(check).toContain('readSkillListDataset');
+    expect(check).toContain('skillListVersion');
+    expect(workflow).toContain('pnpm skill-list-check');
+  });
+
+  it('試行数が手元の CLI の既定とワークフローで揃っている', () => {
+    // 揃っていないと、手元で確かめた表と CI が作る表が別物になる。
+    const trials = Number(/^\s*TRIALS:\s*'(\d+)'\s*$/m.exec(workflow)?.[1]);
+    const cliDefault = Number(
+      /const trials = Number\(arg\('trials', '(\d+)'\)\)/.exec(
+        readFileSync('packages/solver/src/skill-list-cli.ts', 'utf8'),
+      )?.[1],
+    );
+    expect(trials).toBeGreaterThan(0);
+    expect(cliDefault).toBe(trials);
+  });
+
   it('1 ジョブの上限（6 時間）に収まる時間で切ってある', () => {
     const limits = [...workflow.matchAll(/^\s*timeout-minutes:\s*(\d+)\s*$/gm)].map((m) =>
       Number(m[1]),
@@ -238,7 +299,10 @@ describe('スキル一覧の表の作り直し', () => {
     // 表はコースごとに 1 枚なので、こけた分片のコースが載らないだけである。
     // fail-fast で全部捨てると、何十時間かけた他の分片まで無駄になる。
     expect(workflow).toContain('fail-fast: false');
-    expect(workflow).toContain('if: ${{ always() }}');
+    // 分片の成否では止めない。`always()` ではなく `!cancelled()` なのは、
+    // 関所が止めた回と関所がこけた回には走らせないためである（上の節）。
+    expect(jobs['collect']).toContain('!cancelled()');
+    expect(jobs['collect']).not.toContain('needs.measure.result ==');
     // こけたことは PR 本文に出す。黙って少ないコースを配ってはならない。
     expect(workflow).toContain('needs.measure.result');
   });
