@@ -204,6 +204,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      # **ref を指定しない＝起こした ref をそのまま checkout する。**
+      # push で起きた回は main なので、下の PR はデータだけの差分になる。
+      # workflow_dispatch を開発ブランチから掛けた回は**そのブランチ**が土台になり、
+      # chore/build-skill-list に開発中のコード変更まで載った PR が出る。
+      # 間違いではない（ブランチの計算式で測った表が要る場面はある）が、
+      # そのまま main へマージするものではない。**データだけを元の PR に移して閉じること。**
       - uses: actions/checkout@v4
         with:
           token: ${{ secrets.SYNC_PAT || github.token }}
