@@ -663,7 +663,9 @@ for (const value of styleOptions.filter((v) => v !== 'ALL')) {
 await page.selectOption('[data-testid=skill-list-style]', 'ALL');
 await page.waitForTimeout(250);
 
-// 基準の個体は普通／強いの 2 段だけ。スタミナはコースごとの実測なので併記する。
+// 基準の個体は普通／強いの 2 段だけ。スタミナは併記する。
+// **両段ともスタミナは育成の上限である。** 段の違いは速さ・パワー・根性・賢さだけで、
+// スタミナを段の軸に混ぜていたころは上位が回復スキルで埋まっていた。
 const tierOptions = await page.$$eval('[data-testid=skill-list-baseline] option', (os) =>
   os.map((o) => ({ value: o.value, label: o.textContent?.trim() ?? '' })),
 );
@@ -673,7 +675,14 @@ if (tierOptions.map((o) => o.value).join(',') !== 'normal,strong') {
   fail(`段の id が normal / strong でない: ${tierOptions.map((o) => o.value).join(',')}`);
 }
 if (!tierOptions.every((o) => /スタミナ\s*\d+/.test(o.label))) {
-  fail(`実測のスタミナが併記されていない: ${tierOptions.map((o) => o.label).join(' / ')}`);
+  fail(`スタミナが併記されていない: ${tierOptions.map((o) => o.label).join(' / ')}`);
+}
+// 段でスタミナが変わらないこと（変わっていたら段の軸が 2 つある）。
+const tierStamina = [...new Set(tierOptions.map((o) => /スタミナ\s*(\d+)/.exec(o.label)[1]))];
+console.log('--- 段ごとのスタミナ:', tierStamina.join(' / '));
+if (tierStamina.length !== 1) fail(`段でスタミナが変わっている: ${tierStamina.join(' / ')}`);
+if (!skillListNotes.includes('基準の個体はスタミナが足りている')) {
+  fail('スタミナが足りている前提であることが書かれていない');
 }
 const normalTop = (await readTestTable('skill-list-table'))[0];
 await page.selectOption('[data-testid=skill-list-baseline]', 'strong');

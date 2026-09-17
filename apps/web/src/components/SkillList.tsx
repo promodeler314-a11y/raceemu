@@ -8,6 +8,7 @@ import type {
   SkillListIndexEntry,
   SkillListTier,
 } from '../../../../packages/solver/src/skill-list.ts';
+import { isStaminaBinding, staminaHeadroom } from '../../../../packages/solver/src/skill-list.ts';
 import {
   DEFAULT_SKILL_LIST_FILTER,
   FIXED_AXES,
@@ -367,20 +368,37 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
       </div>
 
       <p className="mt-2 text-xs text-ink3">
-        基準の個体のスタミナは<strong>このコースで実測した値</strong>である。
-        「普通」は最大スパートが五分五分で出る量（50 パーセンタイル）、「強い」はほぼ確実に出る量
-        （90 パーセンタイル）で、そのぶん速度・パワー・根性・賢さも上げてある
+        <strong>基準の個体はスタミナが足りている。</strong>
+        育成の上限まで持たせてあり、段の違いは速度・パワー・根性・賢さだけである
         {baseline !== undefined && (
           <>
             （いまは {baseline.label}：スピード {baseline.speed} ・ スタミナ {baseline.stamina} ・
             パワー {baseline.power} ・ 根性 {baseline.guts} ・ 賢さ {baseline.wisdom}）
           </>
         )}
-        。{FIXED_AXES.join('、')}の選択欄は出していない。この版が 1 通りしか測っておらず、
+        。ぎりぎり最大スパートに届く個体にすると、スタミナ 1 点の値打ちが他のどの効果より
+        大きくなり、上位が回復スキルで埋まってしまう。
+        {FIXED_AXES.join('、')}の選択欄は出していない。この版が 1 通りしか測っておらず、
         選べても何も変わらないからである（バ場状態は
         {TRACK_CONDITION_LABEL[file.settings.trackCondition] ?? `不明（${file.settings.trackCondition}）`}
         で固定）。測る軸が増えれば選択欄も増える。
       </p>
+
+      {file.staminaDemand != null && isStaminaBinding(file) && (
+        <p
+          className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink"
+          data-testid="skill-list-stamina-demand"
+        >
+          <strong>このコースは上限のスタミナでも余裕が無い。</strong>
+          最大スパートを出すのに要るスタミナは実測で{' '}
+          <span className="num">{file.staminaDemand.p50}</span>（五分五分）／
+          <span className="num">{file.staminaDemand.p90}</span>（ほぼ確実）。
+          基準の個体は上限の <span className="num">{file.baselines[0]?.stamina}</span> まで
+          持たせてあるが、余裕は <span className="num">{staminaHeadroom(file)}</span> しかない。
+          <strong>回復スキルが上位を占めるのは、基準の個体の置き方ではなくこのコースの性質である。</strong>
+          スタミナはスパートを保てる距離にも効くので、余裕が無いうちは回復が効き続ける。
+        </p>
+      )}
 
       {recommended.length > 0 && <Recommend rows={recommended} onPick={addAndSolve} />}
 
