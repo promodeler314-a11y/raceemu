@@ -1,7 +1,7 @@
 {
   "format": 2,
   "version": "v2-e08cb6e3f38a",
-  "generatedAt": "2026-09-16T18:27:34.460Z",
+  "generatedAt": "2026-09-17T08:19:30.145Z",
   "dataset": {
     "skills": "e857c6ea0e5e62311bd07c3c2c70a69004beeb44",
     "courses": "0117075b5b318f7039e78ae09818b7f658d69b76",
@@ -30,7 +30,7 @@
       "file": "v2-e08cb6e3f38a/10001-10101.json",
       "rows": 4020,
       "trials": 100,
-      "generatedAt": "2026-09-16T17:27:14.085Z"
+      "generatedAt": "2026-09-17T06:34:53.127Z"
     },
     {
       "course": {
@@ -45,7 +45,7 @@
       "file": "v2-e08cb6e3f38a/10001-10102.json",
       "rows": 4120,
       "trials": 100,
-      "generatedAt": "2026-09-16T17:32:40.193Z"
+      "generatedAt": "2026-09-17T06:36:34.915Z"
     },
     {
       "course": {
@@ -60,7 +60,7 @@
       "file": "v2-e08cb6e3f38a/10001-10103.json",
       "rows": 4120,
       "trials": 100,
-      "generatedAt": "2026-09-16T17:39:18.583Z"
+      "generatedAt": "2026-09-17T06:37:46.631Z"
     },
     {
       "course": {
@@ -75,7 +75,7 @@
       "file": "v2-e08cb6e3f38a/10001-10104.json",
       "rows": 4556,
       "trials": 100,
-      "generatedAt": "2026-09-16T17:47:18.736Z"
+      "generatedAt": "2026-09-17T06:39:08.709Z"
     },
     {
       "course": {
@@ -90,7 +90,7 @@
       "file": "v2-e08cb6e3f38a/10001-10105.json",
       "rows": 4234,
       "trials": 100,
-      "generatedAt": "2026-09-16T17:56:47.493Z"
+      "generatedAt": "2026-09-17T07:26:52.792Z"
     },
     {
       "course": {
@@ -105,7 +105,7 @@
       "file": "v2-e08cb6e3f38a/10001-10106.json",
       "rows": 4384,
       "trials": 100,
-      "generatedAt": "2026-09-16T18:00:49.674Z"
+      "generatedAt": "2026-09-17T06:34:35.427Z"
     },
     {
       "course": {
@@ -120,7 +120,7 @@
       "file": "v2-e08cb6e3f38a/10001-10107.json",
       "rows": 4492,
       "trials": 100,
-      "generatedAt": "2026-09-16T18:07:33.413Z"
+      "generatedAt": "2026-09-17T06:38:28.020Z"
     },
     {
       "course": {
@@ -135,7 +135,7 @@
       "file": "v2-e08cb6e3f38a/10001-10108.json",
       "rows": 4928,
       "trials": 100,
-      "generatedAt": "2026-09-16T18:17:37.387Z"
+      "generatedAt": "2026-09-17T06:43:24.581Z"
     },
     {
       "course": {
@@ -150,7 +150,7 @@
       "file": "v2-e08cb6e3f38a/10002-10201.json",
       "rows": 4020,
       "trials": 100,
-      "generatedAt": "2026-09-16T18:21:24.428Z"
+      "generatedAt": "2026-09-17T06:34:18.641Z"
     },
     {
       "course": {
@@ -165,7 +165,1912 @@
       "file": "v2-e08cb6e3f38a/10002-10202.json",
       "rows": 4020,
       "trials": 100,
-      "generatedAt": "2026-09-16T18:25:59.074Z"
+      "generatedAt": "2026-09-17T06:34:38.401Z"
+    },
+    {
+      "course": {
+        "location": 10002,
+        "course": 10203,
+        "locationName": "函館",
+        "courseName": "芝1800m",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10002-10203.json",
+      "rows": 4120,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:38:52.019Z"
+    },
+    {
+      "course": {
+        "location": 10002,
+        "course": 10204,
+        "locationName": "函館",
+        "courseName": "芝2000m",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10002-10204.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:37:42.147Z"
+    },
+    {
+      "course": {
+        "location": 10002,
+        "course": 10205,
+        "locationName": "函館",
+        "courseName": "芝2600m",
+        "distance": 2600,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10002-10205.json",
+      "rows": 4234,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:43:32.141Z"
+    },
+    {
+      "course": {
+        "location": 10002,
+        "course": 10206,
+        "locationName": "函館",
+        "courseName": "ダート1000m",
+        "distance": 1000,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10002-10206.json",
+      "rows": 4384,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:34:08.870Z"
+    },
+    {
+      "course": {
+        "location": 10002,
+        "course": 10207,
+        "locationName": "函館",
+        "courseName": "ダート1700m",
+        "distance": 1700,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10002-10207.json",
+      "rows": 4492,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:21:20.093Z"
+    },
+    {
+      "course": {
+        "location": 10002,
+        "course": 10208,
+        "locationName": "函館",
+        "courseName": "ダート2400m",
+        "distance": 2400,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10002-10208.json",
+      "rows": 4928,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:43:02.538Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10301,
+        "locationName": "新潟",
+        "courseName": "芝1000m",
+        "distance": 1000,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10301.json",
+      "rows": 3996,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:33:47.935Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10302,
+        "locationName": "新潟",
+        "courseName": "芝1200m(内)",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10302.json",
+      "rows": 4020,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:34:36.920Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10303,
+        "locationName": "新潟",
+        "courseName": "芝1400m(内)",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10303.json",
+      "rows": 4020,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:35:18.786Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10304,
+        "locationName": "新潟",
+        "courseName": "芝1600m(外)",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10304.json",
+      "rows": 4104,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:32:52.221Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10305,
+        "locationName": "新潟",
+        "courseName": "芝1800m(外)",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10305.json",
+      "rows": 4104,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:18:06.369Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10306,
+        "locationName": "新潟",
+        "courseName": "芝2000m(内)",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10306.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:36:30.742Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10307,
+        "locationName": "新潟",
+        "courseName": "芝2000m(外)",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10307.json",
+      "rows": 4540,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:09:22.367Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10308,
+        "locationName": "新潟",
+        "courseName": "芝2200m(内)",
+        "distance": 2200,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10308.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:41:05.971Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10309,
+        "locationName": "新潟",
+        "courseName": "芝2400m(内)",
+        "distance": 2400,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10309.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:48:47.822Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10310,
+        "locationName": "新潟",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10310.json",
+      "rows": 4384,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:43:50.532Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10311,
+        "locationName": "新潟",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10311.json",
+      "rows": 4492,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:48:09.424Z"
+    },
+    {
+      "course": {
+        "location": 10003,
+        "course": 10312,
+        "locationName": "新潟",
+        "courseName": "ダート2500m",
+        "distance": 2500,
+        "surface": 2,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10003-10312.json",
+      "rows": 4598,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:52:48.982Z"
+    },
+    {
+      "course": {
+        "location": 10004,
+        "course": 10401,
+        "locationName": "福島",
+        "courseName": "芝1200m",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10004-10401.json",
+      "rows": 4020,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:33:04.303Z"
+    },
+    {
+      "course": {
+        "location": 10004,
+        "course": 10402,
+        "locationName": "福島",
+        "courseName": "芝1800m",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10004-10402.json",
+      "rows": 4120,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:44:33.783Z"
+    },
+    {
+      "course": {
+        "location": 10004,
+        "course": 10403,
+        "locationName": "福島",
+        "courseName": "芝2000m",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10004-10403.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:50:48.579Z"
+    },
+    {
+      "course": {
+        "location": 10004,
+        "course": 10404,
+        "locationName": "福島",
+        "courseName": "芝2600m",
+        "distance": 2600,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10004-10404.json",
+      "rows": 4234,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:58:05.401Z"
+    },
+    {
+      "course": {
+        "location": 10004,
+        "course": 10405,
+        "locationName": "福島",
+        "courseName": "ダート1150m",
+        "distance": 1150,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10004-10405.json",
+      "rows": 4384,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:41:35.004Z"
+    },
+    {
+      "course": {
+        "location": 10004,
+        "course": 10406,
+        "locationName": "福島",
+        "courseName": "ダート1700m",
+        "distance": 1700,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10004-10406.json",
+      "rows": 4492,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:44:18.740Z"
+    },
+    {
+      "course": {
+        "location": 10004,
+        "course": 10407,
+        "locationName": "福島",
+        "courseName": "ダート2400m",
+        "distance": 2400,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10004-10407.json",
+      "rows": 4928,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:54:36.790Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10501,
+        "locationName": "中山",
+        "courseName": "芝1200m(外)",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10501.json",
+      "rows": 4004,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:43:05.423Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10502,
+        "locationName": "中山",
+        "courseName": "芝1600m(外)",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10502.json",
+      "rows": 4104,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:52:47.461Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10503,
+        "locationName": "中山",
+        "courseName": "芝1800m(内)",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10503.json",
+      "rows": 4120,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:44:02.787Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10504,
+        "locationName": "中山",
+        "courseName": "芝2000m(内)",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10504.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:31:55.917Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10505,
+        "locationName": "中山",
+        "courseName": "芝2200m(外)",
+        "distance": 2200,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10505.json",
+      "rows": 4540,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:56:26.849Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10506,
+        "locationName": "中山",
+        "courseName": "芝2500m(内)",
+        "distance": 2500,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10506.json",
+      "rows": 4234,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:48:08.380Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10507,
+        "locationName": "中山",
+        "courseName": "芝3600m(内)",
+        "distance": 3600,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10507.json",
+      "rows": 4250,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:55:33.949Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10508,
+        "locationName": "中山",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10508.json",
+      "rows": 4384,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:42:25.258Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10509,
+        "locationName": "中山",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10509.json",
+      "rows": 4492,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:38:53.125Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10510,
+        "locationName": "中山",
+        "courseName": "ダート2400m",
+        "distance": 2400,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10510.json",
+      "rows": 4928,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:33:57.270Z"
+    },
+    {
+      "course": {
+        "location": 10005,
+        "course": 10511,
+        "locationName": "中山",
+        "courseName": "ダート2500m",
+        "distance": 2500,
+        "surface": 2,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10005-10511.json",
+      "rows": 4598,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:46:54.904Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10601,
+        "locationName": "東京",
+        "courseName": "芝1400m",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10601.json",
+      "rows": 4012,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:15:25.946Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10602,
+        "locationName": "東京",
+        "courseName": "芝1600m",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10602.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:50:13.550Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10603,
+        "locationName": "東京",
+        "courseName": "芝1800m",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10603.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:58:52.115Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10604,
+        "locationName": "東京",
+        "courseName": "芝2000m",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10604.json",
+      "rows": 4548,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:56:09.281Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10605,
+        "locationName": "東京",
+        "courseName": "芝2300m",
+        "distance": 2300,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10605.json",
+      "rows": 4548,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:01:56.191Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10606,
+        "locationName": "東京",
+        "courseName": "芝2400m",
+        "distance": 2400,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10606.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:06:38.196Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10607,
+        "locationName": "東京",
+        "courseName": "芝2500m",
+        "distance": 2500,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10607.json",
+      "rows": 4226,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:45:42.892Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10608,
+        "locationName": "東京",
+        "courseName": "芝3400m",
+        "distance": 3400,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10608.json",
+      "rows": 4242,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:04:45.436Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10609,
+        "locationName": "東京",
+        "courseName": "ダート1300m",
+        "distance": 1300,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10609.json",
+      "rows": 4376,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:59:01.867Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10610,
+        "locationName": "東京",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10610.json",
+      "rows": 4376,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:06:39.291Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10611,
+        "locationName": "東京",
+        "courseName": "ダート1600m",
+        "distance": 1600,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10611.json",
+      "rows": 4484,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:51:35.657Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10612,
+        "locationName": "東京",
+        "courseName": "ダート2100m",
+        "distance": 2100,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10612.json",
+      "rows": 4920,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:57:22.874Z"
+    },
+    {
+      "course": {
+        "location": 10006,
+        "course": 10613,
+        "locationName": "東京",
+        "courseName": "ダート2400m",
+        "distance": 2400,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10006-10613.json",
+      "rows": 4920,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:10:07.450Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10701,
+        "locationName": "中京",
+        "courseName": "芝1200m",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10701.json",
+      "rows": 4004,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:48:25.847Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10702,
+        "locationName": "中京",
+        "courseName": "芝1400m",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10702.json",
+      "rows": 4004,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:00:48.662Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10703,
+        "locationName": "中京",
+        "courseName": "芝1600m",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10703.json",
+      "rows": 4104,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:52:38.335Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10704,
+        "locationName": "中京",
+        "courseName": "芝2000m",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10704.json",
+      "rows": 4540,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:42:25.690Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10705,
+        "locationName": "中京",
+        "courseName": "芝2200m",
+        "distance": 2200,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10705.json",
+      "rows": 4540,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:09:47.475Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10706,
+        "locationName": "中京",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10706.json",
+      "rows": 4368,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:55:33.328Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10707,
+        "locationName": "中京",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10707.json",
+      "rows": 4368,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:03:50.718Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10708,
+        "locationName": "中京",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10708.json",
+      "rows": 4476,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:52:51.991Z"
+    },
+    {
+      "course": {
+        "location": 10007,
+        "course": 10709,
+        "locationName": "中京",
+        "courseName": "ダート1900m",
+        "distance": 1900,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10007-10709.json",
+      "rows": 4904,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:45:26.183Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10801,
+        "locationName": "京都",
+        "courseName": "芝1200m(内)",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10801.json",
+      "rows": 4012,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:41:10.862Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10802,
+        "locationName": "京都",
+        "courseName": "芝1400m(内)",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10802.json",
+      "rows": 4012,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:52:33.743Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10803,
+        "locationName": "京都",
+        "courseName": "芝1400m(外)",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10803.json",
+      "rows": 4012,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:21:29.841Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10804,
+        "locationName": "京都",
+        "courseName": "芝1600m(内)",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10804.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:59:15.790Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10805,
+        "locationName": "京都",
+        "courseName": "芝1600m(外)",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10805.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:07:58.279Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10806,
+        "locationName": "京都",
+        "courseName": "芝1800m(外)",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10806.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:06:10.528Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10807,
+        "locationName": "京都",
+        "courseName": "芝2000m(内)",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10807.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:13:59.949Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10808,
+        "locationName": "京都",
+        "courseName": "芝2200m(外)",
+        "distance": 2200,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10808.json",
+      "rows": 4548,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:19:14.791Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10809,
+        "locationName": "京都",
+        "courseName": "芝2400m(外)",
+        "distance": 2400,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10809.json",
+      "rows": 4548,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:58:41.163Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10810,
+        "locationName": "京都",
+        "courseName": "芝3000m(外)",
+        "distance": 3000,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10810.json",
+      "rows": 4242,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:22:24.953Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10811,
+        "locationName": "京都",
+        "courseName": "芝3200m(外)",
+        "distance": 3200,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10811.json",
+      "rows": 4242,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:18:13.155Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10812,
+        "locationName": "京都",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10812.json",
+      "rows": 4376,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:14:13.664Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10813,
+        "locationName": "京都",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10813.json",
+      "rows": 4376,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:00:22.548Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10814,
+        "locationName": "京都",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10814.json",
+      "rows": 4484,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:07:46.569Z"
+    },
+    {
+      "course": {
+        "location": 10008,
+        "course": 10815,
+        "locationName": "京都",
+        "courseName": "ダート1900m",
+        "distance": 1900,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10008-10815.json",
+      "rows": 4912,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:23:02.514Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10901,
+        "locationName": "阪神",
+        "courseName": "芝1200m(内)",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10901.json",
+      "rows": 4004,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:53:55.458Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10902,
+        "locationName": "阪神",
+        "courseName": "芝1400m(内)",
+        "distance": 1400,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10902.json",
+      "rows": 4004,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:08:53.601Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10903,
+        "locationName": "阪神",
+        "courseName": "芝1600m(外)",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10903.json",
+      "rows": 4112,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:01:15.792Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10904,
+        "locationName": "阪神",
+        "courseName": "芝1800m(外)",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10904.json",
+      "rows": 4104,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:50:56.438Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10905,
+        "locationName": "阪神",
+        "courseName": "芝2000m(内)",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10905.json",
+      "rows": 4540,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:22:04.673Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10906,
+        "locationName": "阪神",
+        "courseName": "芝2200m(内)",
+        "distance": 2200,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10906.json",
+      "rows": 4540,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:09:04.659Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10907,
+        "locationName": "阪神",
+        "courseName": "芝2400m(外)",
+        "distance": 2400,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10907.json",
+      "rows": 4540,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:18:04.517Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10908,
+        "locationName": "阪神",
+        "courseName": "芝2600m(外)",
+        "distance": 2600,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10908.json",
+      "rows": 4218,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:06:48.400Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10909,
+        "locationName": "阪神",
+        "courseName": "芝3000m(内)",
+        "distance": 3000,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10909.json",
+      "rows": 4234,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:54:19.076Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10914,
+        "locationName": "阪神",
+        "courseName": "芝3200m(外→内)",
+        "distance": 3200,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10914.json",
+      "rows": 4234,
+      "trials": 100,
+      "generatedAt": "2026-09-17T08:00:06.248Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10910,
+        "locationName": "阪神",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10910.json",
+      "rows": 4368,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:57:54.000Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10911,
+        "locationName": "阪神",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10911.json",
+      "rows": 4368,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:28:00.160Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10912,
+        "locationName": "阪神",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10912.json",
+      "rows": 4476,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:10:18.417Z"
+    },
+    {
+      "course": {
+        "location": 10009,
+        "course": 10913,
+        "locationName": "阪神",
+        "courseName": "ダート2000m",
+        "distance": 2000,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10009-10913.json",
+      "rows": 4912,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:21:20.662Z"
+    },
+    {
+      "course": {
+        "location": 10010,
+        "course": 11001,
+        "locationName": "小倉",
+        "courseName": "芝1200m",
+        "distance": 1200,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10010-11001.json",
+      "rows": 4020,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:13:04.089Z"
+    },
+    {
+      "course": {
+        "location": 10010,
+        "course": 11002,
+        "locationName": "小倉",
+        "courseName": "芝1800m",
+        "distance": 1800,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10010-11002.json",
+      "rows": 4120,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:23:55.715Z"
+    },
+    {
+      "course": {
+        "location": 10010,
+        "course": 11003,
+        "locationName": "小倉",
+        "courseName": "芝2000m",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10010-11003.json",
+      "rows": 4556,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:30:44.994Z"
+    },
+    {
+      "course": {
+        "location": 10010,
+        "course": 11004,
+        "locationName": "小倉",
+        "courseName": "芝2600m",
+        "distance": 2600,
+        "surface": 1,
+        "category": "LONG"
+      },
+      "file": "v2-e08cb6e3f38a/10010-11004.json",
+      "rows": 4234,
+      "trials": 100,
+      "generatedAt": "2026-09-17T08:11:33.287Z"
+    },
+    {
+      "course": {
+        "location": 10010,
+        "course": 11005,
+        "locationName": "小倉",
+        "courseName": "ダート1000m",
+        "distance": 1000,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10010-11005.json",
+      "rows": 4384,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:28:49.604Z"
+    },
+    {
+      "course": {
+        "location": 10010,
+        "course": 11006,
+        "locationName": "小倉",
+        "courseName": "ダート1700m",
+        "distance": 1700,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10010-11006.json",
+      "rows": 4492,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:28:51.422Z"
+    },
+    {
+      "course": {
+        "location": 10010,
+        "course": 11007,
+        "locationName": "小倉",
+        "courseName": "ダート2400m",
+        "distance": 2400,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10010-11007.json",
+      "rows": 4928,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:29:36.290Z"
+    },
+    {
+      "course": {
+        "location": 10101,
+        "course": 11101,
+        "locationName": "大井",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10101-11101.json",
+      "rows": 4392,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:07:54.519Z"
+    },
+    {
+      "course": {
+        "location": 10101,
+        "course": 11102,
+        "locationName": "大井",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10101-11102.json",
+      "rows": 4500,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:17:56.801Z"
+    },
+    {
+      "course": {
+        "location": 10101,
+        "course": 11103,
+        "locationName": "大井",
+        "courseName": "ダート2000m",
+        "distance": 2000,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10101-11103.json",
+      "rows": 4936,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:36:14.907Z"
+    },
+    {
+      "course": {
+        "location": 10103,
+        "course": 11301,
+        "locationName": "川崎",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10103-11301.json",
+      "rows": 4408,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:00:35.750Z"
+    },
+    {
+      "course": {
+        "location": 10103,
+        "course": 11302,
+        "locationName": "川崎",
+        "courseName": "ダート1600m",
+        "distance": 1600,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10103-11302.json",
+      "rows": 4516,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:18:59.961Z"
+    },
+    {
+      "course": {
+        "location": 10103,
+        "course": 11303,
+        "locationName": "川崎",
+        "courseName": "ダート2100m",
+        "distance": 2100,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10103-11303.json",
+      "rows": 4952,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:14:23.242Z"
+    },
+    {
+      "course": {
+        "location": 10104,
+        "course": 11401,
+        "locationName": "船橋",
+        "courseName": "ダート1000m",
+        "distance": 1000,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10104-11401.json",
+      "rows": 4408,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:56:22.069Z"
+    },
+    {
+      "course": {
+        "location": 10104,
+        "course": 11402,
+        "locationName": "船橋",
+        "courseName": "ダート1600m",
+        "distance": 1600,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10104-11402.json",
+      "rows": 4516,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:31:41.526Z"
+    },
+    {
+      "course": {
+        "location": 10104,
+        "course": 11403,
+        "locationName": "船橋",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10104-11403.json",
+      "rows": 4516,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:19:57.814Z"
+    },
+    {
+      "course": {
+        "location": 10104,
+        "course": 11404,
+        "locationName": "船橋",
+        "courseName": "ダート2400m",
+        "distance": 2400,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10104-11404.json",
+      "rows": 4952,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:33:10.761Z"
+    },
+    {
+      "course": {
+        "location": 10105,
+        "course": 11501,
+        "locationName": "盛岡",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10105-11501.json",
+      "rows": 4392,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:14:01.157Z"
+    },
+    {
+      "course": {
+        "location": 10105,
+        "course": 11502,
+        "locationName": "盛岡",
+        "courseName": "ダート1600m",
+        "distance": 1600,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10105-11502.json",
+      "rows": 4500,
+      "trials": 100,
+      "generatedAt": "2026-09-17T06:59:44.683Z"
+    },
+    {
+      "course": {
+        "location": 10105,
+        "course": 11503,
+        "locationName": "盛岡",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10105-11503.json",
+      "rows": 4500,
+      "trials": 100,
+      "generatedAt": "2026-09-17T08:11:27.859Z"
+    },
+    {
+      "course": {
+        "location": 10105,
+        "course": 11504,
+        "locationName": "盛岡",
+        "courseName": "ダート2000m",
+        "distance": 2000,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10105-11504.json",
+      "rows": 4936,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:07:26.507Z"
+    },
+    {
+      "course": {
+        "location": 10201,
+        "course": 11203,
+        "locationName": "ロンシャン",
+        "courseName": "芝2400m",
+        "distance": 2400,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10201-11203.json",
+      "rows": 4572,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:39:07.006Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11613,
+        "locationName": "サンタアニタパーク",
+        "courseName": "芝1000m",
+        "distance": 1000,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11613.json",
+      "rows": 4044,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:16:12.166Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11614,
+        "locationName": "サンタアニタパーク",
+        "courseName": "芝1600m",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11614.json",
+      "rows": 4144,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:30:21.795Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11615,
+        "locationName": "サンタアニタパーク",
+        "courseName": "芝2000m",
+        "distance": 2000,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11615.json",
+      "rows": 4580,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:25:17.981Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11616,
+        "locationName": "サンタアニタパーク",
+        "courseName": "芝2400m",
+        "distance": 2400,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11616.json",
+      "rows": 4580,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:38:08.332Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11617,
+        "locationName": "サンタアニタパーク",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11617.json",
+      "rows": 4408,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:37:40.467Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11618,
+        "locationName": "サンタアニタパーク",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11618.json",
+      "rows": 4408,
+      "trials": 100,
+      "generatedAt": "2026-09-17T08:19:06.145Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11619,
+        "locationName": "サンタアニタパーク",
+        "courseName": "ダート1600m",
+        "distance": 1600,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11619.json",
+      "rows": 4516,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:39:11.837Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11620,
+        "locationName": "サンタアニタパーク",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11620.json",
+      "rows": 4516,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:39:53.716Z"
+    },
+    {
+      "course": {
+        "location": 10202,
+        "course": 11621,
+        "locationName": "サンタアニタパーク",
+        "courseName": "ダート2000m",
+        "distance": 2000,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10202-11621.json",
+      "rows": 4952,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:42:33.786Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11701,
+        "locationName": "デルマー",
+        "courseName": "芝1000m",
+        "distance": 1000,
+        "surface": 1,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11701.json",
+      "rows": 4044,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:13:55.719Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11702,
+        "locationName": "デルマー",
+        "courseName": "芝1600m",
+        "distance": 1600,
+        "surface": 1,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11702.json",
+      "rows": 4144,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:26:23.424Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11703,
+        "locationName": "デルマー",
+        "courseName": "芝2200m",
+        "distance": 2200,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11703.json",
+      "rows": 4580,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:49:44.545Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11704,
+        "locationName": "デルマー",
+        "courseName": "芝2400m",
+        "distance": 2400,
+        "surface": 1,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11704.json",
+      "rows": 4580,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:11:51.607Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11705,
+        "locationName": "デルマー",
+        "courseName": "ダート1200m",
+        "distance": 1200,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11705.json",
+      "rows": 4408,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:26:40.677Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11706,
+        "locationName": "デルマー",
+        "courseName": "ダート1400m",
+        "distance": 1400,
+        "surface": 2,
+        "category": "SHORT"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11706.json",
+      "rows": 4408,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:22:26.932Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11707,
+        "locationName": "デルマー",
+        "courseName": "ダート1600m",
+        "distance": 1600,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11707.json",
+      "rows": 4516,
+      "trials": 100,
+      "generatedAt": "2026-09-17T08:05:05.998Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11708,
+        "locationName": "デルマー",
+        "courseName": "ダート1800m",
+        "distance": 1800,
+        "surface": 2,
+        "category": "MILE"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11708.json",
+      "rows": 4516,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:42:18.294Z"
+    },
+    {
+      "course": {
+        "location": 10203,
+        "course": 11709,
+        "locationName": "デルマー",
+        "courseName": "ダート2000m",
+        "distance": 2000,
+        "surface": 2,
+        "category": "MIDDLE"
+      },
+      "file": "v2-e08cb6e3f38a/10203-11709.json",
+      "rows": 4952,
+      "trials": 100,
+      "generatedAt": "2026-09-17T07:33:02.317Z"
     }
   ],
   "generations": [
