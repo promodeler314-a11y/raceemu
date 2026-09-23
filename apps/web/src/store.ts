@@ -440,6 +440,11 @@ interface AppState {
   seed: number;
 
   running: boolean;
+  /**
+   * 中断を受け付けたか。止まるまで数秒かかる（Worker が受け持ちの塊を終えるまで待つ）
+   * ので、押したことを表示で返すために持つ。新しく走らせるたびに戻す。
+   */
+  cancelRequested: boolean;
   progress: number;
   elapsedMs: number;
   error: string | null;
@@ -680,6 +685,12 @@ const saveSnapshots = debounceSave<Snapshot[]>('snapshots', 200);
 
 let controller: AbortController | null = null;
 
+/** 走らせ始めるときの中断の口。前の回の「中断を受け付けた」を戻す。 */
+function newController(): AbortController {
+  useStore.setState({ cancelRequested: false });
+  return new AbortController();
+}
+
 export const useStore = create<AppState>((set, get) => ({
   uma: {
     charaName: '',
@@ -705,6 +716,7 @@ export const useStore = create<AppState>((set, get) => ({
   seed: 1,
 
   running: false,
+  cancelRequested: false,
   progress: 0,
   elapsedMs: 0,
   error: null,
@@ -830,7 +842,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ notice: '順位条件を判定していないので、相手の強さを振っても発動率は動きません。' });
       return;
     }
-    controller = new AbortController();
+    controller = newController();
     set({ bandRunning: true, error: null });
     try {
       const setting = buildSetting(state);
@@ -905,7 +917,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (state.running || state.multiRunning || state.optimizeRunning) return;
     const opponents = state.opponents.length > 0 ? state.opponents : defaultOpponents(state.track.gateCount);
     if (state.opponents.length === 0) set({ opponents });
-    controller = new AbortController();
+    controller = newController();
     set({ multiRunning: true, multiProgress: 0, error: null, multiResult: null, multiDetail: null });
     const started = performance.now();
     try {
@@ -1016,7 +1028,7 @@ export const useStore = create<AppState>((set, get) => ({
       set({ notice: 'この距離とバ場に当たるコースがありません。' });
       return;
     }
-    controller = new AbortController();
+    controller = newController();
     set({ crossRunning: true, crossProgress: 0, error: null, crossResult: null });
     const started = performance.now();
     try {
@@ -1113,7 +1125,7 @@ export const useStore = create<AppState>((set, get) => ({
   run: async () => {
     const state = get();
     if (state.running) return;
-    controller = new AbortController();
+    controller = newController();
     set({ running: true, progress: 0, error: null, detail: null, skillSummaries: [], band: null });
     const started = performance.now();
     try {
@@ -1162,7 +1174,11 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
 
-  cancel: () => controller?.abort(),
+  cancel: () => {
+    if (controller === null) return;
+    set({ cancelRequested: true });
+    controller.abort();
+  },
 
   showTrial: (trial) => {
     const state = get();
@@ -1188,7 +1204,7 @@ export const useStore = create<AppState>((set, get) => ({
   solveInverse: async () => {
     const state = get();
     if (state.running) return;
-    controller = new AbortController();
+    controller = newController();
     set({ running: true, progress: 0, error: null, inverseResult: null });
     const started = performance.now();
     // 探索範囲は 200 から 1600 まで 10 刻み。ステータスの現実的な幅に合わせる。
@@ -1323,7 +1339,7 @@ export const useStore = create<AppState>((set, get) => ({
       });
       return;
     }
-    controller = new AbortController();
+    controller = newController();
     const signal = controller.signal;
     const base = toSerializable({ ...buildSetting(state), skills: always });
     const field = fieldSpec(state);
@@ -1442,7 +1458,7 @@ export const useStore = create<AppState>((set, get) => ({
       return;
     }
 
-    controller = new AbortController();
+    controller = newController();
     set({ sensitivityRunning: true, error: null, sensitivityResult: null, sensitivityLog: [] });
     try {
       const result = await measureSensitivity(

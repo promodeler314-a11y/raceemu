@@ -355,7 +355,11 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       if (ocr === null) {
         // スキルの読み取りと違い、こちらは分類器を持たない。文字認識が
         // 無ければできることが無いので、黙って空を返さずそう言う。
-        sendJson(res, 503, { error: '文字認識が無効である（RACEEMU_TESSDATA が未指定）' });
+        // この文言は画面にそのまま出る。環境変数の名前は利用者には意味が無いので、
+        // 置く側への案内は起動時のログ（main.ts）に任せる。
+        sendJson(res, 503, {
+          error: 'このサーバでは、ステータスの読み取りを使えない（文字認識の学習データが置かれていない）。',
+        });
         return;
       }
       let image: Buffer;

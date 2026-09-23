@@ -3,12 +3,26 @@ import type { Style } from '../../../../packages/sim/src/data/constants.ts';
 import { listIndividuals, type Individual } from '../individualsApi.ts';
 import { defaultOpponents, estimateMulti, gameData, skillChoices, useStore } from '../store.ts';
 import { formatDuration } from '../format.ts';
-import { Panel } from './Inputs.tsx';
+import { rarityLabel } from '../skills.ts';
+import { CancelButton, Panel } from './Inputs.tsx';
 import { MultiRaceDetail, MultiTrialPicker } from './MultiRace.tsx';
 
 const fieldCls = 'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
 const STYLES: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
 const STYLE_LABEL: Record<string, string> = { NIGE: '逃げ', SEN: '先行', SASI: '差し', OI: '追込' };
+
+/** 保存した日時。表示は日本時間で、年は省く。読めなければ空にする。 */
+function savedAt(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('ja-JP', {
+    timeZone: 'Asia/Tokyo',
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
 const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
 
 interface OpponentRowProps {
@@ -101,16 +115,17 @@ function OpponentRow({ id, index, savedIndividuals, savedMessage, onRequestSaved
                   <li key={individual.id}>
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-surface2"
+                      className="flex w-full items-center justify-between gap-2 px-2 py-1 text-left hover:bg-sunken"
                       onClick={() => {
                         setFromIndividual(id, individual);
                         setPickerOpen(false);
                       }}
                     >
                       <span className="truncate">{individual.label || '(名称未設定)'}</span>
+                      {/* 同じ構成を何度か保存すると名前だけでは見分けが付かない。保存した日時を添える */}
                       <span className="whitespace-nowrap text-ink3">
                         {STYLE_LABEL[individual.uma.style] ?? individual.uma.style} ・ スキル{' '}
-                        {individual.skillIds.length}
+                        {individual.skillIds.length} ・ {savedAt(individual.createdAt)}
                       </span>
                     </button>
                   </li>
@@ -135,12 +150,12 @@ function OpponentRow({ id, index, savedIndividuals, savedMessage, onRequestSaved
                   <li key={skill.id}>
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-surface2"
+                      className="flex w-full items-center justify-between px-2 py-1 text-left hover:bg-sunken"
                       onClick={() => toggleSkill(id, skill.id)}
                     >
                       <span>{skill.name}</span>
                       <span className="text-ink3">
-                        {opponent.skillIds.includes(skill.id) ? '選択中' : skill.rarity}
+                        {opponent.skillIds.includes(skill.id) ? '選択中' : rarityLabel(skill.rarity)}
                       </span>
                     </button>
                   </li>
@@ -176,7 +191,6 @@ export function FieldPanel() {
   const trials = useStore((s) => s.multiTrials);
   const setTrials = useStore((s) => s.setMultiTrials);
   const run = useStore((s) => s.runMulti);
-  const cancel = useStore((s) => s.cancel);
   const running = useStore((s) => s.multiRunning);
   const progress = useStore((s) => s.multiProgress);
   const busy = useStore((s) => s.running || s.optimizeRunning);
@@ -194,13 +208,15 @@ export function FieldPanel() {
   // それぞれ叩くと、開くたびに毎回同じ一覧を 9 回取りに行くことになる。
   const [savedIndividuals, setSavedIndividuals] = useState<readonly Individual[] | null>(null);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
+  // 開くたびに取り直す。1 度取った一覧を使い回すと、面を開いたまま
+  // ヘッダから保存した個体が出てこない（docs/ui-audit-race-emulator.md 第3節 C-4）。
+  // 取り直しているあいだは前の一覧を出したままにする。
   const loadSavedIndividuals = () => {
-    if (savedIndividuals !== null) return;
     setSavedMessage(null);
     listIndividuals()
       .then((items) => {
         setSavedIndividuals(items);
-        if (items.length === 0) setSavedMessage('保存された個体がまだ無い。');
+        setSavedMessage(items.length === 0 ? '保存された個体がまだ無い。' : null);
       })
       .catch((error: unknown) => {
         setSavedMessage(error instanceof Error ? error.message : String(error));
@@ -221,7 +237,7 @@ export function FieldPanel() {
         </p>
         <p className="mt-1 text-xs text-ink3">
           この面は上の実行バーとは別に動く。
-          試行回数もシードもここで指定し、「順位条件を判定する」の指定は使わない（順位は実際の位置から決まる）。
+          試行回数はここで指定し、シードは実行バーの値を使う。「順位条件を判定する」の指定は使わない（順位は実際の位置から決まる）。
           枠番は空いているところから配る。
         </p>
         <div className="mt-3 overflow-x-auto">
@@ -275,13 +291,7 @@ export function FieldPanel() {
           </button>
           {running ? (
             <>
-              <button
-                type="button"
-                className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
-                onClick={cancel}
-              >
-                中断
-              </button>
+              <CancelButton />
               <span className="text-sm text-ink3">
                 {progress} / {trials}
               </span>

@@ -18,6 +18,26 @@ import type { SkillData } from '../../../packages/sim/src/skill/types.ts';
 /** 未選択を表す値。本家の `NOT_SELECTED` にあたる。 */
 export const NO_CHARA = '';
 
+/**
+ * レア度の表示名。データの値（`normal` `inherit` など）は内部の名前なので、
+ * 画面にはそのまま出さない（docs/ui-audit-race-emulator.md 第1節「内部の値」）。
+ * 知らない値が来たら、表に足すまでのあいだは空にする。英語を出すよりよい。
+ */
+const RARITY_LABEL: Record<string, string> = {
+  normal: '通常',
+  rare: 'レア',
+  unique: '固有',
+  inherit: '継承',
+  evo: '進化',
+  special: '特殊',
+  scenario: 'シナリオ',
+  minus: 'マイナス',
+};
+
+export function rarityLabel(rarity: string): string {
+  return RARITY_LABEL[rarity] ?? '';
+}
+
 export interface SkillIndex {
   /** キャラの一覧。ウマ娘名で並べる（勝負服名は先頭に付くので飛ばす）。 */
   readonly charas: readonly string[];

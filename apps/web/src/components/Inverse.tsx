@@ -6,7 +6,7 @@ import {
 } from '../../../../packages/solver/src/critical.ts';
 import { GOAL_LABEL, STATUS_LABEL, type Goal, type TargetStatus } from '../../../../packages/solver/src/target.ts';
 import { useStore } from '../store.ts';
-import { Panel } from './Inputs.tsx';
+import { CancelButton, Panel } from './Inputs.tsx';
 
 /** 回数の見出し。最後の区切りはそれ以上をまとめて受け持つ。 */
 function bucketLabel(count: number): string {
@@ -28,15 +28,38 @@ const GOALS: Goal[] = [{ kind: 'maxSpurt' }, { kind: 'finish' }];
  */
 function CriticalHistogram({
   values,
-  from,
-  to,
+  from: searchFrom,
+  to: searchTo,
   current,
 }: {
   values: Float64Array;
+  /** 探した範囲。図はこのうち値のある所だけを描く。 */
   from: number;
   to: number;
   current?: number;
 }) {
+  // 探した範囲（200〜1600 など）をそのまま横軸にすると、棒が中央の一部に
+  // 固まって形が読めない（docs/ui-audit-race-emulator.md 第3節 A-4）。
+  // 値といまの設定値が入る幅に絞り、10 刻みに丸める。探した範囲の外には出ない。
+  const { from, to } = useMemo(() => {
+    let lo = Number.POSITIVE_INFINITY;
+    let hi = Number.NEGATIVE_INFINITY;
+    for (const value of values) {
+      if (Number.isNaN(value)) continue;
+      lo = Math.min(lo, value);
+      hi = Math.max(hi, value);
+    }
+    if (current !== undefined) {
+      lo = Math.min(lo, current);
+      hi = Math.max(hi, current);
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { from: searchFrom, to: searchTo };
+    const pad = Math.max(10, (hi - lo) * 0.08);
+    const narrowFrom = Math.max(searchFrom, Math.floor((lo - pad) / 10) * 10);
+    const narrowTo = Math.min(searchTo, Math.ceil((hi + pad) / 10) * 10);
+    return narrowTo > narrowFrom ? { from: narrowFrom, to: narrowTo } : { from: searchFrom, to: searchTo };
+  }, [values, current, searchFrom, searchTo]);
+
   const bins = useMemo(() => {
     const binCount = 40;
     const width = (to - from) / binCount;
@@ -119,7 +142,6 @@ export function InversePanel() {
     progress,
     setInverse,
     solveInverse,
-    cancel,
   } = useStore();
   const uma = useStore((s) => s.uma);
 
@@ -213,13 +235,7 @@ export function InversePanel() {
         </button>
         {running && (
           <>
-            <button
-              type="button"
-              className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
-              onClick={cancel}
-            >
-              中断
-            </button>
+            <CancelButton />
             <span className="num text-sm text-ink3">
               {progress} / {inverseCount}
             </span>

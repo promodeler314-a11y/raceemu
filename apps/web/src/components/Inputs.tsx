@@ -14,7 +14,7 @@ import {
 } from '../store.ts';
 import { FidelityLegend, FidelityMark } from './Fidelity.tsx';
 import { formatDuration } from '../format.ts';
-import { NO_CHARA, skillIndex } from '../skills.ts';
+import { NO_CHARA, rarityLabel, skillIndex } from '../skills.ts';
 import type { SkillData } from '../../../../packages/sim/src/skill/types.ts';
 import type {
   PositionKeepMode,
@@ -78,7 +78,7 @@ export function Segmented<T extends string>({
             aria-label={`${label} ${option.label}`}
             aria-checked={value === option.value}
             onClick={() => onChange(option.value)}
-            className={`flex flex-1 items-center justify-center border-r border-rule px-1 text-xs last:border-r-0 ${
+            className={`flex flex-1 items-center justify-center whitespace-nowrap border-r border-rule px-1 text-xs last:border-r-0 ${
               value === option.value
                 ? 'bg-acc-tint font-semibold text-acc-ink'
                 : 'bg-surface text-ink2'
@@ -149,6 +149,30 @@ function CourseShape({ detail }: { detail: TrackDetail }) {
         <span className="num">{length}m</span>
       </div>
     </div>
+  );
+}
+
+/**
+ * 中断ボタン。走っているあいだだけ描く。
+ *
+ * 押してから止まるまで数秒かかる（Worker が受け持ちの塊を終えるまで待つ）。
+ * そのあいだ「中断」のままだと、押せたのか分からない
+ * （docs/ui-audit-race-emulator.md 第3節 C-1）。受け付けたら文言を変えて押せなくする。
+ * Esc での中断も同じ状態を見るので、キーで止めたときも表示が変わる。
+ */
+export function CancelButton({ className = 'text-sm' }: { className?: string }) {
+  const cancel = useStore((s) => s.cancel);
+  const requested = useStore((s) => s.cancelRequested);
+  return (
+    <button
+      type="button"
+      className={`rounded-sm border border-rule2 px-3 py-1.5 disabled:text-ink3 ${className}`}
+      onClick={cancel}
+      disabled={requested}
+      title="Esc でも中断できる"
+    >
+      {requested ? '中断しています…' : '中断'}
+    </button>
   );
 }
 
@@ -302,7 +326,7 @@ export function CourseInput() {
 const STYLES: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
 const STYLE_LABEL: Record<string, string> = { NIGE: '逃げ', SEN: '先行', SASI: '差し', OI: '追込' };
 const CONDITIONS: Condition[] = ['BEST', 'GOOD', 'NORMAL', 'BAD', 'WORST'];
-const CONDITION_LABEL: Record<Condition, string> = {
+export const CONDITION_LABEL: Record<Condition, string> = {
   BEST: '絶好調',
   GOOD: '好調',
   NORMAL: '普通',
@@ -372,20 +396,27 @@ export function UmaInput() {
         {stat('wisdom', '賢さ')}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {/*
+          やる気は 5 択で「絶好調」「絶不調」が 3 文字ある。1 列に押し込むと
+          文字が縦に割れて上下が切れる（docs/ui-audit-race-emulator.md 第3節 B-2）。
+          行を丸ごと使わせる。
+        */}
+        <div className="col-span-2 sm:col-span-3">
+          <Segmented
+            label="やる気"
+            value={uma.condition}
+            options={CONDITIONS.map((condition) => ({
+              value: condition,
+              label: CONDITION_LABEL[condition],
+            }))}
+            onChange={(condition) => setUma({ condition })}
+          />
+        </div>
         <Segmented
           label="脚質"
           value={uma.style}
           options={STYLES.map((style) => ({ value: style, label: STYLE_LABEL[style] ?? style }))}
           onChange={(style) => setUma({ style })}
-        />
-        <Segmented
-          label="やる気"
-          value={uma.condition}
-          options={CONDITIONS.map((condition) => ({
-            value: condition,
-            label: CONDITION_LABEL[condition],
-          }))}
-          onChange={(condition) => setUma({ condition })}
         />
         <Field label="枠番（0 でランダム）">
           <input
@@ -554,7 +585,7 @@ export function SkillInput() {
               >
                 <span>{skill.name}</span>
                 <span className="text-xs text-ink3">
-                  {skillIds.includes(skill.id) ? '選択中' : skill.rarity}
+                  {skillIds.includes(skill.id) ? '選択中' : rarityLabel(skill.rarity)}
                 </span>
               </button>
             </li>
@@ -744,7 +775,8 @@ export function OptionsInput() {
           合計 {debuffTotal} 個
         </span>
       </h3>
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1 sm:grid-cols-3">
+      {/* 3 列だと名前が「抜け駆け…」のように切れる（UI 診断 第3節 B-6）。2 列にする */}
+      <div className="grid grid-cols-1 gap-x-4 gap-y-1 min-[360px]:grid-cols-2">
         {debuffTypes.map((type) => (
           <label key={type.id} className="flex items-center justify-between gap-2 text-xs">
             <span className="truncate" title={type.label}>
@@ -854,7 +886,7 @@ export function OpponentInput() {
 }
 
 export function RunPanel() {
-  const { count, seed, running, progress, setCount, setSeed, run, cancel, useField, setUseField } =
+  const { count, seed, running, progress, setCount, setSeed, run, useField, setUseField } =
     useStore();
   const gateCount = useStore((s) => s.track.gateCount);
   const elapsedMs = useStore((s) => s.elapsedMs);
@@ -900,14 +932,7 @@ export function RunPanel() {
       </button>
       {running ? (
         <>
-          <button
-            type="button"
-            className="rounded-sm border border-rule2 px-3 py-1.5 text-xs"
-            onClick={cancel}
-            title="Esc でも中断できる"
-          >
-            中断
-          </button>
+          <CancelButton className="text-xs" />
           <span className="num text-xs text-ink3" role="status" aria-live="polite">
             {progress} / {count}
           </span>

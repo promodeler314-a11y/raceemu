@@ -85,9 +85,7 @@ export function MultiTrialPicker() {
           </button>
         ))}
       </div>
-      <p className="mt-1 text-xs text-ink3">
-        押すと、その試行だけを同じ種で走らせ直して中身を出す。フレーム列は持ち回っていない。
-      </p>
+      <p className="mt-1 text-xs text-ink3">押すと、その試行だけを同じ条件で走らせ直して中身を出す。</p>
     </div>
   );
 }
@@ -148,9 +146,10 @@ export function MultiRaceDetail() {
             <span className="tabular-nums">{self.raceTime.toFixed(3)}</span> 秒
           </span>
         )}
-        <span className="text-ink3" title="押してから図が出るまでに掛かった時間">
-          走らせ直し <span className="tabular-nums">{detail.elapsedMs.toFixed(0)}</span> ms
-        </span>
+        {/*
+          走らせ直しに掛かった時間（数十 ms）は読む人の判断に使わないので出さない
+          （docs/ui-audit-race-emulator.md 第1節「内部の値」）。値は store の multiDetail に残る。
+        */}
         <button
           type="button"
           className="ml-auto rounded-sm border border-rule2 px-2 py-0.5"
