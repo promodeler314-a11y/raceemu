@@ -1,70 +1,59 @@
 @import 'tailwindcss';
 @import 'uplot/dist/uPlot.min.css';
+/*
+ * 見た目の土台は共有リポジトリ（design-system、git submodule）が持つ。
+ * F-13 とローテーション最適化にも同じものを入れるためで、値と決めた理由は
+ * design-system/tokens.css と design-system/DESIGN.md にある。
+ * **ここでは値を持たない。** 取り込みが済んでいないと、この行で止まる。
+ */
+@import '../../../design-system/tokens.css';
 
 /*
- * 見た目の土台。値は design/*.dc.html のモックから取っている。
+ * 共有の変数（--uma-*）を Tailwind のトークンに橋渡しする。
+ * ユーティリティ（bg-paper など）をどれだけ作るかは、この並びから決まる。
+ * そのため、共有側が素の CSS 変数だけを持っていても、この宣言はこちらに要る。
+ *
+ * inline を付けるのは、暗い表示への切り替えを効かせるためである。付けないと
+ * 値が :root で解決されたまま配られる。切り替えは <html> の data-theme で
+ * 行うので、付けなくても動く見込みではあるが、依存したい挙動ではない。
  *
  * 色をトークンにまとめてあるのは、ダークの切替を「値の差し替え 1 か所」で
  * 済ませるためである。以前は dark: を 114 か所に散らしていたので、画面を
  * 足すたびに両方を書く必要があった。
  */
-@theme {
-  --color-paper: #f5f4f1;
-  --color-surface: #fcfcfb;
-  --color-sunken: #eeece7;
-  --color-rule: #dedbd3;
-  --color-rule2: #c6c2b8;
-  --color-ink: #12120f;
-  --color-ink2: #52514e;
-  --color-ink3: #8a877e;
+@theme inline {
+  --color-paper: var(--uma-paper);
+  --color-surface: var(--uma-surface);
+  --color-sunken: var(--uma-sunken);
+  --color-rule: var(--uma-rule);
+  --color-rule2: var(--uma-rule2);
+  --color-ink: var(--uma-ink);
+  --color-ink2: var(--uma-ink2);
+  --color-ink3: var(--uma-ink3);
 
   /* 図の系列。dataviz の既定から取っており、役割の割り当てはモックに合わせる。 */
-  --color-s1: #2a78d6;
-  --color-s2: #eb6834;
-  --color-s3: #1baf7a;
+  --color-s1: var(--uma-s1);
+  --color-s2: var(--uma-s2);
+  --color-s3: var(--uma-s3);
 
-  --color-acc-tint: #e7effa;
-  --color-acc-ink: #1c5cab;
-  --color-primary-bg: #12120f;
-  --color-primary-fg: #ffffff;
+  --color-acc-tint: var(--uma-acc-tint);
+  --color-acc-ink: var(--uma-acc-ink);
+  --color-primary-bg: var(--uma-primary-bg);
+  --color-primary-fg: var(--uma-primary-fg);
 
-  --color-warn-tint: #fdf6e3;
-  --color-warn-rule: #e8d9a8;
-  --color-warn-ink: #7a5c12;
-  --color-bad-tint: #fdeceb;
-  --color-bad-rule: #f0c3bf;
-  --color-bad-ink: #a3312a;
+  --color-warn-tint: var(--uma-warn-tint);
+  --color-warn-rule: var(--uma-warn-rule);
+  --color-warn-ink: var(--uma-warn-ink);
+  --color-bad-tint: var(--uma-bad-tint);
+  --color-bad-rule: var(--uma-bad-rule);
+  --color-bad-ink: var(--uma-bad-ink);
 
-  --font-sans: 'IBM Plex Sans JP', 'Hiragino Kaku Gothic ProN', 'Yu Gothic', sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, Consolas, monospace;
+  --font-sans: var(--uma-font-sans);
+  --font-mono: var(--uma-font-mono);
 
-  --radius-sm: 3px;
-  --radius-md: 3px;
-  --radius-lg: 3px;
-}
-
-/* ダークはトークンの差し替えだけで成立させる。 */
-[data-theme='dark'] {
-  --color-paper: #17181a;
-  --color-surface: #1f2123;
-  --color-sunken: #272a2d;
-  --color-rule: #34373b;
-  --color-rule2: #46494e;
-  --color-ink: #e9e7e2;
-  --color-ink2: #aaa7a1;
-  --color-ink3: #77746e;
-
-  --color-acc-tint: rgba(58, 138, 232, 0.22);
-  --color-acc-ink: #7fb2ea;
-  --color-primary-bg: #e9e7e2;
-  --color-primary-fg: #17181a;
-
-  --color-warn-tint: rgba(232, 190, 80, 0.14);
-  --color-warn-rule: #5c4d24;
-  --color-warn-ink: #d8bd6a;
-  --color-bad-tint: rgba(224, 108, 98, 0.14);
-  --color-bad-rule: #6b3a36;
-  --color-bad-ink: #e29a94;
+  --radius-sm: var(--uma-radius-sm);
+  --radius-md: var(--uma-radius-md);
+  --radius-lg: var(--uma-radius-lg);
 }
 
 html {

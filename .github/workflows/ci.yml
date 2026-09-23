@@ -18,7 +18,14 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      # 見た目のトークンは design-system（uma-design-system の submodule）にある。
+      # 取らないと `pnpm build` が index.css の @import で止まる。
+      # 共有リポジトリを非公開にしたら DS_PAT（Contents を read だけ）を登録する。
+      # 公開のあいだは既定のトークンで足りる。
       - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.DS_PAT || github.token }}
 
       # pnpm のバージョンは package.json の packageManager から読まれる。
       - uses: pnpm/action-setup@v4

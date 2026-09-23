@@ -38,6 +38,7 @@
 ## 開発
 
 ```
+git clone --recurse-submodules https://github.com/promodeler314-a11y/raceemu.git
 pnpm install
 pnpm test        # 本家との突き合わせとスキル条件の網羅。24 ファイル 201 件
 pnpm typecheck
@@ -55,6 +56,19 @@ pnpm fetch-tessdata            # 画面の読み取りに使う学習データ�
 pnpm e2e:import                # 画面の読み取りをサーバとブラウザで確認
 pnpm api                       # サーバ側の口（apps/api）
 ```
+
+見た目のトークン（色・角丸・書体）は `design-system/` にある。
+F-13 とローテーション最適化にも同じものを入れるため、共有リポジトリ
+（[uma-design-system](https://github.com/promodeler314-a11y/uma-design-system)）を
+git submodule として取り込んでいる。`apps/web/src/index.css` が `@import` で読むので、
+**取り込んでいないとビルドが止まる。**
+
+```
+git submodule update --init    # 既に clone してある場合
+git -C design-system pull      # 共有側の更新を取り込む。指し先が動くのでコミットが要る
+```
+
+共有側は `design-system/` の中では編集しない。単独で clone したフォルダで直して push する。
 
 `pnpm test` の 201 件のうち 13 件は手元の材料に依る。
 学習データを取っていなければ読み取りの 7 件が飛び、実機の写真を置いた場所を `RACEEMU_REAL_SCREENSHOT_DIR` で指していなければステータス読み取りの 6 件が飛ぶ。
