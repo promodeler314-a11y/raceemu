@@ -7,36 +7,49 @@ import { formatTime, percentile } from '../format.ts';
 import { Panel } from './Inputs.tsx';
 
 /**
- * 系列の色は dataviz の既定パレットの 1 から 3 番目。
+ * 図の色は共有のトークン（design-system/tokens.css の --uma-chart-*）から読む。
  *
- * 割り当てはモックに合わせてある。目標速度は速度と同じ量の参照線であって
+ * uPlot は canvas に描くので、CSS の変数をそのまま渡せない。図を作るときに
+ * getComputedStyle で値を読み、テーマが変わったら図を作り直す（Chart の
+ * useEffect が theme に依存している）。以前は明暗の値をここに直書きしていて、
+ * トークンと二重になっていたうえ、切り替えても表示中の図は前の色のままだった
+ * （docs/ui-audit-race-emulator.md 第3節 A-1・A-3）。
+ *
+ * 系列の割り当てはモックに合わせてある。目標速度は速度と同じ量の参照線であって
  * 別の系列ではないので、カテゴリ色を 1 枠使わず、破線の文脈色で描く。
- * 空いた橙は体力に回した。`#1baf7a` は明色面でのコントラストが 3:1 を
- * 下回るため、主要な系列に充てるより比較の 3 列目のような枠に回すほうがよい。
+ * 空いた橙は体力に回した。
+ *
+ * - speed / sp：系列（速度、体力）
+ * - context：目標速度と勾配。コースと設定の文脈であって系列ではないので、地の文字色に寄せる
+ * - other：全頭同時の図の、自分と 1 着以外の線
  */
-const SERIES = {
-  speed: { light: '#2a78d6', dark: '#3987e5' },
-  sp: { light: '#eb6834', dark: '#d95926' },
-  // 目標速度と勾配はコースと設定の文脈であって系列ではない。地の色で描く。
-  context: { light: '#52514e', dark: '#c3c2b7' },
-};
+export type ChartSlot = 'speed' | 'sp' | 'context' | 'other';
 
-/**
- * ヘッダの切替が付いたので、OS の設定ではなく画面の状態を見る。
- * 色は CSS のトークンで持っているが、uPlot は canvas に描くため
- * ここだけは JavaScript 側で値を選ぶ必要がある。
- */
-export function isDark(): boolean {
-  return document.documentElement.dataset['theme'] === 'dark';
+interface ChartPalette extends Record<ChartSlot, string> {
+  readonly grid: string;
+  /** コーナーの帯 */
+  readonly band: string;
+  /** フェーズの境の破線 */
+  readonly phase: string;
+  /** スキルの印。イベント表の色分け（border-s1 text-s1）と揃える */
+  readonly skill: string;
+  readonly fontSans: string;
 }
 
-export function color(slot: keyof typeof SERIES): string {
-  return isDark() ? SERIES[slot].dark : SERIES[slot].light;
-}
-
-/** CSS のトークンをそのまま使う。スキルの印は EventList の色分けと揃える。 */
-function tokenColor(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(`--color-${name}`).trim();
+function readPalette(): ChartPalette {
+  const style = getComputedStyle(document.documentElement);
+  const read = (name: string) => style.getPropertyValue(`--uma-${name}`).trim();
+  return {
+    speed: read('chart-speed'),
+    sp: read('chart-sp'),
+    context: read('chart-context'),
+    other: read('chart-other'),
+    grid: read('chart-grid'),
+    band: read('chart-band'),
+    phase: read('chart-phase'),
+    skill: read('s1'),
+    fontSans: read('font-sans'),
+  };
 }
 
 /**
@@ -98,7 +111,11 @@ function nearestSkill(u: uPlot, skills: readonly SkillMarker[]): SkillMarker | n
  * コーナーを薄い帯で、フェーズ境界を破線で背景に描く。
  * スキル発動位置は縦線と上端の三角印で示し、カーソルが近づくと onHoverSkill で名前を伝える。
  */
-function coursePlugin(bands: CourseBands, onHoverSkill: (marker: SkillMarker | null) => void): uPlot.Plugin {
+function coursePlugin(
+  bands: CourseBands,
+  palette: ChartPalette,
+  onHoverSkill: (marker: SkillMarker | null) => void,
+): uPlot.Plugin {
   return {
     hooks: {
       draw: (u) => {
@@ -106,13 +123,13 @@ function coursePlugin(bands: CourseBands, onHoverSkill: (marker: SkillMarker | n
         const top = u.bbox.top;
         const height = u.bbox.height;
         ctx.save();
-        ctx.fillStyle = isDark() ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.045)';
+        ctx.fillStyle = palette.band;
         for (const [start, end] of bands.corners) {
           const x0 = u.valToPos(start, 'x', true);
           const x1 = u.valToPos(end, 'x', true);
           ctx.fillRect(x0, top, x1 - x0, height);
         }
-        ctx.strokeStyle = isDark() ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.18)';
+        ctx.strokeStyle = palette.phase;
         ctx.setLineDash([3, 3]);
         ctx.lineWidth = 1;
         for (const position of bands.phases) {
@@ -122,7 +139,7 @@ function coursePlugin(bands: CourseBands, onHoverSkill: (marker: SkillMarker | n
           ctx.lineTo(x, top + height);
           ctx.stroke();
         }
-        const skillColor = tokenColor('s1');
+        const skillColor = palette.skill;
         ctx.setLineDash([]);
         for (const marker of bands.skills) {
           const x = Math.round(u.valToPos(marker.position, 'x', true)) + 0.5;
@@ -160,9 +177,11 @@ export interface ChartProps {
      * 系列の値。途中で終わる系列（ゴールした頭）は null を置くと線が切れる。
      */
     values: Float64Array | readonly (number | null)[];
-    slot?: keyof typeof SERIES;
-    /** slot より優先する線の色。全頭同時の図で頭ごとに色を変えるのに使う。 */
-    color?: string;
+    /**
+     * 線の色の役割。省くと context。色そのものは渡さない。
+     * 渡すと図を作った時点の色で固まり、テーマを切り替えても変わらなくなる。
+     */
+    slot?: ChartSlot;
     /** 参照線として破線で描く。系列そのものではないもの。 */
     dashed?: boolean;
     /** 線の太さ。省くと 2（破線は 1.5）。 */
@@ -195,6 +214,8 @@ export function Chart({
   const ref = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
   const [hoverSkill, setHoverSkill] = useState<SkillMarker | null>(null);
+  // 色は作るときに読むので、テーマが変わったら作り直す。
+  const theme = useStore((s) => s.theme);
 
   useEffect(() => {
     setHoverSkill(null);
@@ -203,6 +224,15 @@ export function Chart({
   useEffect(() => {
     const element = ref.current;
     if (element === null) return;
+    const palette = readPalette();
+    // 軸の文字は canvas に描くので、uPlot の既定（system-ui のスタック）のままだと
+    // 画面の書体と揃わない。大きさと太さは既定のままにする。
+    const axis = {
+      stroke: palette.context,
+      grid: { stroke: palette.grid },
+      font: `12px ${palette.fontSans}`,
+      labelFont: `bold 12px ${palette.fontSans}`,
+    };
     const options: uPlot.Options = {
       title,
       width: element.clientWidth,
@@ -221,21 +251,18 @@ export function Chart({
               },
             },
       },
-      axes: [
-        { label: xLabel, stroke: isDark() ? '#c3c2b7' : '#52514e', grid: { stroke: isDark() ? '#2a2a28' : '#eceae4' } },
-        { stroke: isDark() ? '#c3c2b7' : '#52514e', grid: { stroke: isDark() ? '#2a2a28' : '#eceae4' } },
-      ],
+      axes: [{ label: xLabel, ...axis }, axis],
       series: [
         { label: xLabel },
         ...series.map((s) => ({
           label: s.label,
-          stroke: s.color ?? color(s.slot ?? 'context'),
+          stroke: palette[s.slot ?? 'context'],
           width: s.width ?? (s.dashed === true ? 1.5 : 2),
           ...(s.dashed === true ? { dash: [4, 3] } : {}),
           points: { show: false },
         })),
       ],
-      plugins: [coursePlugin(bands, setHoverSkill)],
+      plugins: [coursePlugin(bands, palette, setHoverSkill)],
     };
     // 横軸のあとに系列が並ぶ。値は Float64Array と (number | null)[] を混ぜられる。
     const data = [x, ...series.map((s) => s.values)] as uPlot.AlignedData;
@@ -247,7 +274,7 @@ export function Chart({
       plot.current?.destroy();
       plot.current = null;
     };
-  }, [title, height, x, series, bands, includeZero, xLabel, syncKey, legend]);
+  }, [title, height, x, series, bands, includeZero, xLabel, syncKey, legend, theme]);
 
   const skillHint =
     bands.skills.length === 0
@@ -560,7 +587,8 @@ export function TimeHistogram() {
               width={Math.max(barWidth, 0)}
               height={height}
               rx={0.6}
-              fill={color('speed')}
+              // SVG は CSS の変数をそのまま使えるので、テーマを切り替えるとその場で変わる。
+              style={{ fill: 'var(--uma-chart-speed)' }}
               opacity={hover === null || hover === i ? 1 : 0.45}
               onMouseEnter={() => setHover(i)}
               onMouseLeave={() => setHover((h) => (h === i ? null : h))}
@@ -580,7 +608,7 @@ export function TimeHistogram() {
             x2={xOf(value)}
             y1={padTop}
             y2={padTop + plotH}
-            stroke={isDark() ? '#77746e' : '#8a877e'}
+            className="stroke-ink3"
             strokeWidth={1}
             strokeDasharray="3 3"
           />
@@ -590,7 +618,7 @@ export function TimeHistogram() {
           x2={plotW}
           y1={padTop + plotH}
           y2={padTop + plotH}
-          stroke={isDark() ? '#46494e' : '#c6c2b8'}
+          className="stroke-rule2"
           strokeWidth={1}
         />
       </svg>

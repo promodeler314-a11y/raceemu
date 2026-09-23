@@ -77,3 +77,21 @@ body {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * uPlot の既定 CSS は、図の見出しと凡例に system-ui のスタックを当てる。
+ * 画面と同じ書体に揃え、見出しはほかの区画の見出しと同じ左寄せ・13px・太字にする
+ * （docs/ui-audit-race-emulator.md 第1節「書体」と第2節 C-5）。
+ * canvas に描く目盛りの書体は、Charts.tsx が軸の設定で渡している。
+ */
+.uplot {
+  font-family: var(--font-sans);
+}
+.uplot .u-title {
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+}
+.uplot .u-legend {
+  font-size: 12px;
+}

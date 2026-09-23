@@ -714,8 +714,10 @@ export const useStore = create<AppState>((set, get) => ({
   setTab: (tab) => set({ tab }),
   theme: loadTheme(),
   setTheme: (theme) => {
-    set({ theme });
+    // 属性を先に書き換える。図は theme の変化を受けて CSS の変数を読み直すので、
+    // その時点で新しいテーマの値が効いている必要がある。
     document.documentElement.dataset['theme'] = theme;
+    set({ theme });
     try {
       localStorage.setItem(THEME_KEY, theme);
     } catch {
