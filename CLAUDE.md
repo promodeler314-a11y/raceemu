@@ -11,6 +11,7 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 ## コマンド
 
 ```
+git submodule update --init    # design-system（見た目のトークン）。無いとビルドが止まる
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
 pnpm test                      # vitest run。33 ファイル 422 件

@@ -9,6 +9,9 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.json ./
 COPY packages/ packages/
 COPY apps/ apps/
 COPY scripts/ scripts/
+# 見た目のトークン（submodule）。apps/web/src/index.css が @import で読む。
+# 取り込んでいない文脈で組むと、ここが空になって `pnpm build` が止まる。
+COPY design-system/ design-system/
 # onnxruntime-node（スキル一覧の分類）は Linux 版だけ既定で CUDA 用の追加バイナリを
 # NuGet から取りに行く。CPU でしか動かさないので要らない。
 ENV ONNXRUNTIME_NODE_INSTALL=skip

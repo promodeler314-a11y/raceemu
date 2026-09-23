@@ -27,7 +27,12 @@ jobs:
       contents: read
       packages: write
     steps:
+      # design-system（submodule）はイメージを組む文脈に入れる必要がある。
+      # 取らないと Dockerfile の `pnpm build` が index.css の @import で止まる。
       - uses: actions/checkout@v4
+        with:
+          submodules: true
+          token: ${{ secrets.DS_PAT || github.token }}
 
       - uses: docker/setup-buildx-action@v3
 
