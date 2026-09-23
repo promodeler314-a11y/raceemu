@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { saveIndividual } from '../individualsApi.ts';
 import { currentTrackDetail, gameData, useStore, type Tab } from '../store.ts';
 import { ShareButton } from './Compare.tsx';
@@ -101,15 +101,26 @@ function SaveIndividualButton() {
   const skillIds = useStore((s) => s.skillIds);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  // 保存できた知らせは数秒で消す。残すとヘッダのボタンを押しのけたままになる
+  // （docs/ui-audit-race-emulator.md 第3節 B-8）。失敗は読むまで残す。
+  useEffect(() => {
+    if (message === null || failed) return;
+    const timer = window.setTimeout(() => setMessage(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [message, failed]);
 
   const save = async () => {
     setSaving(true);
     setMessage(null);
+    setFailed(false);
     try {
       const label = `${STYLE_LABELS[uma.style] ?? uma.style} ${uma.speed}/${uma.stamina}/${uma.power}/${uma.guts}/${uma.wisdom}`;
       await saveIndividual({ label, uma, skillIds });
       setMessage('個体として保存した。');
     } catch (error) {
+      setFailed(true);
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setSaving(false);

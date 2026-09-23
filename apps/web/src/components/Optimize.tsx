@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { costModelFor, gameData, skillFidelities, useStore } from '../store.ts';
 import { countFidelity, FidelityLegend, SkillNameWithMark } from './Fidelity.tsx';
-import { Panel } from './Inputs.tsx';
+import { CancelButton, Panel } from './Inputs.tsx';
 import { PlanInput, ROUTE_LABEL } from './Plan.tsx';
 import { ServerSearchInput } from './ServerSearch.tsx';
 
@@ -16,7 +16,6 @@ export function OptimizePanel() {
   const budget = useStore((s) => s.optimizeBudget);
   const setBudget = useStore((s) => s.setOptimizeBudget);
   const run = useStore((s) => s.runOptimize);
-  const cancel = useStore((s) => s.cancel);
   const running = useStore((s) => s.optimizeRunning);
   const busy = useStore((s) => s.running);
   const log = useStore((s) => s.optimizeLog);
@@ -128,13 +127,7 @@ export function OptimizePanel() {
             {running ? '探索中' : '探索する'}
           </button>
           {running && (
-            <button
-              type="button"
-              className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
-              onClick={cancel}
-            >
-              中断
-            </button>
+            <CancelButton />
           )}
           {result !== null && !running && (
             <span className="num text-xs text-ink3" data-testid="optimize-stats">

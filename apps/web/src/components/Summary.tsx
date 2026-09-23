@@ -266,7 +266,7 @@ export function SummaryOutput() {
                               style={{ width: `${(skill.triggerRate * 100).toFixed(1)}%` }}
                             />
                           </div>
-                          <span className="w-14 font-mono">{(skill.triggerRate * 100).toFixed(1)} %</span>
+                          <span className="w-16 whitespace-nowrap font-mono">{(skill.triggerRate * 100).toFixed(1)} %</span>
                         </div>
                       </td>
                       {band !== null && <BandCell band={band[skill.skillId]} />}

@@ -490,7 +490,7 @@ function EventList({ events }: { events: readonly RaceEvent[] }) {
                   {event.position.toFixed(0)} m
                 </td>
                 <td className="py-1 pr-3">
-                  <span className={`rounded-sm border px-1 text-[11px] ${KIND_STYLE[event.kind]}`}>
+                  <span className={`whitespace-nowrap rounded-sm border px-1 text-[11px] ${KIND_STYLE[event.kind]}`}>
                     {kindLabel(event.kind)}
                   </span>
                 </td>
@@ -515,19 +515,39 @@ export function TimeHistogram() {
   const bins = useMemo(() => {
     if (results.length === 0) return null;
     const times = results.map((r) => r.raceTime).sort((a, b) => a - b);
-    const min = times[0]!;
-    const max = times[times.length - 1]!;
-    if (!Number.isFinite(min) || max === min) return null;
+    const fastest = times[0]!;
+    const slowest = times[times.length - 1]!;
+    if (!Number.isFinite(fastest) || slowest === fastest) return null;
+    // 横軸は外れ値を除いた範囲に取る。スタミナが持たない試行のような遅い裾が
+    // 数 % あると、最速〜最遅で取ったときに本体が左の数割に押し込まれて形が
+    // 読めない（docs/ui-audit-race-emulator.md 第3節 A-4）。四分位範囲の 3 倍より
+    // 外は図に入れず、何試行あったかを軸の端に書く。
+    const q1 = percentile(times, 0.25);
+    const q3 = percentile(times, 0.75);
+    const iqr = q3 - q1;
+    let min = iqr > 0 ? Math.max(fastest, q1 - 3 * iqr) : fastest;
+    let max = iqr > 0 ? Math.min(slowest, q3 + 3 * iqr) : slowest;
+    if (!(max > min)) {
+      min = fastest;
+      max = slowest;
+    }
     const binCount = 40;
     const width = (max - min) / binCount;
     const counts = new Array<number>(binCount).fill(0);
+    let below = 0;
+    let above = 0;
     for (const time of times) {
-      const index = Math.min(binCount - 1, Math.floor((time - min) / width));
-      counts[index]! += 1;
+      if (time < min) below += 1;
+      else if (time > max) above += 1;
+      else counts[Math.min(binCount - 1, Math.floor((time - min) / width))]! += 1;
     }
     return {
       min,
       max,
+      fastest,
+      slowest,
+      below,
+      above,
       width,
       counts,
       peak: Math.max(...counts),
@@ -554,7 +574,10 @@ export function TimeHistogram() {
   // 図を見られない場合に、形の要点だけでも伝える。
   const description =
     `${bins.total} 試行のタイムの分布。` +
-    `${formatTime(bins.min)} から ${formatTime(bins.max)} に広がり、` +
+    `${formatTime(bins.fastest)} から ${formatTime(bins.slowest)} に広がり、` +
+    (bins.below + bins.above > 0
+      ? `図は ${formatTime(bins.min)} から ${formatTime(bins.max)} の範囲を描いている（外れた ${bins.below + bins.above} 試行を除く）。`
+      : '') +
     `最も多いのは ${formatTime(peakFrom)} あたりで ${bins.peak} 件。` +
     `p5 は ${formatTime(bins.p5)}、p50 は ${formatTime(bins.p50)}、p95 は ${formatTime(bins.p95)}。`;
 
@@ -622,8 +645,11 @@ export function TimeHistogram() {
           strokeWidth={1}
         />
       </svg>
-      <div className="flex justify-between text-xs text-ink3">
-        <span>{formatTime(bins.min)}</span>
+      <div className="flex justify-between gap-3 text-xs text-ink3">
+        <span>
+          {formatTime(bins.min)}
+          {bins.below > 0 && <span className="block">これより速い {bins.below.toLocaleString('ja-JP')} 試行は図の外</span>}
+        </span>
         {hover !== null ? (
           <span className="font-medium text-ink2">
             {formatTime(bins.min + hover * bins.width)} – {formatTime(bins.min + (hover + 1) * bins.width)} ・{' '}
@@ -633,7 +659,14 @@ export function TimeHistogram() {
         ) : (
           <span>バーにカーソルを合わせると帯の内訳を表示</span>
         )}
-        <span>{formatTime(bins.max)}</span>
+        <span className="text-right">
+          {formatTime(bins.max)}
+          {bins.above > 0 && (
+            <span className="block">
+              これより遅い {bins.above.toLocaleString('ja-JP')} 試行（最遅 {formatTime(bins.slowest)}）は図の外
+            </span>
+          )}
+        </span>
       </div>
     </div>
   );

@@ -2,7 +2,7 @@ import { Fragment, useMemo } from 'react';
 import type { CrossCourseRow } from '../../../../packages/sim/src/parallel/cross.ts';
 import { formatDuration } from '../format.ts';
 import { crossCourses, distancesOf, estimateCross, useStore, type CrossResult } from '../store.ts';
-import { Panel } from './Inputs.tsx';
+import { CancelButton, Panel } from './Inputs.tsx';
 
 /**
  * コース横断の評価。
@@ -79,7 +79,6 @@ export function CrossPanel() {
   const cross = useStore((s) => s.cross);
   const setCross = useStore((s) => s.setCross);
   const run = useStore((s) => s.runCross);
-  const cancel = useStore((s) => s.cancel);
   const running = useStore((s) => s.crossRunning);
   const progress = useStore((s) => s.crossProgress);
   const busy = useStore((s) => s.running || s.multiRunning || s.optimizeRunning);
@@ -165,13 +164,7 @@ export function CrossPanel() {
         </button>
         {running ? (
           <>
-            <button
-              type="button"
-              className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
-              onClick={cancel}
-            >
-              中断
-            </button>
+            <CancelButton />
             <span className="num text-sm text-ink3">
               {progress} / {courses.length} コース
             </span>
