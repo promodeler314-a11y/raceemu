@@ -61,16 +61,34 @@ export default function App() {
   }, []);
 
   return (
-    <div className="flex h-screen flex-col bg-paper text-ink">
+    // 広い幅では画面の高さに固定し、左右の列をそれぞれの中でスクロールさせる。
+    // 狭い幅では列を縦に積むので、固定するとあとの列の高さが 0 になり、
+    // 実行バーごと見えなくなる。狭い幅ではページ全体をスクロールさせる。
+    <div className="flex min-h-screen flex-col bg-paper text-ink md:h-screen">
       <Header />
       <ErrorBanner />
-      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+      <div
+        className={`flex flex-1 flex-col md:grid md:min-h-0 md:grid-rows-[auto_minmax(0,1fr)] ${
+          tab === 'settings' ? 'md:grid-cols-[468px_minmax(0,1fr)]' : 'md:grid-cols-[280px_minmax(0,1fr)]'
+        }`}
+      >
+        {/*
+          実行バーはどの面でも同じ場所にある。走らせるのに面を移らなくてよい。
+          広い幅では右の列の上端に置く。狭い幅では設定の列より先に置き、
+          スクロールしても上に貼り付ける。設定を全部通らないと実行に届かない
+          形にしない（docs/ui-gap.md 8 節、design/Mobile.dc.html）。
+        */}
+        <div className="sticky top-0 z-10 md:static md:col-start-2 md:row-start-1">
+          <RunPanel />
+        </div>
         {/*
           設定の面では入力欄そのものを、他の面では畳んだ要約を左に置く。
           モックの 1440px では設定 468px / 要約 280px である。
+          relative は、中の sr-only（absolute）の置き場をこの列にするため。
+          無いとページの外に置かれ、広い幅でもページ全体がスクロールしてしまう。
         */}
         {tab === 'settings' ? (
-          <section className="flex w-full flex-none flex-col gap-3.5 overflow-y-auto border-b border-rule2 bg-surface p-5 md:w-[468px] md:border-r md:border-b-0">
+          <section className="relative flex w-full flex-none flex-col gap-3.5 border-b border-rule2 bg-surface p-5 md:col-start-1 md:row-span-2 md:row-start-1 md:min-h-0 md:overflow-y-auto md:border-r md:border-b-0">
             <UmaInput />
             <CourseInput />
             <SkillInput />
@@ -83,9 +101,7 @@ export default function App() {
         ) : (
           <SettingsRail />
         )}
-        <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
-          {/* 実行バーはどの面でも同じ場所にある。走らせるのに面を移らなくてよい。 */}
-          <RunPanel />
+        <main className="flex min-w-0 flex-1 flex-col md:col-start-2 md:row-start-2 md:min-h-0 md:overflow-y-auto">
           <div className="flex flex-col gap-4 p-5">
             {tab === 'settings' && <EmptyOrSummary />}
             {tab === 'summary' && <SummaryOutput />}

@@ -1025,6 +1025,27 @@ const overflow = await mobile.evaluate(
 console.log('--- 幅 390 での横あふれ:', overflow, 'px');
 if (overflow > 0) fail('小さい画面で横にあふれている');
 await mobile.screenshot({ path: 'docs/images/m4-mobile.png', fullPage: true });
+// 狭い幅の設定の面から実行できるか。横あふれが無いことと、使えることは別である。
+// 以前は設定の列が高さを取り切って <main> が高さ 0 になり、実行バーごと消えていた
+// （docs/ui-audit-race-emulator.md 第3節 B-1）。設定の列の最後まで送っても
+// 押せることを見る。
+await mobile.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+await mobile.waitForTimeout(200);
+const mobileRun = mobile.getByRole('button', { name: '実行', exact: true });
+const mobileRunBox = await mobileRun.boundingBox();
+const mobileViewport = mobile.viewportSize();
+console.log('--- 幅 390 の設定の面、最下部での実行ボタン:', mobileRunBox);
+if (
+  mobileRunBox === null ||
+  mobileRunBox.height === 0 ||
+  mobileRunBox.y < 0 ||
+  mobileRunBox.y + mobileRunBox.height > mobileViewport.height
+) {
+  fail('小さい画面の設定の面で、実行ボタンが画面に出ていない');
+} else {
+  await mobileRun.click();
+  await mobile.waitForSelector('[data-testid=average-time]', { timeout: 60000 });
+}
 // 探索の面は表が多い。開いた面だけを見ていると、あふれを見落とす。
 await mobile.goto('http://localhost:4173/#tab=solve', { waitUntil: 'load' });
 await mobile.waitForTimeout(300);

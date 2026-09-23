@@ -256,7 +256,8 @@ export function SettingsRail() {
   ];
 
   return (
-    <aside className="flex w-full flex-none flex-col gap-4 overflow-y-auto border-b border-rule2 bg-surface p-4 md:w-[280px] md:border-r md:border-b-0">
+    // 置き場所（広い幅での格子の位置）は App.tsx の設定の列と揃える。
+    <aside className="flex w-full flex-none flex-col gap-4 border-b border-rule2 bg-surface p-4 md:col-start-1 md:row-span-2 md:row-start-1 md:min-h-0 md:overflow-y-auto md:border-r md:border-b-0">
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-semibold">設定</span>
         <span className="flex-1" />
