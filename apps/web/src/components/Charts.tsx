@@ -36,6 +36,30 @@ interface ChartPalette extends Record<ChartSlot, string> {
   readonly fontSans: string;
 }
 
+/**
+ * 縦軸の幅を目盛りの文字から決める。uPlot の既定は固定の幅で、書体を
+ * BIZ UDPゴシックにしてから「2,000」のような目盛りが左で切れていた。
+ * uPlot の軸の自動調整の例（axis-autosize）と同じ考え方で、いちばん長い目盛りを測る。
+ */
+function fitAxisSize(self: uPlot, values: string[] | null, axisIdx: number, cycleNum: number): number {
+  const axis = self.axes[axisIdx]! as uPlot.Axis & { _size?: number; font?: unknown };
+  // 2 巡目以降は前の値を使う。測り直すと大きさが揺れて止まらないことがある
+  if (cycleNum > 1 && axis._size !== undefined) return axis._size;
+  let size = (axis.ticks?.size ?? 10) + (axis.gap ?? 5);
+  const longest = (values ?? []).reduce((acc, value) => (value.length > acc.length ? value : acc), '');
+  if (longest !== '') {
+    const font = Array.isArray(axis.font) ? String(axis.font[0]) : String(axis.font ?? '');
+    if (font !== '') self.ctx.font = font;
+    size += self.ctx.measureText(longest).width / devicePixelRatio;
+  }
+  return Math.ceil(size);
+}
+
+/** 凡例に出す値。カーソルが無いとき（値が null）は空にする。 */
+function legendValue(_u: uPlot, value: number | null): string {
+  return value === null ? '' : value.toLocaleString('ja-JP', { maximumFractionDigits: 2 });
+}
+
 function readPalette(): ChartPalette {
   const style = getComputedStyle(document.documentElement);
   const read = (name: string) => style.getPropertyValue(`--uma-${name}`).trim();
@@ -198,6 +222,11 @@ export interface ChartProps {
   /** 凡例を出すか。系列が多いときに畳める。 */
   readonly legend?: boolean;
   /**
+   * 縦軸のグリッドを引くか。値の段差が小さい図（勾配）では、線がグリッドに
+   * 埋もれるので消す（#102、UI 診断 第3節 A-5）。
+   */
+  readonly yGrid?: boolean;
+  /**
    * スキルの印の読み方を図の下に書くか。図を縦に並べるときは最初の 1 枚だけにする。
    * 同じ説明を図ごとに繰り返さない（docs/ui-audit-race-emulator.md 第1節「操作説明の繰り返し」）。
    */
@@ -216,6 +245,7 @@ export function Chart({
   syncKey = 'race',
   legend = true,
   skillHint: showSkillHint = true,
+  yGrid = true,
 }: ChartProps) {
   const ref = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
@@ -257,11 +287,16 @@ export function Chart({
               },
             },
       },
-      axes: [{ label: xLabel, ...axis }, axis],
+      axes: [
+        { label: xLabel, ...axis },
+        { ...axis, grid: { ...axis.grid, show: yGrid }, size: fitAxisSize },
+      ],
+      // カーソルが無いとき、凡例の値の欄は既定で「--」になる。空にする（#102、A-7）
       series: [
-        { label: xLabel },
+        { label: xLabel, value: legendValue },
         ...series.map((s) => ({
           label: s.label,
+          value: legendValue,
           stroke: palette[s.slot ?? 'context'],
           width: s.width ?? (s.dashed === true ? 1.5 : 2),
           ...(s.dashed === true ? { dash: [4, 3] } : {}),
@@ -280,7 +315,7 @@ export function Chart({
       plot.current?.destroy();
       plot.current = null;
     };
-  }, [title, height, x, series, bands, includeZero, xLabel, syncKey, legend, theme]);
+  }, [title, height, x, series, bands, includeZero, xLabel, syncKey, legend, yGrid, theme]);
 
   const skillHint =
     !showSkillHint || bands.skills.length === 0
@@ -396,7 +431,8 @@ export function FrameCharts() {
           x={prepared.x}
           height={120}
           bands={prepared.bands}
-          series={[{ label: '勾配', values: prepared.slope, slot: 'context' }]}
+          yGrid={false}
+          series={[{ label: '勾配', values: prepared.slope, slot: 'context', width: 2.5 }]}
         />
         <EventList events={events} />
       </div>
