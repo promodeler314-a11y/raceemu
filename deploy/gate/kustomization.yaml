@@ -1,0 +1,24 @@
+# ゲートウェイ（raceemu-gate）。アプリの前に置いて、Discord のマジックリンクを
+# 持っている人だけを通す。仕組みは gate.js の先頭と docs/deploy.md の 4.4 節。
+#
+#   kubectl apply -k deploy/gate
+#
+# 先に deploy/k8s.yaml（名前空間と上流の Service）と、Secret raceemu-gate を置いておくこと。
+# Secret はリポジトリに入れない。作り方は gate.yaml の先頭にある。
+#
+# gate.js を ConfigMap raceemu-gate-src に詰めて /app にマウントし、node:24-slim で
+# そのまま走らせる。イメージを組まない。
+resources:
+  - gate.yaml
+
+configMapGenerator:
+  - name: raceemu-gate-src
+    namespace: raceemu
+    files:
+      - gate.js
+
+generatorOptions:
+  # 名前に中身のハッシュを付けない。付けると apply のたびに新しい ConfigMap ができ、
+  # 古いものがクラスタに残り続ける。そのかわり gate.js を変えたときは、
+  # apply のあとに kubectl rollout restart deploy/raceemu-gate -n raceemu が要る。
+  disableNameSuffixHash: true

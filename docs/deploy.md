@@ -62,19 +62,27 @@ GitHub Pages への配信は廃止した（5 節）。
 [探索・画面の読み取り・個体の保存](server-design.md)をサーバ側で回すための置き場である。
 静的ファイルも `apps/api` が同じオリジンから配る。
 
-マニフェストは 2 つある。
+マニフェストは 3 つある。
 
 | ファイル | 中身 |
 | --- | --- |
 | [`deploy/k8s.yaml`](../deploy/k8s.yaml) | 名前空間、アプリの Deployment と Service、個体の保存に使う PVC（4.3 節） |
 | [`deploy/sync.yaml`](../deploy/sync.yaml) | `main` を自動で出す仕組み（4.2 節） |
+| [`deploy/gate/`](../deploy/gate/) | ゲートウェイ。ソースの `gate.js` と、kustomize で置くマニフェスト（4.4 節） |
 
-**どちらも本番と一致させてある。** 手で本番を触ったら、同じ変更をここにも入れる。
-`kubectl diff -f deploy/k8s.yaml -f deploy/sync.yaml` が、4.3 節の印の 1 行のほかに何も出さなければ揃っている。
-2 つを繋ぐ名前とタグの食い違いは `test/deploy.test.ts` が見ている。
+**どれも本番と一致させてある。** 手で本番を触ったら、同じ変更をここにも入れる。
+次の 2 つが、4.3 節の印の 1 行のほかに何も出さなければ揃っている。
 
-ゲートウェイ（4.4 節）のマニフェストだけはリポジトリに無く、クラスタにだけある。
-クラスタを作り直すときは、先に `kubectl get -o yaml` で取っておく。
+```
+kubectl diff -f deploy/k8s.yaml -f deploy/sync.yaml
+kubectl diff -k deploy/gate
+```
+
+マニフェストどうしを繋ぐ名前とタグの食い違いは `test/deploy.test.ts` が見ている。
+
+**リポジトリに入れていないのは Secret `raceemu-gate`（ゲートの署名の鍵）だけである。**
+作り方は `deploy/gate/gate.yaml` の先頭にある。
+クラスタを作り直すときは、値を先に控えておく。
 
 全体の流れは次のとおりである。
 
@@ -232,14 +240,32 @@ curl -s http://192.168.0.206/api/health          # LAN の中から
 探索は 1 本で 25 万レース規模になるので、誰でも投げられる状態で外に出すと、そのまま計算資源を配ることになる。
 その手前に `raceemu-gate` を置いている。
 
-`raceemu-gate` は依存の無い Node の 1 ファイル（`gate.js`、ConfigMap `raceemu-gate-src`）で、口を 2 つ持つ。
+`raceemu-gate` は依存の無い Node の 1 ファイル（[`deploy/gate/gate.js`](../deploy/gate/gate.js)）で、口を 2 つ持つ。
+イメージは組まない。kustomize が `gate.js` を ConfigMap `raceemu-gate-src` に詰め、`node:24-slim` にマウントしてそのまま走らせる。
 
 - **`:8080` アプリ。** Discord の Bot が配ったマジックリンクを持っている人だけを通し、上流（`raceemu.raceemu.svc.cluster.local:80`）へ流す。リンクは Bot が `MAGIC_SECRET` で署名したもので、ゲートは署名と期限を確かめるだけである。通したあとは 24 時間のセッションになる。
 - **`:8090` 集計画面。** 誰が何をどれだけ使ったかを出す。別のホスト名を割り当て、Cloudflare Access で持ち主だけに絞る。
+  **`gate.js` 自身はここに認証を持たない。** Service を `ClusterIP` 以外に変えると LAN に認証なしで出るので、`test/deploy.test.ts` が止める。
 
 使用済みのリンクと利用の記録は SQLite（PVC `raceemu-gate-data` の `/data/usage.db`）に持つ。
 署名の鍵は Secret `raceemu-gate` にある。
-ゲートの中身はこのリポジトリに無く、別の手順（`raceemu-gate-apply.sh`）で ConfigMap に入れている。
+
+**`gate.js` を変えたら、置いたあとに作り直す。**
+
+```
+kubectl apply -k deploy/gate
+kubectl rollout restart deploy/raceemu-gate -n raceemu
+```
+
+ConfigMap の名前に中身のハッシュを付けていない（付けると `apply` のたびに新しい ConfigMap ができ、古いものが残り続ける）ので、`apply` だけでは Pod が古いソースで走り続ける。
+`main` を出す 4.2 節の仕組みはゲートを扱わない。
+ゲートを変える回は、マージしたあとに上の 2 行を手で流す。
+
+`gate.js` は `.gitattributes` で LF に固定してある。
+kustomize は中身をそのまま ConfigMap に詰めるので、Windows で CRLF に変わるとクラスタの中身まで変わる。
+
+以前は別の手順（`raceemu-gate-apply.sh`、このリポジトリの外）で ConfigMap に入れていた。
+Deployment の注釈 `checksum/src` はその名残で、値に意味は無い。
 
 **LAN の `192.168.0.206` はゲートを通らない。**
 Service `raceemu` が MetalLB で LAN に直に出ているためである。

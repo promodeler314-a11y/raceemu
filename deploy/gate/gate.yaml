@@ -1,0 +1,120 @@
+# ゲートウェイの本体。kustomization.yaml から読む（kubectl apply -k deploy/gate）。
+#
+# 署名の鍵は Secret raceemu-gate に持つ。リポジトリには入れない。
+# MAGIC_SECRET は Discord の Bot がリンクに署名するのと同じ値でなければならない。
+# SESSION_SECRET はゲートだけが使う（入れ替えると、配ったセッションがすべて切れる）。
+#
+#   kubectl create secret generic raceemu-gate -n raceemu \
+#     --from-literal=MAGIC_SECRET=<Bot と同じ値> \
+#     --from-literal=SESSION_SECRET=<openssl rand -hex 32 など>
+---
+# 使用済みのリンク、ログイン、転送量、探索の記録を SQLite で持つ。
+# local-path は最初に置かれたノードに縛られるので、Pod もそのノードで立つ。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: raceemu-gate-data
+  namespace: raceemu
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: raceemu-gate
+  namespace: raceemu
+spec:
+  replicas: 1
+  # ReadWriteOnce の PVC を新旧の Pod が同時に掴まないよう、止めてから立てる。
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: { app: raceemu-gate }
+  template:
+    metadata:
+      labels: { app: raceemu-gate }
+      annotations:
+        # 以前の手順（raceemu-gate-apply.sh）の名残で、値に意味は無い。
+        # 消すと apply のときにゲートが 1 回作り直されるので、そのまま置いている。
+        checksum/src: raceemu-gate-apply.sh が管理する
+    spec:
+      # node:24-slim の node ユーザー（uid/gid 1000）で走らせ、PVC もそれに合わせる。
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: gate
+          image: node:24-slim
+          # 依存パッケージは無い。node:sqlite が Node 24 の標準に入っている。
+          command: [node, /app/gate.js]
+          ports:
+            - name: app
+              containerPort: 8080
+            - name: admin
+              containerPort: 8090
+          env:
+            - name: MAGIC_SECRET
+              valueFrom:
+                secretKeyRef: { name: raceemu-gate, key: MAGIC_SECRET }
+            - name: SESSION_SECRET
+              valueFrom:
+                secretKeyRef: { name: raceemu-gate, key: SESSION_SECRET }
+            # 上流はアプリの Service（deploy/k8s.yaml）。
+            - name: UPSTREAM_HOST
+              value: raceemu.raceemu.svc.cluster.local
+            - name: UPSTREAM_PORT
+              value: "80"
+            - name: DB_PATH
+              value: /data/usage.db
+            - name: SESSION_HOURS
+              value: "24"
+            - name: TZ
+              value: Asia/Tokyo
+          volumeMounts:
+            - name: src
+              mountPath: /app
+              readOnly: true
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 50m
+              memory: 96Mi
+            limits:
+              memory: 384Mi
+          readinessProbe:
+            httpGet: { path: /__gate/health, port: 8080 }
+            initialDelaySeconds: 3
+          livenessProbe:
+            httpGet: { path: /__gate/health, port: 8080 }
+            initialDelaySeconds: 15
+            periodSeconds: 30
+      volumes:
+        - name: src
+          configMap: { name: raceemu-gate-src }
+        - name: data
+          persistentVolumeClaim: { claimName: raceemu-gate-data }
+---
+# クラスタの中にだけ出す。外へは Cloudflare のトンネルが繋ぐ。
+#   :8080 アプリ（raceemu.promodeler314.win の宛先）
+#   :8090 集計画面。gate.js 自身は認証を持たないので、Cloudflare Access で持ち主だけに絞る。
+#         LoadBalancer や NodePort に変えてはならない（LAN に認証なしで出る）。
+apiVersion: v1
+kind: Service
+metadata:
+  name: raceemu-gate
+  namespace: raceemu
+spec:
+  type: ClusterIP
+  selector: { app: raceemu-gate }
+  ports:
+    - name: app
+      port: 8080
+      targetPort: 8080
+    - name: admin
+      port: 8090
+      targetPort: 8090
