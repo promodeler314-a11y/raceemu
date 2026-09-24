@@ -81,7 +81,8 @@ function SaveSnapshotButton() {
   return (
     <button
       type="button"
-      className="h-[30px] rounded-sm bg-primary-bg px-3 text-xs font-bold text-primary-fg disabled:opacity-40"
+      // 朱は計算を走らせるボタンだけに使う（DESIGN.md 3 節）。ヘッダの保存は脇の操作なので線の枠にする
+      className="h-[30px] rounded-sm border border-rule2 px-3 text-xs font-bold text-ink2 disabled:opacity-40"
       onClick={saveSnapshot}
       disabled={summary === null}
     >

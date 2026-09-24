@@ -154,7 +154,7 @@ export function ImportPanel() {
         />
         <button
           type="button"
-          className="rounded-sm bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-50"
+          className="rounded-sm border border-rule2 bg-surface px-4 py-1.5 text-sm text-ink disabled:opacity-50"
           onClick={() => inputRef.current?.click()}
           disabled={state === 'running'}
         >
@@ -368,7 +368,7 @@ export function StatusImportPanel() {
         />
         <button
           type="button"
-          className="rounded-sm bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-50"
+          className="rounded-sm border border-rule2 bg-surface px-4 py-1.5 text-sm text-ink disabled:opacity-50"
           onClick={() => inputRef.current?.click()}
           disabled={state === 'running'}
         >

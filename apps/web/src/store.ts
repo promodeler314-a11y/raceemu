@@ -1361,7 +1361,7 @@ export const useStore = create<AppState>((set, get) => ({
       // （docs/server-design.md 2 節）ので、ここで倒れてはならない。
       if (hasEndpoint(state.searchEndpoint) && state.searchTarget === 'server') {
         try {
-          set({ optimizeLog: ['サーバに投げた。順番待ちがあれば待つ。'], ranOnServer: true });
+          set({ optimizeLog: ['サーバに投げました。順番待ちがあれば待ちます。'], ranOnServer: true });
           result = await runServerSearch(
             state.searchEndpoint,
             {
@@ -1391,7 +1391,7 @@ export const useStore = create<AppState>((set, get) => ({
           if (!(error instanceof ServerSearchUnavailable)) throw error;
           set({
             ranOnServer: false,
-            optimizeLog: [`サーバが居なかった: ${error.message}`, 'ブラウザで回す。'],
+            optimizeLog: [`サーバに届きませんでした: ${error.message}`, 'ブラウザで回します。'],
           });
         }
       }

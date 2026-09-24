@@ -156,7 +156,7 @@ export function CrossPanel() {
         </label>
         <button
           type="button"
-          className="rounded-sm bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-50"
+          className="rounded-sm bg-primary-bg px-4 py-1.5 text-sm text-primary-fg disabled:opacity-50"
           onClick={() => void run()}
           disabled={running || busy || courses.length === 0}
         >

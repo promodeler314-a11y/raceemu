@@ -60,7 +60,7 @@ export function TransferPanel() {
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          className="rounded-sm bg-ink px-3 py-1.5 text-xs text-paper disabled:opacity-50"
+          className="rounded-sm border border-rule2 bg-surface px-3 py-1.5 text-xs text-ink disabled:opacity-50"
           onClick={read}
           disabled={text.trim() === ''}
         >

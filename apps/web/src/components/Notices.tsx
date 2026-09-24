@@ -94,7 +94,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, Boundar
             className="rounded-sm bg-primary-bg px-3 py-1.5 text-sm text-primary-fg"
             onClick={() => location.reload()}
           >
-            開き直す
+            再読み込み
           </button>
           <button
             type="button"
@@ -108,7 +108,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, Boundar
               location.href = location.pathname;
             }}
           >
-            保存した設定を消して開き直す
+            保存した設定の削除と再読み込み
           </button>
         </div>
       </div>
