@@ -52,7 +52,7 @@ GitHub Pages への配信は廃止した（5 節）。
 
 - **モバイルでの Worker 数。** 既定は `hardwareConcurrency - 1`（`packages/sim/src/parallel/browser.ts`）なので、8 コアの端末では 7 本立ち上がり、それぞれ 1.18 MB を読む。上限を切るかは実機で測ってから決める。
 - **ES module 形式の Worker。** `vite.config.ts` で `worker.format` を `es` にしている。Firefox は 114 から対応した。
-- **入れ替えのたびに Pod が作り直される。** `main` に何か入るたびに再起動するので、実行中の探索はそこで切れる。個体の保存も、いまの本番では再起動で消える（4.3 節）。
+- **入れ替えのたびに Pod が作り直される。** `main` に何か入るたびに再起動するので、実行中の探索はそこで切れる。保存した個体は PVC に置いてあるので残る（4.3 節）。
 
 ## 4. 自前の k3s に置く
 
@@ -168,22 +168,28 @@ kubectl set image deploy/raceemu raceemu=192.168.0.203:5000/raceemu:<短縮 SHA>
 ### 4.3 本番の Deployment は `deploy/k8s.yaml` と違う
 
 本番の `raceemu` はリポジトリの `deploy/k8s.yaml` から置かれたものではない。
-いまの `deploy/k8s.yaml` をそのまま `apply` すると、イメージが ghcr.io に切り替わり、Service の外向きの IP も外れる。
+いまの `deploy/k8s.yaml` をそのまま `apply` すると、イメージが ghcr.io に切り替わる。
+Service も `type` と MetalLB の注釈が無いので、LAN の `192.168.0.206` が外れる。
 
 | | `deploy/k8s.yaml` | 本番 |
 | --- | --- | --- |
 | イメージ | `ghcr.io/promodeler314-a11y/raceemu:main` | `192.168.0.203:5000/raceemu:current` |
 | 入れ替えの戦略 | 既定（RollingUpdate） | `Recreate` |
 | Service | ClusterIP | `LoadBalancer`（MetalLB、`192.168.0.206`） |
-| 個体の保存 | PVC `raceemu-data` を `/data` に、`RACEEMU_DATA_DIR=/data` | **PVC も `RACEEMU_DATA_DIR` も無い** |
 | 注釈 `raceemu.dev/commit` | 無い | 4.2 節が使う |
 
-**本番では、保存した個体が入れ替えのたびに消える。**
-`RACEEMU_DATA_DIR` が無いと `apps/api` は個体をメモリの SQLite に持つ（起動時のログに「再起動で消える」と出る）。
-4.2 節の仕組みは `main` に何か入るたびに Pod を作り直すので、保存した個体はそこで無くなる。
-直すには、`deploy/k8s.yaml` にある PVC と `volumeMounts`、`RACEEMU_DATA_DIR` を本番の Deployment に足す。
+そのほかの値（PVC `raceemu-data` と `RACEEMU_DATA_DIR=/data`、`fsGroup: 1000`、`RACEEMU_MAX_RUNNING=1`、`RACEEMU_MAX_QUEUED=8`、`RACEEMU_MAX_RACES=2000000`、requests と limits、2 つの probe）は同じである。
 
-そのほかの値（`RACEEMU_MAX_RUNNING=1`、`RACEEMU_MAX_QUEUED=8`、`RACEEMU_MAX_RACES=2000000`、requests と limits、2 つの probe）は同じである。
+**個体の保存は、2026-09-24 まで本番で消えていた。**
+本番の Deployment に PVC も `RACEEMU_DATA_DIR` も無く、`apps/api` は個体をメモリの SQLite に持っていた（起動時のログに「再起動で消える」と出る）。
+4.2 節の仕組みは `main` に何か入るたびに Pod を作り直すので、保存した個体はそこで無くなっていた。
+`deploy/k8s.yaml` と同じ PVC（1 GiB、`local-path`）と `volumeMounts`、`RACEEMU_DATA_DIR` を本番に足して直した。
+起動時のログが「個体の保存: /data」になっていれば効いている。
+
+**`local-path` の PVC は最初に置かれたノードに縛られる。**
+Pod はそのノードでしか立ち上がらなくなる（いまは `k3s-worker1`）。
+ノードを止めるとアプリも止まり、ノードを失うと保存した個体も失う。
+`raceemu-gate-data` も同じ扱いである。
 
 `/api/health` が返す `concurrencySource` が `cgroup` であれば、[設計](server-design.md)の 4.1 節の前提どおりに並列数を読めている（本番は `cgroup` で 4 本）。
 `availableParallelism` と出ていたらクォータを読めておらず、ノードのコア数で走っている。
