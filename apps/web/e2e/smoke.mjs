@@ -1076,6 +1076,33 @@ if (skillListOverflow > 0) fail('小さい画面のスキル一覧の面で横�
 await mobile.screenshot({ path: 'docs/images/skill-list-mobile.png', fullPage: true });
 await mobile.close();
 
+// タッチ端末でも、ホバーでしか出ない情報を見られること（#103）。
+// タップに続く擬似的なマウスの出入りと打ち消し合って、出た瞬間に消えていたことがある。
+const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+const touchPage = await touch.newPage();
+await touchPage.goto('http://localhost:4173/#tab=summary', { waitUntil: 'load' });
+await touchPage.getByRole('button', { name: '実行', exact: true }).tap();
+await touchPage.waitForSelector('[data-testid=average-time]', { timeout: 60000 });
+// 書体（Google Fonts）が届くと文字が組み直されて図の位置がずれる。CI では届くのが遅く、
+// 先に測った座標をタップすると棒から外れることがあった。書体を待ち、座標ではなく
+// 棒そのものをタップする（Playwright がタップの直前に位置を測り直し、上に何か
+// 重なっていないかも確かめる）。高さ 0 の棒には指が届かないので、いちばん高い棒を選ぶ。
+await touchPage.evaluate(() => document.fonts.ready);
+const touchBars = touchPage.locator('svg[role=img] rect');
+const touchHeights = await touchBars.evaluateAll((rects) => rects.map((rect) => rect.getBoundingClientRect().height));
+const touchIndex = touchHeights.indexOf(Math.max(...touchHeights));
+const touchBarSize = await touchBars.nth(touchIndex).evaluate((rect) => {
+  const box = rect.getBoundingClientRect();
+  return { width: box.width, height: box.height };
+});
+await touchBars.nth(touchIndex).tap({ position: { x: touchBarSize.width / 2, y: touchBarSize.height - 3 } });
+const touchDetailBox = touchPage.locator('svg[role=img]').first().locator('xpath=following-sibling::div[1]');
+await touchDetailBox.filter({ hasText: /試行 ・/ }).waitFor({ timeout: 5000 }).catch(() => undefined);
+const touchDetail = await touchDetailBox.innerText();
+console.log('--- タップした分布の棒の内訳:', touchDetail.replace(/\s+/g, ' ').slice(0, 60));
+if (!/試行 ・/.test(touchDetail)) fail('タッチ端末で分布の棒をタップしても内訳が出ない');
+await touch.close();
+
 console.log('エラー:', errors.length === 0 ? 'なし' : errors);
 if (errors.length > 0) fail('コンソールにエラーが出た');
 
