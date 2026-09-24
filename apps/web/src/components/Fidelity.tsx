@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import {
   FIDELITY_LABEL,
   FIDELITY_MARK,
@@ -20,22 +21,43 @@ const MARK_CLASS: Readonly<Record<Fidelity, string>> = {
 };
 
 function titleOf(fidelity: SkillFidelity): string {
+  // 条件の型名（note.type）は内部の名前なので出さない。理由の文だけで読める
   return [
     FIDELITY_LABEL[fidelity.fidelity],
-    ...fidelity.notes.map((note) => `${FIDELITY_MARK[note.fidelity]} ${note.type}: ${note.reason}`),
+    ...fidelity.notes.map((note) => `${FIDELITY_MARK[note.fidelity]} ${note.reason}`),
   ].join('\n');
 }
 
-/** 印 1 つ。完全に判定できているものには何も出さない。 */
+/**
+ * 印 1 つ。完全に判定できているものには何も出さない。
+ *
+ * 理由をマウスを合わせたときの title だけに持たせると、タッチ端末では見られない
+ * （#103、UI 診断 第3節 A-8）。押すと印の下に理由を開き、もう一度押すと閉じる。
+ */
 export function FidelityMark({ fidelity }: { fidelity: SkillFidelity | undefined }) {
+  const [open, setOpen] = useState(false);
   if (fidelity === undefined || fidelity.fidelity === 'exact') return null;
+  const text = titleOf(fidelity);
   return (
-    <span
-      className={`ml-1 ${MARK_CLASS[fidelity.fidelity]}`}
-      title={titleOf(fidelity)}
-      aria-label={FIDELITY_LABEL[fidelity.fidelity]}
-    >
-      {FIDELITY_MARK[fidelity.fidelity]}
+    <span className="relative ml-1 inline-block">
+      <button
+        type="button"
+        className={MARK_CLASS[fidelity.fidelity]}
+        title={text}
+        aria-label={`${FIDELITY_LABEL[fidelity.fidelity]}（理由の表示）`}
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        {FIDELITY_MARK[fidelity.fidelity]}
+      </button>
+      {open && (
+        <span
+          role="note"
+          className="absolute left-0 top-full z-20 mt-1 block w-64 whitespace-pre-line rounded-sm border border-rule2 bg-surface p-2 text-left text-[11px] font-normal text-ink2"
+        >
+          {text}
+        </span>
+      )}
     </span>
   );
 }
@@ -86,7 +108,7 @@ export function FidelityLegend({ useField }: { useField: boolean }) {
       発動条件の一部を落としています。落とした条件は満たしている扱いになるので、発動率も短縮量も本来より高く出ます。
       {!useField &&
         '順位条件を判定していないので、順位と距離差の条件はすべて落ちている側に入ります。'}
-      {' 印にカーソルを合わせると、どの条件がそうなのかが出ます。'}
+      {' 印を押すと、どの条件がそうなのかが出ます。'}
     </p>
   );
 }

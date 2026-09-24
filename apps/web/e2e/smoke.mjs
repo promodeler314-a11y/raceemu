@@ -1076,6 +1076,25 @@ if (skillListOverflow > 0) fail('小さい画面のスキル一覧の面で横�
 await mobile.screenshot({ path: 'docs/images/skill-list-mobile.png', fullPage: true });
 await mobile.close();
 
+// タッチ端末でも、ホバーでしか出ない情報を見られること（#103）。
+// タップに続く擬似的なマウスの出入りと打ち消し合って、出た瞬間に消えていたことがある。
+const touch = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+const touchPage = await touch.newPage();
+await touchPage.goto('http://localhost:4173/#tab=summary', { waitUntil: 'load' });
+await touchPage.getByRole('button', { name: '実行', exact: true }).tap();
+await touchPage.waitForSelector('[data-testid=average-time]', { timeout: 60000 });
+// 図を画面の中に入れてから、いちばん高い棒を押す。画面の外や高さ 0 の棒には指が届かない
+await touchPage.locator('svg[role=img]').first().scrollIntoViewIfNeeded();
+const touchBars = touchPage.locator('svg[role=img] rect');
+const touchBoxes = await Promise.all([...Array(await touchBars.count()).keys()].map((i) => touchBars.nth(i).boundingBox()));
+const touchBar = touchBoxes.reduce((best, box) => (box !== null && (best === null || box.height > best.height) ? box : best), null);
+await touchPage.touchscreen.tap(touchBar.x + touchBar.width / 2, touchBar.y + touchBar.height - 3);
+await touchPage.waitForTimeout(300);
+const touchDetail = await touchPage.locator('svg[role=img]').first().locator('xpath=following-sibling::div[1]').innerText();
+console.log('--- タップした分布の棒の内訳:', touchDetail.replace(/\s+/g, ' ').slice(0, 60));
+if (!/試行 ・/.test(touchDetail)) fail('タッチ端末で分布の棒をタップしても内訳が出ない');
+await touch.close();
+
 console.log('エラー:', errors.length === 0 ? 'なし' : errors);
 if (errors.length > 0) fail('コンソールにエラーが出た');
 

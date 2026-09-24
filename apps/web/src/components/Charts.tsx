@@ -307,10 +307,35 @@ export function Chart({
     };
     // 横軸のあとに系列が並ぶ。値は Float64Array と (number | null)[] を混ぜられる。
     const data = [x, ...series.map((s) => s.values)] as uPlot.AlignedData;
-    plot.current = new uPlot(options, data, element);
+    const created = new uPlot(options, data, element);
+    plot.current = created;
     const onResize = () => plot.current?.setSize({ width: element.clientWidth, height });
     window.addEventListener('resize', onResize);
+    // タッチ端末にはカーソルが無く、スキルの印に合わせて名前を出せない（#103、UI 診断 第3節 A-8）。
+    // タップした位置の近くにある印を拾う。指はマウスより粗いので、拾う範囲を広めに取る。
+    let pointerType = 'mouse';
+    const onPointerDown = (event: PointerEvent) => {
+      pointerType = event.pointerType;
+    };
+    const onTap = (event: MouseEvent) => {
+      if (pointerType === 'mouse') return;
+      const left = event.clientX - created.over.getBoundingClientRect().left;
+      let nearest: SkillMarker | null = null;
+      let nearestDist = 16;
+      for (const marker of bands.skills) {
+        const distance = Math.abs(created.valToPos(marker.position, 'x', false) - left);
+        if (distance < nearestDist) {
+          nearestDist = distance;
+          nearest = marker;
+        }
+      }
+      setHoverSkill(nearest);
+    };
+    created.over.addEventListener('pointerdown', onPointerDown);
+    created.over.addEventListener('click', onTap);
     return () => {
+      created.over.removeEventListener('pointerdown', onPointerDown);
+      created.over.removeEventListener('click', onTap);
       window.removeEventListener('resize', onResize);
       plot.current?.destroy();
       plot.current = null;
@@ -320,7 +345,7 @@ export function Chart({
   const skillHint =
     !showSkillHint || bands.skills.length === 0
       ? undefined
-      : '薄い縦線と三角の印はスキル発動位置です。カーソルを合わせると名前を表示します。';
+      : '薄い縦線と三角の印はスキル発動位置です。カーソルを合わせるかタップすると名前を表示します。発動位置は下のイベント表でも読めます。';
   const caption =
     hoverSkill !== null
       ? `${hoverSkill.caption ?? `${hoverSkill.position.toFixed(0)} m`} ・ ${hoverSkill.labels.join('、')}`
@@ -663,6 +688,11 @@ export function TimeHistogram() {
               style={{ fill: 'var(--uma-chart-speed)' }}
               opacity={hover === null || hover === i ? 1 : 0.45}
               onMouseEnter={() => setHover(i)}
+              // タッチ端末にはホバーが無いので、タップで出して、もう一度のタップで消す（#103）。
+              // click で切り替えると、タップに続く擬似的なマウスの出入りと打ち消し合う。押した瞬間に切り替える
+              onPointerDown={(event) => {
+                if (event.pointerType !== 'mouse') setHover((h) => (h === i ? null : i));
+              }}
               onMouseLeave={() => setHover((h) => (h === i ? null : h))}
             />
           );
@@ -681,6 +711,8 @@ export function TimeHistogram() {
             y1={padTop}
             y2={padTop + plotH}
             className="stroke-ink3"
+            // 破線は棒の上に重なる。指が当たっても下の棒に届くようにする（#103）
+            pointerEvents="none"
             strokeWidth={1}
             strokeDasharray="3 3"
           />
@@ -691,6 +723,7 @@ export function TimeHistogram() {
           y1={padTop + plotH}
           y2={padTop + plotH}
           className="stroke-rule2"
+          pointerEvents="none"
           strokeWidth={1}
         />
       </svg>
@@ -706,7 +739,7 @@ export function TimeHistogram() {
             {((bins.counts[hover]! / bins.total) * 100).toFixed(1)}%
           </span>
         ) : (
-          <span>バーにカーソルを合わせると帯の内訳を表示します</span>
+          <span>バーにカーソルを合わせるかタップすると、帯の内訳を表示します</span>
         )}
         <span className="text-right">
           {formatTime(bins.max)}
