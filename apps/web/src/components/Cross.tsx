@@ -1,7 +1,7 @@
 import { Fragment, useMemo } from 'react';
 import type { CrossCourseRow } from '../../../../packages/sim/src/parallel/cross.ts';
 import { formatDuration } from '../format.ts';
-import { crossCourses, distancesOf, estimateCross, useStore, type CrossResult } from '../store.ts';
+import { crossCourses, distancesOf, estimateCross, startSp, useStore, type CrossResult } from '../store.ts';
 import { CancelButton, Panel } from './Inputs.tsx';
 
 /**
@@ -209,6 +209,23 @@ function CrossTable({
   groups: readonly DistanceGroup[];
   result: CrossResult;
 }) {
+  // 残り体力をスタート時の体力に対する割合でも読めるようにする（#105）。
+  // スタート時の体力は距離で変わるので、コースごとに出す。
+  const uma = useStore((s) => s.uma);
+  const track = useStore((s) => s.track);
+  const skillIds = useStore((s) => s.skillIds);
+  const options = useStore((s) => s.options);
+  const debuffCounts = useStore((s) => s.debuffCounts);
+  const shareOf = (row: CrossResult['rows'][number]) => {
+    const start = startSp({
+      uma,
+      skillIds,
+      options,
+      debuffCounts,
+      track: { ...track, location: row.location, course: row.course },
+    });
+    return start > 0 ? (row.summary.all.averageGoalSp / start) * 100 : Number.NaN;
+  };
   return (
     <div className="mt-4">
       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 text-xs text-ink3">
@@ -240,7 +257,7 @@ function CrossTable({
                 完走率
               </th>
               <th scope="col" className="pb-1 text-right font-normal">
-                平均残り体力
+                平均残り体力（スタート時比）
               </th>
             </tr>
           </thead>
@@ -284,6 +301,9 @@ function CrossTable({
                       </td>
                       <td className="num py-1 text-right text-ink3">
                         {row.summary.all.averageGoalSp.toFixed(1)}
+                        {Number.isFinite(shareOf(row)) && (
+                          <span className="ml-1 text-[11px]">（{shareOf(row).toFixed(1)} %）</span>
+                        )}
                       </td>
                     </tr>
                   );

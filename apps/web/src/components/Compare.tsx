@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react';
-import { currentTrackDetail, gameData, useStore, type Snapshot } from '../store.ts';
+import { currentTrackDetail, gameData, startSp, useStore, type Snapshot } from '../store.ts';
 import { formatTime } from '../format.ts';
 import { CONDITION_LABEL as MOOD_LABEL, Panel } from './Inputs.tsx';
 
@@ -40,6 +40,8 @@ const GROUPS: readonly { readonly name: string; readonly rows: readonly Row[] }[
       { label: '最大スパート率', value: (s) => percent(s.summary.spurtRate) },
       { label: '完走率', value: (s) => percent(s.summary.finishRate) },
       { label: '平均残り体力', value: (s) => s.summary.all.averageGoalSp.toFixed(1) },
+      // 残り体力を読む基準（#105）。スタミナやコースを変えた列どうしでは、ここも動く
+      { label: 'スタート時の体力', value: (s) => startSp(s).toFixed(0), numeric: true },
     ],
   },
   {
