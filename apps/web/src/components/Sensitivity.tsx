@@ -8,7 +8,7 @@ import {
   sensitivityScales,
   useStore,
 } from '../store.ts';
-import { Panel } from './Inputs.tsx';
+import { CancelButton, Panel } from './Inputs.tsx';
 
 /**
  * 近似の感度分析。
@@ -96,7 +96,6 @@ export function SensitivityPanel() {
   const setTrials = useStore((s) => s.setSensitivityTrials);
   const setLimit = useStore((s) => s.setSensitivityLimit);
   const run = useStore((s) => s.runSensitivity);
-  const cancel = useStore((s) => s.cancel);
   const running = useStore((s) => s.sensitivityRunning);
   const busy = useStore((s) => s.running);
   const optimizeRunning = useStore((s) => s.optimizeRunning);
@@ -215,14 +214,7 @@ export function SensitivityPanel() {
           {running ? '測っている' : '近似の幅を測る'}
         </button>
         {running ? (
-          <button
-            type="button"
-            className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
-            onClick={cancel}
-            title="Esc でも中断できる"
-          >
-            中断
-          </button>
+          <CancelButton />
         ) : (
           <span
             className="text-xs text-ink3"

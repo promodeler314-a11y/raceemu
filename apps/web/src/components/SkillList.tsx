@@ -148,7 +148,7 @@ export function SkillListPanel() {
   }
   if (index.courses.length === 0) {
     return (
-      <Unavailable message="表の一覧は取れたが、測ってあるコースが 1 つも無い。生成（pnpm skill-list）がまだ 1 コースも回っていない。" />
+      <Unavailable message="この配布物には、測ってあるコースが 1 つも無い。" />
     );
   }
   return <SkillListCoursePicker index={index} />;
@@ -302,7 +302,7 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
 
   return (
     <>
-      <Provenance file={file} index={index} />
+      <Provenance file={file} />
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="block">
@@ -523,26 +523,46 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
   );
 }
 
-/** どの版の、何から作った表かを出す。値は相手の分布に依るので、版は隠さない。 */
-function Provenance({ file, index }: { file: SkillListCourseFile; index: SkillListIndex }) {
+/**
+ * どの版の、何から作った表かを出す。値は相手の分布に依るので、版は隠さない。
+ *
+ * ただし版の名前と指紋（16 進の並び）は、読む人の判断には使わない内部の値である
+ * （docs/ui-audit-race-emulator.md 第1節「内部の値」）。結果の出どころを
+ * 確かめたい人のために残し、普段は畳んでおく。
+ */
+function Provenance({ file }: { file: SkillListCourseFile }) {
   return (
     <div
-      className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink3"
+      className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] text-ink3"
       data-testid="skill-list-version"
     >
       <span className="font-semibold text-ink2">{courseLabel(file.course)}</span>
-      <span className="num">版 {file.version}</span>
-      <span className="num">
-        {file.skillIds.length.toLocaleString('ja-JP')} スキル ・{' '}
-        {file.columns.length.toLocaleString('ja-JP')} 行 ・ 一覧に {index.courses.length} コース
+      <span>
+        1 行あたり <span className="num">{file.settings.trials.toLocaleString('ja-JP')}</span> 試行
       </span>
-      <span className="num">{file.settings.trials.toLocaleString('ja-JP')} 試行 / 行</span>
       <span>{file.settings.useField ? '順位条件を判定した' : '順位条件は満たしている前提'}</span>
-      <span className="num" title="スキル / コース / 計算式 / 相手の分布 の指紋">
-        指紋 {file.dataset.skills}・{file.dataset.courses}・{file.dataset.raceModel}・
-        {file.dataset.fieldProfile}
+      <span>
+        作成 <span className="num">{file.generatedAt.slice(0, 10)}</span>
       </span>
-      <span className="num">{file.generatedAt.slice(0, 10)}</span>
+      <details className="basis-full">
+        <summary className="cursor-pointer select-none">表の版</summary>
+        <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+          <span>
+            版 <span className="num">{file.version}</span>
+          </span>
+          <span>
+            <span className="num">{file.skillIds.length.toLocaleString('ja-JP')}</span> スキル ・{' '}
+            <span className="num">{file.columns.length.toLocaleString('ja-JP')}</span> 行
+          </span>
+          <span title="スキル / コース / 計算式 / 相手の分布 の指紋">
+            指紋{' '}
+            <span className="num break-all">
+              {file.dataset.skills}・{file.dataset.courses}・{file.dataset.raceModel}・
+              {file.dataset.fieldProfile}
+            </span>
+          </span>
+        </div>
+      </details>
     </div>
   );
 }

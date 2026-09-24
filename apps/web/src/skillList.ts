@@ -116,7 +116,8 @@ export async function fetchSkillListCourse(
 /** 画面が読むときの失敗の言い分け。例外の型ごとに文面を変える。 */
 export function explainSkillListError(error: unknown): string {
   if (error instanceof SkillListUnavailable) {
-    return `${error.message} この面は事前に計算した表を読むだけなので、表が無いと何も出せない。表は \`pnpm skill-list\` が作り、\`apps/web/public/skill-list/\` に置く。`;
+    // 作り方（pnpm skill-list）は配る側の話なので、画面には出さない。README と CLAUDE.md にある。
+    return `${error.message} この面は事前に計算した表を読むだけなので、表が無いと何も出せない。`;
   }
   if (error instanceof SkillListBroken) return error.message;
   return error instanceof Error ? error.message : String(error);

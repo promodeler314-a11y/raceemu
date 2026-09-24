@@ -1,10 +1,7 @@
 import { Fragment, useState } from 'react';
 import { currentTrackDetail, gameData, useStore, type Snapshot } from '../store.ts';
-import { Panel } from './Inputs.tsx';
-
-function seconds(value: number): string {
-  return Number.isFinite(value) ? value.toFixed(3) : '-';
-}
+import { formatTime } from '../format.ts';
+import { CONDITION_LABEL as MOOD_LABEL, Panel } from './Inputs.tsx';
 
 function percent(value: number): string {
   return Number.isFinite(value) ? `${(value * 100).toFixed(1)} %` : '-';
@@ -23,6 +20,11 @@ type Row = {
   readonly value: (s: Snapshot) => string;
   /** 基準との差を数値で出すか */
   readonly numeric?: boolean;
+  /**
+   * 差を取るための値。表示が数字そのものでない行（タイムの「1:57.644」）で使う。
+   * 省くと表示の文字列を数として読む。
+   */
+  readonly amount?: (s: Snapshot) => number;
   /** 差の小数桁。タイムは 3 桁、ステータスのような整数は 0 桁。 */
   readonly digits?: number;
 };
@@ -31,10 +33,10 @@ const GROUPS: readonly { readonly name: string; readonly rows: readonly Row[] }[
   {
     name: '結果',
     rows: [
-      { label: '平均タイム', value: (s) => seconds(s.summary.all.averageTime), numeric: true, digits: 3 },
-      { label: '中央値', value: (s) => seconds(s.summary.all.medianTime), numeric: true, digits: 3 },
-      { label: '最速タイム', value: (s) => seconds(s.summary.all.bestTime), numeric: true, digits: 3 },
-      { label: '最遅タイム', value: (s) => seconds(s.summary.all.worstTime), numeric: true, digits: 3 },
+      { label: '平均タイム', value: (s) => formatTime(s.summary.all.averageTime), amount: (s) => s.summary.all.averageTime, numeric: true, digits: 3 },
+      { label: '中央値', value: (s) => formatTime(s.summary.all.medianTime), amount: (s) => s.summary.all.medianTime, numeric: true, digits: 3 },
+      { label: '最速タイム', value: (s) => formatTime(s.summary.all.bestTime), amount: (s) => s.summary.all.bestTime, numeric: true, digits: 3 },
+      { label: '最遅タイム', value: (s) => formatTime(s.summary.all.worstTime), amount: (s) => s.summary.all.worstTime, numeric: true, digits: 3 },
       { label: '最大スパート率', value: (s) => percent(s.summary.spurtRate) },
       { label: '完走率', value: (s) => percent(s.summary.finishRate) },
       { label: '平均残り体力', value: (s) => s.summary.all.averageGoalSp.toFixed(1) },
@@ -49,7 +51,7 @@ const GROUPS: readonly { readonly name: string; readonly rows: readonly Row[] }[
       { label: '根性', value: (s) => String(s.uma.guts), numeric: true },
       { label: '賢さ', value: (s) => String(s.uma.wisdom), numeric: true },
       { label: '脚質', value: (s) => STYLE_LABEL[s.uma.style] ?? s.uma.style },
-      { label: 'やる気', value: (s) => s.uma.condition },
+      { label: 'やる気', value: (s) => MOOD_LABEL[s.uma.condition] ?? '' },
     ],
   },
   {
@@ -142,8 +144,8 @@ function DistributionOverlay({ columns }: { columns: readonly Snapshot[] }) {
         ))}
       </svg>
       <div className="flex justify-between text-[11px] text-ink3">
-        <span className="num">{seconds(min)}</span>
-        <span className="num">{seconds(max)}</span>
+        <span className="num">{formatTime(min)}</span>
+        <span className="num">{formatTime(max)}</span>
       </div>
     </div>
   );
@@ -274,7 +276,9 @@ export function CompareOutput() {
                           const differs = value !== baseValue;
                           const delta =
                             row.numeric === true && differs
-                              ? Number(value) - Number(baseValue)
+                              ? row.amount !== undefined
+                                ? row.amount(snapshot) - row.amount(base)
+                                : Number(value) - Number(baseValue)
                               : Number.NaN;
                           const interval =
                             row.label === '平均タイム' && differs
@@ -283,7 +287,7 @@ export function CompareOutput() {
                           return (
                             <td
                               key={snapshot.id}
-                              className={`num py-1 text-right ${differs ? 'font-semibold' : 'text-ink3'}`}
+                              className={`${row.numeric === true ? 'num ' : ''}py-1 text-right ${differs ? 'font-semibold' : 'text-ink3'}`}
                             >
                               {value}
                               {Number.isFinite(delta) && (

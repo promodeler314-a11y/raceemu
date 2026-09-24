@@ -171,7 +171,7 @@ await goTab('設定');
 await page.fill('input[placeholder="スキル名で検索"]', 'シューティングスター');
 const sameName = await page.locator('ul li button:has-text("シューティングスター")').allTextContents();
 // 固有と継承版は名前が同じで、一覧に出てよいのは継承版だけである。
-if (sameName.length !== 1 || !sameName[0].includes('inherit')) {
+if (sameName.length !== 1 || !sameName[0].includes('継承')) {
   fail(`一覧に固有が出ている: ${sameName.join(' / ')}`);
 }
 await page.fill('input[placeholder="スキル名で検索"]', '');
