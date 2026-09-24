@@ -4,7 +4,7 @@ import { listIndividuals, type Individual } from '../individualsApi.ts';
 import { defaultOpponents, estimateMulti, gameData, skillChoices, useStore } from '../store.ts';
 import { formatDuration } from '../format.ts';
 import { rarityLabel } from '../skills.ts';
-import { CancelButton, Panel } from './Inputs.tsx';
+import { CancelButton, Explain, Panel } from './Inputs.tsx';
 import { MultiRaceDetail, MultiTrialPicker } from './MultiRace.tsx';
 
 const fieldCls = 'w-full rounded-sm border border-rule2 bg-surface px-2 py-1 text-sm';
@@ -233,13 +233,15 @@ export function FieldPanel() {
       <Panel title="相手">
         <p className="text-xs text-ink3">
           出走する {gateCount} 頭を同時に走らせ、着順の分布と勝率を出します。
-          相手は自分の走りに反応し、位置取りも相手を見て決まります。
+          試行回数はここで指定し、シードは実行バーの値を使います。
         </p>
-        <p className="mt-1 text-xs text-ink3">
-          この面は上の実行バーとは別に動きます。
-          試行回数はここで指定し、シードは実行バーの値を使います。「順位条件を判定する」の指定は使いません（順位は実際の位置から決まります）。
-          枠番は空いているところから配ります。
-        </p>
+        <Explain className="mt-1">
+          <p>
+            相手は自分の走りに反応し、位置取りも相手を見て決まります。
+            この面は上の実行バーとは別に動き、「順位条件を判定する」の指定は使いません（順位は実際の位置から決まります）。
+            枠番は空いているところから配ります。
+          </p>
+        </Explain>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="text-ink3">

@@ -8,7 +8,7 @@ import {
   sensitivityScales,
   useStore,
 } from '../store.ts';
-import { CancelButton, Panel } from './Inputs.tsx';
+import { CancelButton, Explain, Panel } from './Inputs.tsx';
 
 /**
  * 近似の感度分析。
@@ -130,11 +130,15 @@ export function SensitivityPanel() {
   return (
     <Panel title="近似の感度">
       <p className="text-xs text-ink3">
-        他のウマ娘との接触や追い抜きの扱いは、ゲームと突き合わせて確かめたものではありません。
-        置き方を半分と倍に振って走らせ、短縮量がどれだけ動くかを見ます。
+        近似の置き方を半分と倍に振って走らせ、短縮量がどれだけ動くかを見ます。
         幅が誤差より広いスキルは、順位を置き方のほうが決めています。
-        {scaleCount} 通り × (1 + 候補) 構成を走らせるので、候補は上限で切ります。
       </p>
+      <Explain className="mt-1">
+        <p>
+          他のウマ娘との接触や追い抜きの扱いは、ゲームと突き合わせて確かめたものではありません。
+          {scaleCount} 通り × (1 + 候補) 構成を走らせるので、候補は上限で切ります。
+        </p>
+      </Explain>
 
       {/*
         軸は 2 つある。まとめて 1 つの幅にはしない。確率が倍になる世界と
