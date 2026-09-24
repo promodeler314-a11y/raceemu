@@ -3,6 +3,9 @@
 `apps/web` が出す静的ファイルと `apps/api` を、自前の k3s に置く（4 節）。
 `apps/api` は静的ファイルも同じオリジンから配るので、これ一つでアプリとして完結する。
 
+**`main` に入れれば、数分（遅くとも 10 分ほど）で本番に出る。人が手で入れ替える手順は無い。**
+クラスタの中の CronJob が 5 分ごとに `main` を見に行き、新しいコミットがあればクラスタの中で組んで入れ替える（4.2 節）。
+
 GitHub Pages への配信は廃止した（5 節）。
 
 ## 1. 静的ファイルだけで足りる
@@ -49,76 +52,176 @@ GitHub Pages への配信は廃止した（5 節）。
 
 - **モバイルでの Worker 数。** 既定は `hardwareConcurrency - 1`（`packages/sim/src/parallel/browser.ts`）なので、8 コアの端末では 7 本立ち上がり、それぞれ 1.18 MB を読む。上限を切るかは実機で測ってから決める。
 - **ES module 形式の Worker。** `vite.config.ts` で `worker.format` を `es` にしている。Firefox は 114 から対応した。
-- **入れ替えの反映。** タグが `main` のまま中身が変わるので、`kubectl apply` では新しいイメージに変わらない（4.2 節）。
+- **入れ替えのたびに Pod が作り直される。** `main` に何か入るたびに再起動するので、実行中の探索はそこで切れる。保存した個体は PVC に置いてあるので残る（4.3 節）。
 
 ## 4. 自前の k3s に置く
 
 [探索・画面の読み取り・個体の保存](server-design.md)をサーバ側で回すための置き場である。
 静的ファイルも `apps/api` が同じオリジンから配る。
 
-### 4.1 イメージ
+**この節は、動いているクラスタから読み取った実態を書いている（2026-09-24 時点）。**
+入れ替えの仕組み（4.2 節）とゲートウェイ（4.4 節）のマニフェストはリポジトリに無く、クラスタにだけある。
+`deploy/k8s.yaml` も本番とは食い違っている（4.3 節）。
+クラスタを作り直すときは、ここに書いたものを `kubectl get -o yaml` で取っておいてから始める。
 
-[ワークフロー](../.github/workflows/image.yml)が `main` への取り込みごとに `ghcr.io/promodeler314-a11y/raceemu` を更新する。
-タグは `main` と `sha-<短縮>` の 2 つで、常用は `main`、動いている版を固定したいときは `sha` を指す。
+全体の流れは次のとおりである。
 
-手元で組んで転送する手順は置いていない。
-挟むと、何が動いているのかがコミットから追えなくなる。
+```
+main に push
+  └→ raceemu-sync（CronJob、5 分ごと）が GitHub から main の SHA を取る
+       └→ デプロイ済みの SHA と違えば raceemu-build（Job）をその場で作る
+            └→ BuildKit が GitHub から直に組み、192.168.0.203:5000/raceemu に置く
+                 └→ rollout restart → 立ち上がったら SHA の印を付け替える
 
+利用者 → Cloudflare → raceemu-gate（マジックリンク）→ raceemu（apps/api）
+```
+
+### 4.1 イメージは 2 か所で組まれている
+
+**本番が引いているのは、クラスタの中で組んだほうである。**
+
+| | クラスタの中（本番） | GitHub Actions |
+| --- | --- | --- |
+| 組む所 | `raceemu-build` Job（BuildKit、rootless） | [`image.yml`](../.github/workflows/image.yml) |
+| 置き場 | `192.168.0.203:5000/raceemu`（LAN のレジストリ、平文の HTTP） | `ghcr.io/promodeler314-a11y/raceemu` |
+| タグ | 短縮 SHA（例 `c40450f`）と `current` | `sha-<短縮>` と `main` |
+| 本番が引くか | 引く（`:current`） | 引かない |
+
+どちらも同じ `deploy/Dockerfile` から組む。
+
+**`image.yml` を残しているのは、pull request で `Dockerfile` を検査するためである。**
 pull request では組むだけで置かない。
 `Dockerfile` が壊れていることにマージしてから気付く、という事故をここで止める。
+`main` では ghcr.io にも置くが、本番はそれを使っていない。
 
-**パッケージは公開で置かれる。**
-最初の 1 本を置いたあと、資格情報なしで引けることを確かめた。
+**手元で組んで転送する手順は置いていない。**
+挟むと、何が動いているのかがコミットから追えなくなる。
+クラスタの中で組むときも、組む元は GitHub 上のその SHA（`https://github.com/promodeler314-a11y/raceemu.git#<SHA>`）であり、手元の作業ツリーではない。
+タグにも短縮 SHA が付くので、レジストリを見れば何が組まれたか分かる。
+
+**BuildKit は GitHub から直に取るので、`design-system` も公開のまま取れる必要がある。**
+submodule の中身も BuildKit が取りに行く。
+[uma-design-system](https://github.com/promodeler314-a11y/uma-design-system) を非公開にすると、GitHub Actions は `DS_PAT` で通るが、クラスタの中のビルドは資格情報を持っていないので止まる。
+
+**ghcr.io のイメージは `linux/amd64` だけである。**
+本番には関係しない（クラスタの中のビルドはノードと同じ形で組まれる）。
+ghcr.io のイメージを arm64 のノードで使うことになったら、`build-push-action` に `platforms: linux/amd64,linux/arm64` を足す。
+組む時間は倍以上になる（QEMU を挟むため）ので、要ると分かってから足す。
+
+ghcr.io のパッケージは公開で、資格情報なしで引けることを確かめてある。
 
 ```
 $ curl -s "https://ghcr.io/token?scope=repository:promodeler314-a11y/raceemu:pull&service=ghcr.io" | jq -r .token > /tmp/t
 $ curl -s -H "Authorization: Bearer $(cat /tmp/t)" https://ghcr.io/v2/promodeler314-a11y/raceemu/tags/list
-{"name":"promodeler314-a11y/raceemu","tags":["main","sha-c8f79e6"]}
 ```
 
-クラスタ側に `imagePullSecret` は要らない。
-非公開にしたくなった場合は、パッケージの設定で切り替えたうえで、`ghcr.io` を引ける `imagePullSecret` を作って `deploy/k8s.yaml` の `spec.template.spec` に足す。
+### 4.2 入れ替えは CronJob が自動でやる
 
-**組んでいるのは `linux/amd64` だけである。**
-ノードが arm64 なら引けない。
-そのときはワークフローの `build-push-action` に `platforms: linux/amd64,linux/arm64` を足す。
-組む時間は倍以上になる（QEMU を挟むため）ので、要ると分かってから足す。
+名前空間 `raceemu` に次のものが置いてある。
 
-### 4.2 置く
+| 種類 | 名前 | 役目 |
+| --- | --- | --- |
+| CronJob | `raceemu-sync` | 5 分ごとに `sync.sh` を走らせる（`alpine/kubectl`） |
+| ConfigMap | `raceemu-sync` | `sync.sh` と `build-job.yaml`（ビルド Job の雛形） |
+| ServiceAccount / Role / RoleBinding | `raceemu-deployer` | Job の作成と削除、Deployment の更新、Pod のログの読み取りだけを許す |
+| Job | `raceemu-build` | 1 回ごとのビルド。`sync.sh` が雛形から作る |
+
+`sync.sh` がやることは次のとおりである。
+
+1. GitHub の API で `main` の先頭の SHA を取る。40 桁の 16 進でなければ（エラーの JSON が返った場合など）そこで止める。
+2. Deployment `raceemu` の注釈 `raceemu.dev/commit` と比べる。同じなら何もせずに終わる（「変更なし」）。
+3. 前回の `raceemu-build` Job を消し、雛形の SHA を埋めて作り直す。BuildKit が組んで、`:<短縮 SHA>` と `:current` の 2 つのタグで置く。ビルドのキャッシュも同じレジストリの `:buildcache` に置く。
+4. 15 秒おきに Job を見て、終わるのを待つ（30 分で打ち切る）。
+5. `kubectl rollout restart` で入れ替え、`rollout status` で立ち上がりを待つ。Deployment は `imagePullPolicy: Always` なので、`:current` を引き直す。
+6. **立ち上がったあとで**注釈 `raceemu.dev/commit` を新しい SHA に書き換える。
+
+**印を最後に付けるので、途中で失敗しても次の回にやり直しになる。**
+ビルドに失敗しても入れ替えが終わらなくても、注釈は古い SHA のままなので、5 分後の回がもう一度組む。
+CronJob は `concurrencyPolicy: Forbid` で、前の回が組んでいる最中に次の回が重ならない。
+
+**いまの版を見る。**
 
 ```
-kubectl apply -f deploy/k8s.yaml
-kubectl rollout status deploy/raceemu -n raceemu
-kubectl port-forward deploy/raceemu 8080:8080 -n raceemu   # 手元から確かめる
-curl -s localhost:8080/api/health
+kubectl get deploy raceemu -n raceemu -o jsonpath='{.metadata.annotations.raceemu\.dev/commit}'
+kubectl get jobs -n raceemu                      # 同期の回ごとの成否と、直近のビルド
+kubectl logs job/raceemu-build -n raceemu         # ビルドのログ（終わってから 1 日残る）
 ```
 
-マニフェストは `raceemu` という名前空間を作ってその中に置く。
-名前空間を指定しないと、`kubectl apply` を実行した人の現在のコンテキストの名前空間にそのまま入ってしまい、次の 4.3 節で使う Service の DNS 名が人によって変わってしまう。
+**待たずに入れ替える。** 5 分を待てないときは、CronJob から Job を 1 本作る。
 
-`/api/health` が返す `concurrencySource` が `cgroup` であれば、[設計](server-design.md)の 4.1 節の前提どおりに並列数を読めている。
+```
+kubectl create job --from=cronjob/raceemu-sync raceemu-sync-manual -n raceemu
+kubectl logs -f job/raceemu-sync-manual -n raceemu
+```
+
+**版を止める、戻す。**
+`sync.sh` は `main` の先頭に揃えようとするので、先に CronJob を止めてからイメージを指す。
+
+```
+kubectl patch cronjob raceemu-sync -n raceemu -p '{"spec":{"suspend":true}}'
+kubectl set image deploy/raceemu raceemu=192.168.0.203:5000/raceemu:<短縮 SHA> -n raceemu
+```
+
+戻すときは `current` に指し直してから `suspend` を外す。
+止めたまま忘れると、以後の `main` が出なくなる。
+
+### 4.3 本番の Deployment は `deploy/k8s.yaml` と違う
+
+本番の `raceemu` はリポジトリの `deploy/k8s.yaml` から置かれたものではない。
+いまの `deploy/k8s.yaml` をそのまま `apply` すると、イメージが ghcr.io に切り替わる。
+Service も `type` と MetalLB の注釈が無いので、LAN の `192.168.0.206` が外れる。
+
+| | `deploy/k8s.yaml` | 本番 |
+| --- | --- | --- |
+| イメージ | `ghcr.io/promodeler314-a11y/raceemu:main` | `192.168.0.203:5000/raceemu:current` |
+| 入れ替えの戦略 | 既定（RollingUpdate） | `Recreate` |
+| Service | ClusterIP | `LoadBalancer`（MetalLB、`192.168.0.206`） |
+| 注釈 `raceemu.dev/commit` | 無い | 4.2 節が使う |
+
+そのほかの値（PVC `raceemu-data` と `RACEEMU_DATA_DIR=/data`、`fsGroup: 1000`、`RACEEMU_MAX_RUNNING=1`、`RACEEMU_MAX_QUEUED=8`、`RACEEMU_MAX_RACES=2000000`、requests と limits、2 つの probe）は同じである。
+
+**個体の保存は、2026-09-24 まで本番で消えていた。**
+本番の Deployment に PVC も `RACEEMU_DATA_DIR` も無く、`apps/api` は個体をメモリの SQLite に持っていた（起動時のログに「再起動で消える」と出る）。
+4.2 節の仕組みは `main` に何か入るたびに Pod を作り直すので、保存した個体はそこで無くなっていた。
+`deploy/k8s.yaml` と同じ PVC（1 GiB、`local-path`）と `volumeMounts`、`RACEEMU_DATA_DIR` を本番に足して直した。
+起動時のログが「個体の保存: /data」になっていれば効いている。
+
+**`local-path` の PVC は最初に置かれたノードに縛られる。**
+Pod はそのノードでしか立ち上がらなくなる（いまは `k3s-worker1`）。
+ノードを止めるとアプリも止まり、ノードを失うと保存した個体も失う。
+`raceemu-gate-data` も同じ扱いである。
+
+`/api/health` が返す `concurrencySource` が `cgroup` であれば、[設計](server-design.md)の 4.1 節の前提どおりに並列数を読めている（本番は `cgroup` で 4 本）。
 `availableParallelism` と出ていたらクォータを読めておらず、ノードのコア数で走っている。
 `RACEEMU_CONCURRENCY` を置いて明示する。
 
-新しいイメージに入れ替えるときは次のとおりである。
-タグが同じ `main` のままなので、`apply` では何も変わらない。
-
 ```
-kubectl rollout restart deploy/raceemu -n raceemu
+curl -s http://192.168.0.206/api/health          # LAN の中から
 ```
 
-### 4.3 外に出す
+### 4.4 外に出す口はゲートウェイを通る
 
-Service（`raceemu.raceemu.svc.cluster.local:80`）を cloudflared の宛先にする。
-Ingress は要らない。
+外からの経路は `raceemu.promodeler314.win` → Cloudflare のトンネル → `raceemu-gate` → `raceemu` である。
+`apps/api` 自身は認証を持っていない。
+探索は 1 本で 25 万レース規模になるので、誰でも投げられる状態で外に出すと、そのまま計算資源を配ることになる。
+その手前に `raceemu-gate` を置いている。
 
-トンネルをリモート管理（`cloudflared tunnel run --token ...`）で立てている場合、宛先の設定はクラスタ内ではなく Cloudflare のダッシュボード（Zero Trust → Networks → Tunnels → 該当のトンネル → Public Hostname）にある。
+`raceemu-gate` は依存の無い Node の 1 ファイル（`gate.js`、ConfigMap `raceemu-gate-src`）で、口を 2 つ持つ。
+
+- **`:8080` アプリ。** Discord の Bot が配ったマジックリンクを持っている人だけを通し、上流（`raceemu.raceemu.svc.cluster.local:80`）へ流す。リンクは Bot が `MAGIC_SECRET` で署名したもので、ゲートは署名と期限を確かめるだけである。通したあとは 24 時間のセッションになる。
+- **`:8090` 集計画面。** 誰が何をどれだけ使ったかを出す。別のホスト名を割り当て、Cloudflare Access で持ち主だけに絞る。
+
+使用済みのリンクと利用の記録は SQLite（PVC `raceemu-gate-data` の `/data/usage.db`）に持つ。
+署名の鍵は Secret `raceemu-gate` にある。
+ゲートの中身はこのリポジトリに無く、別の手順（`raceemu-gate-apply.sh`）で ConfigMap に入れている。
+
+**LAN の `192.168.0.206` はゲートを通らない。**
+Service `raceemu` が MetalLB で LAN に直に出ているためである。
+LAN の外には出ていないが、LAN の中からは誰でも探索を投げられる。
+
+トンネルの宛先の設定はクラスタの中ではなく Cloudflare のダッシュボード（Zero Trust → Networks → Tunnels → 該当のトンネル → Public Hostname）にある。
 Service の URL 欄にはスキーム（`http://`）を付けず、ホスト名とポートだけを入れる。
 Type を別に選ぶ欄がある。
-
-**認証は持たせていない。**
-[設計](server-design.md)の 5 節のとおり、Cloudflare Access を前に置く前提である。
-探索は 1 本で 25 万レース規模になるので、誰でも投げられる状態で外に出すと、そのまま計算資源を配ることになる。
 
 ## 5. GitHub Pages への配信をやめた
 
