@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { framePerSecond } from '../../../../packages/sim/src/data/constants.ts';
 import type { HorseTrace, MultiReplay } from '../../../../packages/sim/src/multi/replay.ts';
 import { useStore } from '../store.ts';
-import { Chart, color, isDark, type CourseBands, type SkillMarker } from './Charts.tsx';
+import { Chart, type ChartSlot, type CourseBands, type SkillMarker } from './Charts.tsx';
 import { Panel } from './Inputs.tsx';
 
 /**
@@ -17,11 +17,6 @@ import { Panel } from './Inputs.tsx';
  */
 
 const STYLE_LABEL: Record<string, string> = { NIGE: '逃げ', SEN: '先行', SASI: '差し', OI: '追込' };
-
-/** 自分以外の線。数が多いので地の色に寄せ、自分と 1 着だけを立たせる。 */
-function otherColor(): string {
-  return isDark() ? 'rgba(195,194,183,0.5)' : 'rgba(82,81,78,0.45)';
-}
 
 /** 位置が target を超えた最初の時刻。届かないまま終われば最後の時刻。 */
 function timeAt(trace: HorseTrace, times: Float64Array, target: number): number {
@@ -229,9 +224,10 @@ function prepare(replay: MultiReplay) {
   const selfPosition = (i: number) =>
     i < self.positions.length ? self.positions[i]! : self.positions[self.positions.length - 1]!;
 
-  // 着順が同じ色にならないよう、自分と 1 着だけを立たせる。
-  const strokeOf = (horse: HorseTrace) =>
-    horse.index === replay.focus ? color('speed') : horse.order === 1 ? color('sp') : otherColor();
+  // 着順が同じ色にならないよう、自分と 1 着だけを立たせる。残りは数が多いので
+  // 地の色に寄せる。色そのものではなく役割を渡す（テーマの切り替えに追従させるため）。
+  const slotOf = (horse: HorseTrace): ChartSlot =>
+    horse.index === replay.focus ? 'speed' : horse.order === 1 ? 'sp' : 'other';
   const widthOf = (horse: HorseTrace) =>
     horse.index === replay.focus ? 2.5 : horse.order === 1 ? 2 : 1;
   const labelOf = (horse: HorseTrace) =>
@@ -249,12 +245,12 @@ function prepare(replay: MultiReplay) {
   const gapSeries = horses.map((horse) => {
     const values: (number | null)[] = new Array(frames).fill(null);
     for (let i = 0; i < horse.positions.length; i++) values[i] = horse.positions[i]! - selfPosition(i);
-    return { label: labelOf(horse), values, color: strokeOf(horse), width: widthOf(horse) };
+    return { label: labelOf(horse), values, slot: slotOf(horse), width: widthOf(horse) };
   });
   const speedSeries = horses.map((horse) => {
     const values: (number | null)[] = new Array(frames).fill(null);
     for (let i = 0; i < horse.speeds.length; i++) values[i] = horse.speeds[i]!;
-    return { label: labelOf(horse), values, color: strokeOf(horse), width: widthOf(horse) };
+    return { label: labelOf(horse), values, slot: slotOf(horse), width: widthOf(horse) };
   });
 
   // コーナーとフェーズは、自分が通った時刻に置く。頭ごとに通過時刻が違うので、

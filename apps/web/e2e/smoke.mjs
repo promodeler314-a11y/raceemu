@@ -155,6 +155,16 @@ if (skillRows.length !== 2) fail(`スキルの行数が想定と違う: ${skillR
 
 await goTab('詳細');
 console.log('uPlot の図の数:', await page.locator('.u-wrap').count());
+// テーマを切り替えたら図を作り直す。uPlot は canvas に描くので、作り直さないと
+// 表示中の図が前のテーマの色のまま残る（docs/ui-audit-race-emulator.md 第3節 A-1）。
+const plotBeforeToggle = await page.locator('.uplot').first().elementHandle();
+await page.click('button:has-text("ダーク")');
+await page.waitForTimeout(300);
+const plotRecreated = await page.evaluate((el) => !el.isConnected, plotBeforeToggle);
+console.log('--- テーマを切り替えたあと図を作り直した:', plotRecreated);
+if (!plotRecreated) fail('テーマを切り替えても図が作り直されない');
+await page.click('button:has-text("ライト")');
+await page.waitForTimeout(300);
 
 // 固有スキル: 一覧には出ず、キャラを選んで取る
 await goTab('設定');
