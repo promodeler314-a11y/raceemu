@@ -281,7 +281,7 @@
 ## 4. 対応状況
 
 各 PR で直したものをここに記録する。第1〜3節の本文は診断した時点のまま残す。
-残っているものは issue が持つ（CLAUDE.md「残課題は issue が持つ」）。2026-09-24 時点。
+残っているものは issue が持つ（CLAUDE.md「残課題は issue が持つ」）。2026-09-24 時点で、第1〜3 節の項目はすべて対応した。
 
 ### 第1節 禁止リストの判定
 
@@ -291,8 +291,8 @@
 | 等幅フォントの日本語への適用 | [#97](https://github.com/promodeler314-a11y/raceemu/pull/97)（比較の表）と [#99](https://github.com/promodeler314-a11y/raceemu/pull/99)（題字・フッタ・左の要約・コース横断・逆算・詳細・スキル表）で、等幅を数字だけにした |
 | 欧文スタイルの題字（境界） | [#99](https://github.com/promodeler314-a11y/raceemu/pull/99) で「RACE EMULATOR」を「レースエミュレータ」にした |
 | 同じ形のカード 3 枚の横並び | [#99](https://github.com/promodeler314-a11y/raceemu/pull/99) でプリセットを一覧にした |
-| カード内の枠の入れ子（境界） | 残っている。[#101](https://github.com/promodeler314-a11y/raceemu/issues/101) |
-| 全セクションを同じカード枠で囲む | 設定の列の階層の逆転は [#99](https://github.com/promodeler314-a11y/raceemu/pull/99) で直した（取り込み 3 区画を線の区切りに）。右側の本文は [#101](https://github.com/promodeler314-a11y/raceemu/issues/101) |
+| カード内の枠の入れ子（境界） | [#114](https://github.com/promodeler314-a11y/raceemu/pull/114) で、組み合わせ探索の中の枠付きの箱 2 つ（候補の出どころ、探索を投げるサーバ）を、上に線を引く区切りにした（[#101](https://github.com/promodeler314-a11y/raceemu/issues/101)） |
+| 全セクションを同じカード枠で囲む | 設定の列の階層の逆転は [#99](https://github.com/promodeler314-a11y/raceemu/pull/99) で直した（取り込み 3 区画を線の区切りに）。右側の本文は [#114](https://github.com/promodeler314-a11y/raceemu/pull/114) で、面ごとに主役をカード、脇役を線の区切りにした（比較の面のコース横断、勝率の面の相手、探索の面の近似の感度）（[#101](https://github.com/promodeler314-a11y/raceemu/issues/101)） |
 | 数値タイルの格子と空きマス | [#99](https://github.com/promodeler314-a11y/raceemu/pull/99) で脇の指標を 5 つから 4 つにした（最速と最遅を「タイムの幅」に） |
 | 絵文字のファビコン | [#99](https://github.com/promodeler314-a11y/raceemu/pull/99) で折れ線の図にした |
 | 内部の値の表示 | [#97](https://github.com/promodeler314-a11y/raceemu/pull/97) で直した（やる気の `BEST`、レア度の生の値、環境変数名、開発者向けの生成手順、「走らせ直し N ms」）。スキル表の版と指紋は、出どころを確かめる人のために残して畳んだ。画面に出ていたファイル名 `screen.ts` は [#100](https://github.com/promodeler314-a11y/raceemu/pull/100) で外した |
@@ -304,7 +304,7 @@
 
 | 項目 | 対応 |
 | --- | --- |
-| C-1 各区画の冒頭の説明文の量 | 残っている。[#106](https://github.com/promodeler314-a11y/raceemu/issues/106) |
+| C-1 各区画の冒頭の説明文の量 | [#113](https://github.com/promodeler314-a11y/raceemu/pull/113) で、目的の 1 文と結果を読むのに要る注意だけを外に出し、残りを「詳しい説明」に畳んだ（逆算・近似の感度・コース横断・勝率の相手）（[#106](https://github.com/promodeler314-a11y/raceemu/issues/106)） |
 | C-2 敬体と常体の混在 | [#100](https://github.com/promodeler314-a11y/raceemu/pull/100) で文章を敬体、ボタンを体言止めにした（DESIGN.md 5 節） |
 | C-3 ピル型のチップ | [#99](https://github.com/promodeler314-a11y/raceemu/pull/99) で角丸 3px にした |
 | C-4 分布の見出しの p5 / p50 / p95 | [#99](https://github.com/promodeler314-a11y/raceemu/pull/99) で「中央」「9 割が」と言葉で書いた |
@@ -319,14 +319,14 @@
 | A-2 uPlot と SVG で挙動が違う | [#96](https://github.com/promodeler314-a11y/raceemu/pull/96) で、どちらも共有トークンから色を取る形にそろえた |
 | A-3 図の色の二重管理 | [#96](https://github.com/promodeler314-a11y/raceemu/pull/96) で直した。色は `design-system/tokens.css` の `--uma-chart-*` から読む |
 | A-4 分布の横軸が外れ値に引っ張られる | [#97](https://github.com/promodeler314-a11y/raceemu/pull/97) で直した。四分位範囲の 3 倍より外は図に入れず、数を軸の端に書く。臨界値の分布は値のある範囲に絞った |
-| A-5 勾配の線、A-6 全頭同時の線の重なり、A-7 凡例の「--」 | 残っている。[#102](https://github.com/promodeler314-a11y/raceemu/issues/102) |
-| A-8 ホバー前提の情報 | 残っている。[#103](https://github.com/promodeler314-a11y/raceemu/issues/103) |
+| A-5 勾配の線、A-6 全頭同時の線の重なり、A-7 凡例の「--」 | [#110](https://github.com/promodeler314-a11y/raceemu/pull/110) で直した。勾配の図は縦軸のグリッドを消して線を太く、全頭同時の速度の図は自分と最先着の相手の 2 本だけ、凡例はカーソルが無いとき空に（[#102](https://github.com/promodeler314-a11y/raceemu/issues/102)） |
+| A-8 ホバー前提の情報 | [#112](https://github.com/promodeler314-a11y/raceemu/pull/112) で、分布の棒・図のスキルの印・近似の印（△▲）をタップでも出せるようにした。e2e にタッチ端末での検査を足した（[#103](https://github.com/promodeler314-a11y/raceemu/issues/103)） |
 | B-1 390px の設定の面から実行できない | [#92](https://github.com/promodeler314-a11y/raceemu/pull/92) で直した。実行バーを `<main>` の外に出し、狭い幅では上に貼り付けた。e2e に検査を足した |
 | B-2 やる気のボタンの文字割れ、B-3 イベントの種別の折り返し、B-4 「100.0 %」の折り返し、B-6 デバフ名の切れ、B-8 保存の知らせが消えない | [#97](https://github.com/promodeler314-a11y/raceemu/pull/97) で直した |
-| B-5 表の横スクロールの手がかり、B-7 390px のヘッダの高さ | 残っている。[#104](https://github.com/promodeler314-a11y/raceemu/issues/104) |
+| B-5 表の横スクロールの手がかり、B-7 390px のヘッダの高さ | [#111](https://github.com/promodeler314-a11y/raceemu/pull/111) で直した。ヘッダは 172px → 117px（3 段）、タブは 7 つとも収まる。表ははみ出しているときだけ案内を出す（[#104](https://github.com/promodeler314-a11y/raceemu/issues/104)） |
 | C-1 中断してから止まるまで表示が変わらない | [#97](https://github.com/promodeler314-a11y/raceemu/pull/97) で直した。受け付けたら「中断中…」にして押せなくする（Esc でも同じ） |
 | C-2 勝率の面の説明とシードの食い違い、C-3 未定義のトークン、C-4 個体の一覧が取り直されない、C-5 個体の見分けが付かない、C-6 タイムの書式の不ぞろい | [#97](https://github.com/promodeler314-a11y/raceemu/pull/97) で直した |
-| C-7 残り体力の単位 | 残っている。[#105](https://github.com/promodeler314-a11y/raceemu/issues/105) |
+| C-7 残り体力の単位 | [#109](https://github.com/promodeler314-a11y/raceemu/pull/109) で、スタート時の体力（パッシブ前）に対する割合を添えた（結果の面・コース横断・比較の面）（[#105](https://github.com/promodeler314-a11y/raceemu/issues/105)） |
 
 ### 診断のあとに入れたもの
 
@@ -336,3 +336,7 @@
 | 色のトークンの置き場 | [#94](https://github.com/promodeler314-a11y/raceemu/pull/94) で共有リポジトリ（`design-system/`、git submodule）に移した。値は変えていない |
 | 書体と太さ（DESIGN.md 4 節） | [#100](https://github.com/promodeler314-a11y/raceemu/pull/100) で本文を BIZ UDPゴシック、数値を BIZ UDゴシックにした。BIZ UDPゴシックの数字は `tabular-nums` に対応していなかった。太さは 400 と 700 の 2 段 |
 | 強調色の朱（DESIGN.md 3 節） | [#100](https://github.com/promodeler314-a11y/raceemu/pull/100) で主ボタン（計算を走らせるボタン）に当てた。取り込み・書き出し・ヘッダの保存は線の枠にした |
+| 390px で上に貼り付いた実行バーの高さ | [#111](https://github.com/promodeler314-a11y/raceemu/pull/111) で 116px → 87px にした（キー操作の案内を狭い幅では出さない） |
+| 390px の設定の群の畳み込み、フッタの語の途中での折り返し（`docs/ui-gap.md` 8 節） | [#111](https://github.com/promodeler314-a11y/raceemu/pull/111) で直した。「実行オプション」「相手の想定」は狭い幅では畳んで始まる |
+| 書体を替えたあと、縦軸の目盛り「2,000」が左で切れる | [#110](https://github.com/promodeler314-a11y/raceemu/pull/110) で、縦軸の幅を目盛りの文字から決めるようにした |
+| 近似の印の理由に、条件の型名（内部の名前）が混じる | [#112](https://github.com/promodeler314-a11y/raceemu/pull/112) で外した |
