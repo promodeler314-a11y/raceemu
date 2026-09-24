@@ -9,7 +9,7 @@ import {
 } from '../store.ts';
 import { TimeHistogram } from './Charts.tsx';
 import { FidelityLegend, FidelityMark } from './Fidelity.tsx';
-import { Panel } from './Inputs.tsx';
+import { HorizontalScroll, Panel } from './Inputs.tsx';
 
 function percent(value: number): string {
   return Number.isFinite(value) ? `${(value * 100).toFixed(1)} %` : '-';
@@ -244,7 +244,7 @@ export function SummaryOutput() {
               {bandRunning ? '測定中' : '相手の強さによる幅の測定'}
             </button>
           </div>
-          <div className="mt-2 overflow-x-auto">
+          <HorizontalScroll className="mt-2">
             <table data-testid="skill-table" className="w-full min-w-[36rem] text-sm">
               <thead>
                 <tr className="border-b border-rule text-xs text-ink3">
@@ -324,7 +324,7 @@ export function SummaryOutput() {
                 })}
               </tbody>
             </table>
-          </div>
+          </HorizontalScroll>
           {/* 印の意味。発動率をどこまで信じてよいかの話なので、表のすぐ下に置く。 */}
           <div className="mt-2">
             <FidelityLegend useField={useField} />

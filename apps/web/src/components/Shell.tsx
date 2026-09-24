@@ -57,7 +57,7 @@ function ThemeToggle() {
           type="button"
           aria-pressed={theme === value}
           onClick={() => setTheme(value)}
-          className={`flex w-12 items-center justify-center border-r border-rule text-xs last:border-r-0 ${
+          className={`flex w-10 items-center justify-center border-r border-rule text-xs last:border-r-0 md:w-12 ${
             theme === value ? 'bg-acc-tint font-bold text-acc-ink' : 'bg-surface text-ink2'
           }`}
         >
@@ -82,11 +82,13 @@ function SaveSnapshotButton() {
     <button
       type="button"
       // 朱は計算を走らせるボタンだけに使う（DESIGN.md 3 節）。ヘッダの保存は脇の操作なので線の枠にする
-      className="h-[30px] rounded-sm border border-rule2 px-3 text-xs font-bold text-ink2 disabled:opacity-40"
+      aria-label="スナップショットを保存"
+      className="h-[30px] rounded-sm border border-rule2 px-2 text-xs font-bold text-ink2 disabled:opacity-40 md:px-3"
       onClick={saveSnapshot}
       disabled={summary === null}
     >
-      スナップショットを保存
+      <span className="md:hidden">スナップショット</span>
+      <span className="hidden md:inline">スナップショットを保存</span>
     </button>
   );
 }
@@ -133,18 +135,30 @@ function SaveIndividualButton() {
     <div className="flex items-center gap-2">
       <button
         type="button"
-        className="h-[30px] rounded-sm border border-rule2 px-3 text-xs font-bold text-ink2 disabled:opacity-40"
+        aria-label="個体として保存"
+        className="h-[30px] rounded-sm border border-rule2 px-2 text-xs font-bold text-ink2 disabled:opacity-40 md:px-3"
         onClick={() => void save()}
         disabled={saving}
       >
-        {saving ? '保存中…' : '個体として保存'}
+        {saving ? (
+          '保存中…'
+        ) : (
+          <>
+            <span className="md:hidden">個体の保存</span>
+            <span className="hidden md:inline">個体として保存</span>
+          </>
+        )}
       </button>
       {message !== null && <span className="text-[11px] text-ink3">{message}</span>}
     </div>
   );
 }
 
-/** モックは 1440px しか描いていない。狭い幅では折り返して縦に伸ばす。 */
+/**
+ * モックは 1440px しか描いていない。狭い幅では 3 段に組む（#104）。
+ * 1 段目に題字といまの条件、2 段目にタブ、3 段目にテーマとボタン。
+ * 以前は 4〜5 段に折り返して 172px あり、タブも右端で切れていた。
+ */
 export function Header() {
   const tab = useStore((s) => s.tab);
   const setTab = useStore((s) => s.setTab);
@@ -158,15 +172,18 @@ export function Header() {
         字間で組んでいた（docs/ui-audit-race-emulator.md 第1節「等幅」「欧文スタイル」）。
       */}
       <h1 className="whitespace-nowrap text-[13px] font-bold text-ink">レースエミュレータ</h1>
-      {/* タブが増えると狭い幅では収まらないので、はみ出すぶんは横に送る */}
-      <nav className="flex min-w-0 max-w-full gap-0.5 self-stretch overflow-x-auto" aria-label="画面">
+      {/* 狭い幅でも 7 つが収まるよう、左右の余白を詰める。それでも収まらない幅では横に送る */}
+      <nav
+        className="order-3 flex min-w-0 max-w-full basis-full gap-0.5 self-stretch overflow-x-auto md:order-none md:basis-auto"
+        aria-label="画面"
+      >
         {TABS.map(({ id, label }) => (
           <button
             key={id}
             type="button"
             aria-current={tab === id ? 'page' : undefined}
             onClick={() => setTab(id)}
-            className={`flex flex-none items-center px-3 text-[13px] ${
+            className={`flex h-[34px] flex-none items-center px-2 text-[13px] md:h-auto md:px-3 ${
               tab === id ? 'font-bold text-ink shadow-[inset_0_-2px_0_var(--color-s1)]' : 'text-ink3'
             }`}
           >
@@ -175,11 +192,11 @@ export function Header() {
         ))}
       </nav>
       {/* 狭い幅ではタブが折り返すので、この行も折り返せるようにしておく */}
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+      <div className="order-2 flex min-w-0 flex-1 items-center gap-2 md:order-none">
         <span className="truncate text-[13px] text-ink2">{condition}</span>
         {summary === null && <span className="flex-none text-[11px] text-ink3">未実行</span>}
       </div>
-      <div className="flex flex-wrap items-center gap-2 md:flex-none md:flex-nowrap">
+      <div className="order-4 flex w-full items-center gap-2 md:order-none md:w-auto md:flex-none">
         <ThemeToggle />
         <ShareButton />
         <SaveIndividualButton />
@@ -200,48 +217,53 @@ const COMMIT_SHA = typeof __COMMIT_SHA__ === 'string' ? __COMMIT_SHA__ : '';
 
 export function Footer() {
   return (
-    <footer className="flex flex-none items-center gap-4 border-t border-rule bg-surface px-5 py-1.5 text-[11px] text-ink3">
+    // 狭い幅では折り返すが、語の途中では折らない。区切り（・）ごとに 1 かたまりにする
+    // （docs/ui-gap.md 8 節、design/Mobile.dc.html）。
+    <footer className="flex flex-none flex-wrap items-center gap-x-4 gap-y-0.5 border-t border-rule bg-surface px-5 py-1.5 text-[11px] text-ink3">
       {/*
         試行数と所要時間は結果の見出しにある。ここにも出すと同じ面に 2 度出る
         （docs/ui-audit-race-emulator.md 第1節「情報の重複」）。
       */}
-      <span>設定は自動で保存されます</span>
-      <span className="flex-1" />
-      <span>
-        計算モデルは{' '}
-        <a
-          className="text-ink2 underline"
-          href="https://github.com/mee1080/umasim"
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          mee1080/umasim
-        </a>{' '}
-        の移植 ・ AGPL v3 ・{' '}
-        <a
-          className="text-ink2 underline"
-          href={
-            COMMIT_SHA === ''
-              ? 'https://github.com/promodeler314-a11y/raceemu'
-              : `https://github.com/promodeler314-a11y/raceemu/tree/${COMMIT_SHA}`
-          }
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          ソースはこちら
-        </a>
+      <span className="whitespace-nowrap">設定は自動で保存されます</span>
+      <span className="hidden flex-1 md:block" />
+      <span className="flex flex-wrap items-center gap-x-1">
+        <span className="whitespace-nowrap">
+          計算モデルは{' '}
+          <a
+            className="text-ink2 underline"
+            href="https://github.com/mee1080/umasim"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            mee1080/umasim
+          </a>{' '}
+          の移植 ・
+        </span>
+        <span className="whitespace-nowrap">AGPL v3 ・</span>
+        <span className="whitespace-nowrap">
+          <a
+            className="text-ink2 underline"
+            href={
+              COMMIT_SHA === ''
+                ? 'https://github.com/promodeler314-a11y/raceemu'
+                : `https://github.com/promodeler314-a11y/raceemu/tree/${COMMIT_SHA}`
+            }
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            ソースはこちら
+          </a>
+          {COMMIT_SHA !== '' && ' ・'}
+        </span>
         {/*
           動かしている版と push してある版がズレると、リンクがあっても
           「いま動いているもののソース」にはならない（docs/server-design.md 6 節）。
           組んだコミットを出し、上のリンクもその版に向ける。
         */}
         {COMMIT_SHA !== '' && (
-          <>
-            {' ・ '}
-            <span className="num" data-testid="commit-sha">
-              {COMMIT_SHA}
-            </span>
-          </>
+          <span className="num whitespace-nowrap" data-testid="commit-sha">
+            {COMMIT_SHA}
+          </span>
         )}
       </span>
     </footer>

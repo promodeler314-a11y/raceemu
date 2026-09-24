@@ -28,7 +28,7 @@ import {
 } from '../skillList.ts';
 import { gameData, useStore } from '../store.ts';
 import { PlainFidelityMark } from './Fidelity.tsx';
-import { Panel } from './Inputs.tsx';
+import { HorizontalScroll, Panel } from './Inputs.tsx';
 
 /**
  * スキル一覧の面（[#83](https://github.com/promodeler314-a11y/raceemu/issues/83)）。
@@ -402,7 +402,7 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
 
       {recommended.length > 0 && <Recommend rows={recommended} onPick={addAndSolve} />}
 
-      <div className="mt-4 overflow-x-auto">
+      <HorizontalScroll className="mt-4">
         <table className="w-full min-w-[34rem] text-xs" data-testid="skill-list-table">
           <thead className="text-ink3">
             <tr>
@@ -472,7 +472,7 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
             ))}
           </tbody>
         </table>
-      </div>
+      </HorizontalScroll>
 
       <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-ink3">
         <span data-testid="skill-list-count">

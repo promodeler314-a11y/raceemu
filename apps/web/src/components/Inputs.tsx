@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { FIT_RANKS, type Condition, type FitRank, type Style } from '../../../../packages/sim/src/data/constants.ts';
 import { getSlope, type TrackDetail } from '../../../../packages/sim/src/data/track.ts';
 import {
@@ -176,15 +176,79 @@ export function CancelButton({ className = 'text-sm' }: { className?: string }) 
   );
 }
 
+/**
+ * 横にスクロールする表の入れ物。はみ出しているときだけ、その旨を下に書く。
+ *
+ * 狭い幅では表の右側が切れて見え、続きがあることが分からなかった（#104、UI 診断 第3節 B-5）。
+ * 影やグラデーションで示す手もあるが、禁止リストが影を控えるよう求めているので文字で書く。
+ */
+export function HorizontalScroll({ className = '', children }: { className?: string; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [overflowing, setOverflowing] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (element === null) return;
+    const check = () => setOverflowing(element.scrollWidth > element.clientWidth + 1);
+    check();
+    const observer = new ResizeObserver(check);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  return (
+    <>
+      <div ref={ref} className={`overflow-x-auto ${className}`}>
+        {children}
+      </div>
+      {overflowing && <p className="mt-1 text-[11px] text-ink3">表は横にスクロールすると続きがあります。</p>}
+    </>
+  );
+}
+
 export function Panel({
   title,
   variant = 'card',
+  collapsible = false,
+  summary,
   children,
 }: {
   title: string;
   variant?: 'card' | 'plain';
+  /**
+   * 見出しを押して畳めるようにする（線の区切りのときだけ）。広い幅では開いて、
+   * 狭い幅では畳んで始める。狭い幅で設定の群を全部開いたまま積むと、下の群に
+   * たどり着くまでが長い（#104、docs/ui-gap.md 8 節「群の畳み込み」）。
+   */
+  collapsible?: boolean;
+  /** 畳んだときも見出しの右に出す要約 */
+  summary?: React.ReactNode;
   children: React.ReactNode;
 }) {
+  const [initiallyOpen] = useState(
+    () => typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches,
+  );
+  if (variant === 'plain' && collapsible) {
+    return (
+      <details className="group flex flex-col" open={initiallyOpen}>
+        <summary className="flex h-[34px] cursor-pointer list-none items-center gap-1.5 border-b border-rule [&::-webkit-details-marker]:hidden">
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.6"
+            className="flex-none text-ink2 group-open:rotate-90"
+            aria-hidden="true"
+          >
+            <path d="M6.5 4 10.5 8 6.5 12" />
+          </svg>
+          <h2 className="text-[13px] font-bold">{title}</h2>
+          {summary !== undefined && <span className="ml-auto text-[11px] text-ink3">{summary}</span>}
+        </summary>
+        <div className="flex flex-col gap-2.5 pt-2.5">{children}</div>
+      </details>
+    );
+  }
   if (variant === 'plain') {
     return (
       <section className="flex flex-col gap-2.5">
@@ -707,7 +771,7 @@ export function OptionsInput() {
   const debuffTotal = Object.values(debuffCounts).reduce((a, b) => a + b, 0);
 
   return (
-    <Panel title="実行オプション" variant="plain">
+    <Panel title="実行オプション" variant="plain" collapsible summary={`デバフ ${debuffTotal} 個`}>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="スキル発動率">
           <select
@@ -817,7 +881,7 @@ export function OpponentInput() {
   ];
 
   return (
-    <Panel title="相手の想定" variant="plain">
+    <Panel title="相手の想定" variant="plain" collapsible>
       {!useField && (
         <p className="text-xs text-ink3">
           順位条件を判定していないので、ここの設定は結果に効きません。実行バーの
@@ -956,7 +1020,8 @@ export function RunPanel() {
         順位条件を判定する
         <span className="text-ink3">（相手 {gateCount - 1} 頭）</span>
       </label>
-      <span className="ml-auto text-[11px] text-ink3">
+      {/* キー操作の案内は、キーボードの無い狭い幅では出さない（#104） */}
+      <span className="ml-auto hidden text-[11px] text-ink3 md:inline">
         {/* 前回の所要時間は結果の見出しにある。ここでは実行前の見込みだけを出す */}
         Ctrl+Enter で実行、Esc で中断
       </span>

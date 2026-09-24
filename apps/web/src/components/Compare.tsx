@@ -391,7 +391,9 @@ export function ShareButton() {
   return (
     <button
       type="button"
-      className="rounded-sm border border-rule2 px-3 py-1.5 text-sm"
+      // 狭い幅では短い名前にする（#104）。読み上げは常に正式な名前
+      aria-label="共有 URL のコピー"
+      className="h-[30px] rounded-sm border border-rule2 px-2 text-xs font-bold text-ink2 md:px-3"
       onClick={() => {
         const url = shareUrl();
         history.replaceState(null, '', url);
@@ -404,7 +406,14 @@ export function ShareButton() {
         );
       }}
     >
-      {copied ? 'コピー済み' : '共有 URL のコピー'}
+      {copied ? (
+        'コピー済み'
+      ) : (
+        <>
+          <span className="md:hidden">共有</span>
+          <span className="hidden md:inline">共有 URL のコピー</span>
+        </>
+      )}
     </button>
   );
 }
