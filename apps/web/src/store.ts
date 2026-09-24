@@ -451,6 +451,8 @@ interface AppState {
   /** 失敗ではないが伝えたいこと。保存できない環境など。 */
   notice: string | null;
   summary: SimulationSummary | null;
+  /** 結果を出したときのスタート時の体力（パッシブ前）。残り体力の基準にする。 */
+  summaryStartSp: number;
   results: RaceSimulationResult[];
   skillSummaries: SkillSummary[];
   detail: DetailData | null;
@@ -722,6 +724,7 @@ export const useStore = create<AppState>((set, get) => ({
   error: null,
   notice: null,
   summary: null,
+  summaryStartSp: Number.NaN,
   tab: 'settings',
   setTab: (tab) => set({ tab }),
   theme: loadTheme(),
@@ -1151,6 +1154,7 @@ export const useStore = create<AppState>((set, get) => ({
       }
       set({
         summary: summarize(results, elapsedMs),
+        summaryStartSp: startSp(state),
         results,
         elapsedMs,
         // 次に押す前の見積もりに使う。中断しても、終わったぶんの回数で数えれば点になる。
@@ -1978,6 +1982,29 @@ export function modifiedStatus(state: {
     guts: derived.modifiedGuts,
     wisdom: derived.modifiedWisdom,
   };
+}
+
+/**
+ * スタート時の体力（パッシブ発動前）。残り体力を読むときの基準にする。
+ *
+ * 残り体力の数だけでは、多いのか少ないのかが分からない
+ * （docs/ui-audit-race-emulator.md 第3節 C-7、#105）。
+ * 実際の最大値は試行ごとに発動するパッシブで少し動くので、発動前の値を使う。
+ * 式は本体と同じ `DerivedSetting` に任せる（距離 + 0.8 × 補正後スタミナ × 脚質係数）。
+ */
+export function startSp(state: {
+  uma: UmaStatus;
+  track: TrackRef;
+  skillIds: readonly string[];
+  options: RunOptions;
+  debuffCounts: Readonly<Record<string, number>>;
+}): number {
+  const derived = new DerivedSetting(
+    { ...buildSetting(state as AppState), skills: [] },
+    emptyPassiveBonus(),
+    gameData.trackData,
+  );
+  return derived.spMax;
 }
 
 export function currentTrackDetail(track: TrackRef) {

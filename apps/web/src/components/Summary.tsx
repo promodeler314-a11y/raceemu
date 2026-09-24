@@ -58,6 +58,7 @@ export function SummaryOutput() {
   const bandRunning = useStore((s) => s.bandRunning);
   const runBand = useStore((s) => s.runBand);
   const running = useStore((s) => s.running);
+  const startSpAtRun = useStore((s) => s.summaryStartSp);
   const useField = useStore((s) => s.useField);
 
   // 近似の印。値は個別に選び、組み立ては useMemo で行う。
@@ -177,6 +178,16 @@ export function SummaryOutput() {
             <span className="font-mono text-base font-bold tabular-nums">
               {summary.all.averageGoalSp.toFixed(1)}
             </span>
+            {/* 数だけでは多いのか少ないのかが読めないので、スタート時の体力に対する割合を添える（#105） */}
+            {Number.isFinite(startSpAtRun) && startSpAtRun > 0 && (
+              <span className="text-xs text-ink3">
+                スタート時 <span className="font-mono tabular-nums">{startSpAtRun.toFixed(0)}</span> の{' '}
+                <span className="font-mono tabular-nums">
+                  {((summary.all.averageGoalSp / startSpAtRun) * 100).toFixed(1)}
+                </span>{' '}
+                %
+              </span>
+            )}
             {Number.isFinite(goalSpP5) && (
               <span className="text-xs text-ink3">
                 下位 5% で <span className="font-mono tabular-nums">{goalSpP5.toFixed(1)}</span>
