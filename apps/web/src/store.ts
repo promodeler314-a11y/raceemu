@@ -1334,10 +1334,10 @@ export const useStore = create<AppState>((set, get) => ({
       set({
         error:
           plan === null
-            ? '候補にするスキルを 2 つ以上選ぶ'
+            ? '候補にするスキルを 2 つ以上選んでください。'
             : state.plan.source === 'all'
-              ? '候補が集まらない。白・金・固有の継承版のどれかを開く'
-              : '候補が集まらない。育成ウマ娘かサポートカードを選ぶか、白と固有の継承版を開く',
+              ? '候補が集まりません。白・金・固有の継承版のどれかを開いてください。'
+              : '候補が集まりません。育成ウマ娘かサポートカードを選ぶか、白と固有の継承版を開いてください。',
       });
       return;
     }
@@ -1456,7 +1456,7 @@ export const useStore = create<AppState>((set, get) => ({
             .filter((skill): skill is NonNullable<typeof skill> => skill !== undefined);
     const candidates = sensitivityCandidates(state);
     if (candidates.length === 0) {
-      set({ error: '幅を測るスキルを選ぶか、先に探索を走らせる' });
+      set({ error: '幅を測るスキルを選ぶか、先に探索を走らせてください。' });
       return;
     }
 

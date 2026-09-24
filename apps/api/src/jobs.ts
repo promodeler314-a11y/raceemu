@@ -95,7 +95,7 @@ export class JobRunner {
 
   submit(request: ResolvedRequest): Job {
     if (this.waiting.length >= this.config.maxQueued) {
-      throw new QueueFullError(`待ち行列がいっぱいである（上限 ${this.config.maxQueued}）`);
+      throw new QueueFullError(`待ち行列がいっぱいです（上限 ${this.config.maxQueued}）。`);
     }
     const job: Job = {
       id: randomUUID(),
@@ -206,7 +206,7 @@ export class JobRunner {
       job.races = pool.races;
       if (exceeded) {
         job.status = 'failed';
-        job.error = `レース数の上限 ${this.config.maxRacesPerJob.toLocaleString()} を超えたので打ち切った。候補か予算か試行回数を減らす。`;
+        job.error = `レース数の上限 ${this.config.maxRacesPerJob.toLocaleString()} を超えたので打ち切りました。候補か予算か試行回数を減らしてください。`;
       } else if (error instanceof SimulationCancelled || controller.signal.aborted) {
         job.status = 'cancelled';
       } else {

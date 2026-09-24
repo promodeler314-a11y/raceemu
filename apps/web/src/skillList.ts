@@ -54,11 +54,11 @@ export class SkillListUnavailable extends Error {}
 export class SkillListBroken extends Error {}
 
 function explainNonJson(res: Response): string {
-  if (res.status === 404) return 'この配布物にはスキル一覧の表が入っていない。';
-  if (res.redirected) return `表ではなく別の画面に飛ばされた（最終 ${res.status}）。`;
+  if (res.status === 404) return 'この配布物にはスキル一覧の表が入っていません。';
+  if (res.redirected) return `表ではなく別の画面に飛ばされました（最終 ${res.status}）。`;
   // 「JSON」のような生の語は画面に出さない。読む人に用が無いうえ、
   // 例外がそのまま出ているのか、こちらが言っているのかが見分けられない。
-  return `表の代わりに、別の形の応答が返った（${res.status}）。無いパスを画面に落とす配り方をしていると、ここに来る。`;
+  return `表の代わりに、別の形の応答が返りました（${res.status}）。無いパスを画面に落とす配り方をしていると、ここに来ます。`;
 }
 
 /** JSON を 1 枚取る。JSON でなければ「無い」に倒す。 */
@@ -68,7 +68,7 @@ async function fetchJson(url: string, signal?: AbortSignal): Promise<unknown> {
     res = await fetch(url, { signal });
   } catch (error) {
     throw new SkillListUnavailable(
-      `表を取りに行けなかった（${error instanceof Error ? error.message : String(error)}）`,
+      `表を取りに行けませんでした（${error instanceof Error ? error.message : String(error)}）`,
     );
   }
   const contentType = res.headers.get('content-type') ?? '';
@@ -94,7 +94,7 @@ export async function fetchSkillListIndex(
   const body = await fetchJson(indexUrl, signal);
   if (!isSkillListIndex(body)) {
     throw new SkillListBroken(
-      'スキル一覧の形が読めない。配ってある版が古いか、別のファイルが置かれている。',
+      'スキル一覧の形が読めません。配ってある版が古いか、別のファイルが置かれています。',
     );
   }
   return body;
@@ -108,7 +108,7 @@ export async function fetchSkillListCourse(
 ): Promise<SkillListCourseFile> {
   const body = await fetchJson(indexUrl.replace(/[^/]*$/, entry.file), signal);
   if (!isSkillListCourseFile(body)) {
-    throw new SkillListBroken(`${entry.file} の形が読めない。配ってある版が古い。`);
+    throw new SkillListBroken(`${entry.file} の形が読めません。配ってある版が古いです。`);
   }
   return body;
 }
@@ -117,7 +117,7 @@ export async function fetchSkillListCourse(
 export function explainSkillListError(error: unknown): string {
   if (error instanceof SkillListUnavailable) {
     // 作り方（pnpm skill-list）は配る側の話なので、画面には出さない。README と CLAUDE.md にある。
-    return `${error.message} この面は事前に計算した表を読むだけなので、表が無いと何も出せない。`;
+    return `${error.message} この面は事前に計算した表を読むだけなので、表が無いと何も出せません。`;
   }
   if (error instanceof SkillListBroken) return error.message;
   return error instanceof Error ? error.message : String(error);

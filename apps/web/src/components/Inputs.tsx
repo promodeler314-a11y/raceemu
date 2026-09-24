@@ -80,7 +80,7 @@ export function Segmented<T extends string>({
             onClick={() => onChange(option.value)}
             className={`flex flex-1 items-center justify-center whitespace-nowrap border-r border-rule px-1 text-xs last:border-r-0 ${
               value === option.value
-                ? 'bg-acc-tint font-semibold text-acc-ink'
+                ? 'bg-acc-tint font-bold text-acc-ink'
                 : 'bg-surface text-ink2'
             }`}
           >
@@ -169,9 +169,9 @@ export function CancelButton({ className = 'text-sm' }: { className?: string }) 
       className={`rounded-sm border border-rule2 px-3 py-1.5 disabled:text-ink3 ${className}`}
       onClick={cancel}
       disabled={requested}
-      title="Esc でも中断できる"
+      title="Esc でも中断できます"
     >
-      {requested ? '中断しています…' : '中断'}
+      {requested ? '中断中…' : '中断'}
     </button>
   );
 }
@@ -188,7 +188,7 @@ export function Panel({
   if (variant === 'plain') {
     return (
       <section className="flex flex-col gap-2.5">
-        <h2 className="flex h-[34px] items-center border-b border-rule text-[13px] font-semibold">
+        <h2 className="flex h-[34px] items-center border-b border-rule text-[13px] font-bold">
           {title}
         </h2>
         {children}
@@ -197,7 +197,7 @@ export function Panel({
   }
   return (
     <section className="rounded-sm border border-rule bg-surface p-4">
-      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+      <h2 className="mb-3 text-sm font-bold">{title}</h2>
       {children}
     </section>
   );
@@ -361,7 +361,7 @@ export function UmaInput() {
       </Field>
       <span
         className="num text-right text-[11px] text-ink3"
-        title="やる気やコースの得意ステータスなどの補正を当てた値。計算にはこちらが使われる"
+        title="やる気やコースの得意ステータスなどの補正を当てた値です。計算にはこちらが使われます"
       >
         → {modified[key]}
       </span>
@@ -658,10 +658,10 @@ export function SkillInput() {
           <div className="mt-2 flex items-center justify-between text-xs text-ink3">
             <span>
               合計 {costModel.totalCost(selected.map((s) => s.id))} pt
-              <span className="ml-2">同じグループからは上位のぶんだけ数える。</span>
+              <span className="ml-2">同じグループからは上位のぶんだけ数えます。</span>
             </span>
             <button type="button" className="underline" onClick={clearSkills}>
-              すべて外す
+              すべて解除
             </button>
           </div>
           {/* 印の意味は、印が出ているときだけ添える。 */}
@@ -763,11 +763,11 @@ export function OptionsInput() {
         </Field>
       </div>
       <p className="mt-2 text-xs text-ink3">
-        発生率は「速度上げのみ抽選」のときだけ効く。「スキルも他の乱数も固定」を選ぶと、掛かりと
-        下り坂とスパート候補の抽選も固定され、レースがほぼ決定的になる。
+        発生率は「速度上げのみ抽選」のときだけ効きます。「スキルも他の乱数も固定」を選ぶと、掛かりと
+        下り坂とスパート候補の抽選も固定され、レースがほぼ決定的になります。
       </p>
 
-      <h3 className="mt-4 mb-2 text-sm font-semibold">
+      <h3 className="mt-4 mb-2 text-sm font-bold">
         受けるデバフ
         <span className="ml-2 text-xs font-normal text-ink3">
           合計 {debuffTotal} 個
@@ -820,8 +820,8 @@ export function OpponentInput() {
     <Panel title="相手の想定" variant="plain">
       {!useField && (
         <p className="text-xs text-ink3">
-          順位条件を判定していないので、ここの設定は結果に効かない。実行バーの
-          「順位条件を判定する」を入れると効く。
+          順位条件を判定していないので、ここの設定は結果に効きません。実行バーの
+          「順位条件を判定する」を入れると効きます。
         </p>
       )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -874,10 +874,10 @@ export function OpponentInput() {
         </label>
       </div>
       <p className="text-xs text-ink3">
-        相手 {gateCount - 1} 頭を一緒に走らせて位置を記録し、その束に対して順位を判定する。
-        引き直しを入れると、束の 1 本ごとに脚質構成・強さ・やる気・スキルが変わる。
+        相手 {gateCount - 1} 頭を一緒に走らせて位置を記録し、その束に対して順位を判定します。
+        引き直しを入れると、束の 1 本ごとに脚質構成・強さ・やる気・スキルが変わります。
         相手を固定して引き直しを切ると、順位が塊の境目にしか出ず、3 位以内や 6 位以降の
-        条件が 0 % になる。
+        条件が 0 % になります。
       </p>
     </Panel>
   );
@@ -919,10 +919,10 @@ export function RunPanel() {
       </label>
       <button
         type="button"
-        className="rounded-sm bg-primary-bg px-4 py-1.5 text-xs font-semibold text-primary-fg disabled:opacity-50"
+        className="rounded-sm bg-primary-bg px-4 py-1.5 text-xs font-bold text-primary-fg disabled:opacity-50"
         onClick={() => void run()}
         disabled={running}
-        title="Ctrl+Enter（Mac は Cmd+Enter）でも実行できる"
+        title="Ctrl+Enter（Mac は Cmd+Enter）でも実行できます"
       >
         {running ? '実行中' : '実行'}
       </button>
@@ -939,8 +939,8 @@ export function RunPanel() {
           data-testid="run-estimate"
           title={
             estimate.measured
-              ? '直前の実測から出している'
-              : '作り付けの目安。1 回走らせると実測に置き換わる'
+              ? '直前の実測から出しています'
+              : '作り付けの目安です。1 回走らせると実測に置き換わります'
           }
         >
           {estimate.measured ? '見込み' : '目安'} 約 {formatDuration(estimate.ms)}

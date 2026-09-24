@@ -61,7 +61,7 @@ async function readBinaryBody(req: IncomingMessage, limit: number): Promise<Buff
   for await (const chunk of req) {
     const buffer = chunk as Buffer;
     size += buffer.length;
-    if (size > limit) throw new RequestError(`画像が大きすぎる（上限 ${Math.floor(limit / 1024 / 1024)} MB）`);
+    if (size > limit) throw new RequestError(`画像が大きすぎます（上限 ${Math.floor(limit / 1024 / 1024)} MB）。`);
     chunks.push(buffer);
   }
   return Buffer.concat(chunks);
@@ -75,7 +75,7 @@ async function readBody(req: IncomingMessage): Promise<string> {
   for await (const chunk of req) {
     const buffer = chunk as Buffer;
     size += buffer.length;
-    if (size > MAX_BODY_BYTES) throw new RequestError('本文が大きすぎる');
+    if (size > MAX_BODY_BYTES) throw new RequestError('本文が大きすぎます。');
     chunks.push(buffer);
   }
   return Buffer.concat(chunks).toString('utf8');
@@ -241,7 +241,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       const id = match[1]!;
       const job = runner.get(id);
       if (job === undefined) {
-        sendJson(res, 404, { error: '知らないジョブである。保持期間を過ぎて消えた可能性がある。' });
+        sendJson(res, 404, { error: '知らないジョブです。保持期間を過ぎて消えた可能性があります。' });
         return;
       }
       if (method === 'GET') {
@@ -253,14 +253,14 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         sendJson(res, 200, toView(job));
         return;
       }
-      sendJson(res, 405, { error: `${method} は受け付けない` });
+      sendJson(res, 405, { error: `${method} は受け付けません。` });
       return;
     }
 
     if (path === '/api/ocr/skills' && method === 'POST') {
       const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim();
       if (!IMAGE_TYPES.includes(type)) {
-        sendJson(res, 415, { error: `content-type は ${IMAGE_TYPES.join(' / ')} のいずれかにする` });
+        sendJson(res, 415, { error: `content-type は ${IMAGE_TYPES.join(' / ')} のいずれかにしてください。` });
         return;
       }
       let image: Buffer;
@@ -271,7 +271,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         return;
       }
       if (image.length === 0) {
-        sendJson(res, 400, { error: '本文が空である' });
+        sendJson(res, 400, { error: '本文が空です。' });
         return;
       }
       const started = performance.now();
@@ -327,7 +327,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         found = matcher.matchAll(text);
       } else if (classifyError !== null) {
         const reason = classifyError instanceof Error ? classifyError.message : String(classifyError);
-        throw new Error(`読み取りに失敗した: ${reason}`);
+        throw new Error(`読み取りに失敗しました: ${reason}`);
       } else {
         text = '';
         found = [];
@@ -349,7 +349,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
     if (path === '/api/ocr/status' && method === 'POST') {
       const type = (req.headers['content-type'] ?? '').split(';')[0]!.trim();
       if (!IMAGE_TYPES.includes(type)) {
-        sendJson(res, 415, { error: `content-type は ${IMAGE_TYPES.join(' / ')} のいずれかにする` });
+        sendJson(res, 415, { error: `content-type は ${IMAGE_TYPES.join(' / ')} のいずれかにしてください。` });
         return;
       }
       if (ocr === null) {
@@ -358,7 +358,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         // この文言は画面にそのまま出る。環境変数の名前は利用者には意味が無いので、
         // 置く側への案内は起動時のログ（main.ts）に任せる。
         sendJson(res, 503, {
-          error: 'このサーバでは、ステータスの読み取りを使えない（文字認識の学習データが置かれていない）。',
+          error: 'このサーバでは、ステータスの読み取りを使えません（文字認識の学習データが置かれていません）。',
         });
         return;
       }
@@ -370,7 +370,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         return;
       }
       if (image.length === 0) {
-        sendJson(res, 400, { error: '本文が空である' });
+        sendJson(res, 400, { error: '本文が空です。' });
         return;
       }
       const started = performance.now();
@@ -415,7 +415,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
     if (individualMatch !== null && method === 'DELETE') {
       const removed = individuals.remove(individualMatch[1]!);
       if (!removed) {
-        sendJson(res, 404, { error: '知らない個体である' });
+        sendJson(res, 404, { error: '知らない個体です。' });
         return;
       }
       res.writeHead(204);
@@ -424,7 +424,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
     }
 
     if (path.startsWith('/api/')) {
-      sendJson(res, 404, { error: '知らない口である' });
+      sendJson(res, 404, { error: '知らない口です。' });
       return;
     }
 
@@ -440,7 +440,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       // 無いときに HTML が 200 で返ると、読む側は JSON.parse が投げるまで気付けない。
       // 版を取り違えたのか配り忘れたのかも分からなくなるので、ここで 404 にする。
       if (extname(path) === '.json') {
-        sendJson(res, 404, { error: '見つからない' });
+        sendJson(res, 404, { error: '見つかりません。' });
         return;
       }
       // 残りは index.html に落とす。共有 URL はハッシュなので本来は要らないが、
@@ -448,6 +448,6 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       if (await serveStatic(config.staticRoot, '/index.html', req, res)) return;
     }
 
-    sendJson(res, 404, { error: '見つからない' });
+    sendJson(res, 404, { error: '見つかりません。' });
   }
 }

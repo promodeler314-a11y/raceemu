@@ -98,9 +98,9 @@ export function CrossPanel() {
   return (
     <Panel title="コース横断">
       <p className="text-xs text-ink3">
-        いまの個体を、選んだ距離とバ場に当たる全コースで走らせて並べる。
+        いまの個体を、選んだ距離とバ場に当たる全コースで走らせて並べます。
         チャンピオンズミーティングのコースが決まる前に候補を見るときと、
-        育成中に「どのコースなら走れるか」を見るときに使う。
+        育成中に「どのコースなら走れるか」を見るときに使います。
       </p>
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
@@ -160,7 +160,7 @@ export function CrossPanel() {
           onClick={() => void run()}
           disabled={running || busy || courses.length === 0}
         >
-          {running ? '計算中' : 'コースを走らせる'}
+          {running ? '計算中' : 'コース横断の実行'}
         </button>
         {running ? (
           <>
@@ -178,8 +178,8 @@ export function CrossPanel() {
             data-testid="cross-estimate"
             title={
               estimate.measured
-                ? '直前の実測から出している'
-                : '作り付けの目安。1 回走らせると実測に置き換わる'
+                ? '直前の実測から出しています'
+                : '作り付けの目安です。1 回走らせると実測に置き換わります'
             }
           >
             {courses.length} コース ・ {estimate.measured ? '見込み' : '目安'} 約{' '}
@@ -191,10 +191,10 @@ export function CrossPanel() {
       <p className="mt-2 text-xs text-ink3">
         {courses.length === 0
           ? 'この距離とバ場に当たるコースがありません。'
-          : `当たるコース ${courses.length} 本を ${cross.count.toLocaleString('ja-JP')} 試行ずつ、順に走らせる。`}
+          : `当たるコース ${courses.length} 本を ${cross.count.toLocaleString('ja-JP')} 試行ずつ、順に走らせます。`}
         {useField
-          ? ' 順位条件はコースごとに束を作り直して判定する。そのぶんコース 1 本あたり数秒が余計にかかる。'
-          : ' 順位条件は満たしている前提（本家と同じ）で走らせる。設定の面で切り替えられる。'}
+          ? ' 順位条件はコースごとに束を作り直して判定します。そのぶんコース 1 本あたり数秒が余計にかかります。'
+          : ' 順位条件は満たしている前提（本家と同じ）で走らせます。設定の面で切り替えられます。'}
       </p>
 
       {result !== null && <CrossTable groups={groups} result={result} />}
@@ -218,7 +218,7 @@ function CrossTable({
           <span className="num">{(result.elapsedMs / 1000).toFixed(1)}</span> 秒
         </span>
         <span>{result.useField ? '順位条件を判定した' : '順位条件は満たしている前提'}</span>
-        {result.cancelled && <span>中断したので、走り終えたコースまでである</span>}
+        {result.cancelled && <span>中断したので、走り終えたコースまでです</span>}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[30rem] text-xs" data-testid="cross-table">
@@ -249,7 +249,7 @@ function CrossTable({
               <Fragment key={group.distance}>
                 {groups.length > 1 && (
                   <tr className="bg-sunken">
-                    <td colSpan={6} className="num py-1 text-[11px] font-semibold text-ink2">
+                    <td colSpan={6} className="num py-1 text-[11px] font-bold text-ink2">
                       {group.distance} m
                     </td>
                   </tr>
@@ -269,7 +269,7 @@ function CrossTable({
                         {seconds(row.summary.all.averageTime)}
                       </td>
                       <td
-                        className={`num py-1 pr-2 text-right ${delta === 0 ? 'font-semibold' : 'text-ink3'}`}
+                        className={`num py-1 pr-2 text-right ${delta === 0 ? 'font-bold' : 'text-ink3'}`}
                       >
                         {delta === 0 ? '最速' : `+${delta.toFixed(3)}`}
                         {delta !== 0 && Number.isFinite(interval) && (
@@ -278,7 +278,7 @@ function CrossTable({
                       </td>
                       <td className="num py-1 pr-2 text-right">{percent(row.summary.spurtRate)}</td>
                       <td
-                        className={`num py-1 pr-2 text-right ${row.summary.finishRate < 1 ? 'font-semibold' : ''}`}
+                        className={`num py-1 pr-2 text-right ${row.summary.finishRate < 1 ? 'font-bold' : ''}`}
                       >
                         {percent(row.summary.finishRate)}
                       </td>
@@ -294,12 +294,12 @@ function CrossTable({
         </table>
       </div>
       <p className="mt-2 text-xs text-ink3">
-        「最速との差」は<strong>同じ距離の中</strong>で比べたものである。距離が違う行のあいだで
-        タイムを比べても意味が無い。±はその差の 95 % 区間で、コースどうしを別々に走らせて
-        求めたものなので、同じ試行番号で引き算する探索の面の区間より広い。
+        「最速との差」は<strong>同じ距離の中</strong>で比べたものです。距離が違う行のあいだで
+        タイムを比べても意味がありません。±はその差の 95 % 区間で、コースどうしを別々に走らせて
+        求めたものなので、同じ試行番号で引き算する探索の面の区間より広くなります。
         {result.useField
-          ? ' 順位条件は相手の分布（設定の面の「相手の想定」）に対して判定している。相手を変えれば発動率も変わる。'
-          : ' 順位条件つきのスキルは満たしている前提で発動するので、完走率も最大スパート率も甘めに出る。'}
+          ? ' 順位条件は相手の分布（設定の面の「相手の想定」）に対して判定しています。相手を変えれば発動率も変わります。'
+          : ' 順位条件つきのスキルは満たしている前提で発動するので、完走率も最大スパート率も甘めに出ます。'}
       </p>
     </div>
   );

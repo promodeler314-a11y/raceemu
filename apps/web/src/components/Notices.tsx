@@ -79,7 +79,7 @@ export class AppErrorBoundary extends Component<{ children: ReactNode }, Boundar
     if (error === null) return this.props.children;
     return (
       <div className="mx-auto max-w-2xl p-8">
-        <h1 className="text-base font-semibold">画面を表示できませんでした</h1>
+        <h1 className="text-base font-bold">画面を表示できませんでした</h1>
         <p className="mt-2 text-sm text-ink2">
           計算モデルかコースデータの読み込みでつまずいています。ページを開き直すと直ることが
           あります。直らないときは、保存してある設定が壊れている可能性があるので、下のボタンで

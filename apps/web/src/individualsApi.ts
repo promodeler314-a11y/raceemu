@@ -24,16 +24,16 @@ export interface NewIndividual {
 }
 
 const NO_ENDPOINT =
-  '個体を保存する口が無い。静的ファイルだけを置いた版はサーバを持たないので、この機能はサーバを立てた版でだけ使える。';
+  '個体を保存する口がありません。静的ファイルだけを置いた版はサーバを持たないので、この機能はサーバを立てた版でだけ使えます。';
 
 function explainNonJson(res: Response): string {
   if (res.redirected) {
-    return `個体の口ではなく別の画面に飛ばされた（最終 ${res.status}）。認証が切れていないか確かめる。`;
+    return `個体の口ではなく別の画面に飛ばされました（最終 ${res.status}）。認証が切れていないか確かめてください。`;
   }
   if (res.status === 404 || res.status === 405) return NO_ENDPOINT;
   return (
-    `サーバが JSON ではない応答を返した（${res.status}）。` +
-    'サーバの版が古いか、途中に認証や proxy の画面が挟まっている。/api/health を開くと切り分けられる。'
+    `サーバが JSON ではない応答を返しました（${res.status}）。` +
+    'サーバの版が古いか、途中に認証や proxy の画面が挟まっています。/api/health を開くと切り分けられます。'
   );
 }
 
@@ -51,7 +51,7 @@ async function fetchJson<T>(input: string, init?: RequestInit): Promise<T> {
     const message =
       typeof body === 'object' && body !== null && typeof (body as { error?: unknown }).error === 'string'
         ? (body as { error: string }).error
-        : `失敗した（${res.status}）`;
+        : `失敗しました（${res.status}）。`;
     throw new Error(message);
   }
   return body as T;
@@ -76,5 +76,5 @@ export async function removeIndividual(id: string): Promise<void> {
   const contentType = res.headers.get('content-type') ?? '';
   if (!contentType.includes('application/json')) throw new Error(explainNonJson(res));
   const body = (await res.json().catch(() => null)) as { error?: string } | null;
-  throw new Error(body?.error ?? `削除に失敗した（${res.status}）`);
+  throw new Error(body?.error ?? `削除に失敗しました（${res.status}）。`);
 }

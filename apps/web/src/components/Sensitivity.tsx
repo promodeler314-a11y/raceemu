@@ -59,28 +59,28 @@ function axisNote(axis: SensitivityAxis, useField: boolean): { text: string; wea
     return useField
       ? {
           text:
-            '順位条件を判定しているので、前後のウマ娘・近くの人数・追い抜きはこの距離で決まる。' +
-            '既定の 1 バ身（2.5 m）はスキルデータの注記からの読み取りで、ゲームと突き合わせていない。',
+            '順位条件を判定しているので、前後のウマ娘・近くの人数・追い抜きはこの距離で決まります。' +
+            '既定の 1 バ身（2.5 m）はスキルデータの注記からの読み取りで、ゲームと突き合わせていません。',
           weak: false,
         }
       : {
           text:
-            '順位条件を判定していないので、距離を振っても何も動かない。' +
-            'この設定では近似はすべて確率のままなので、倍率の軸で測ること。',
+            '順位条件を判定していないので、距離を振っても何も動きません。' +
+            'この設定では近似はすべて確率のままなので、倍率の軸で測ってください。',
           weak: true,
         };
   }
   return useField
     ? {
         text:
-          '順位条件を判定しているあいだ、追い抜きと前後のウマ娘は確率ではなく位置から決まる。' +
-          '倍率が効くのは残りの近似だけなので、幅は狭く出る。距離の軸のほうも測ること。',
+          '順位条件を判定しているあいだ、追い抜きと前後のウマ娘は確率ではなく位置から決まります。' +
+          '倍率が効くのは残りの近似だけなので、幅は狭く出ます。距離の軸のほうも測ってください。',
         weak: true,
       }
     : {
         text:
-          '順位条件を判定していないので、他のウマ娘にまつわる条件はすべて確率のままである。' +
-          'この設定では倍率の軸がそのまま効く。',
+          '順位条件を判定していないので、他のウマ娘にまつわる条件はすべて確率のままです。' +
+          'この設定では倍率の軸がそのまま効きます。',
         weak: false,
       };
 }
@@ -130,10 +130,10 @@ export function SensitivityPanel() {
   return (
     <Panel title="近似の感度">
       <p className="text-xs text-ink3">
-        他のウマ娘との接触や追い抜きの扱いは、ゲームと突き合わせて確かめたものではない。
-        置き方を半分と倍に振って走らせ、短縮量がどれだけ動くかを見る。
-        幅が誤差より広いスキルは、順位を置き方のほうが決めている。
-        {scaleCount} 通り × (1 + 候補) 構成を走らせるので、候補は上限で切る。
+        他のウマ娘との接触や追い抜きの扱いは、ゲームと突き合わせて確かめたものではありません。
+        置き方を半分と倍に振って走らせ、短縮量がどれだけ動くかを見ます。
+        幅が誤差より広いスキルは、順位を置き方のほうが決めています。
+        {scaleCount} 通り × (1 + 候補) 構成を走らせるので、候補は上限で切ります。
       </p>
 
       {/*
@@ -171,8 +171,8 @@ export function SensitivityPanel() {
         {optimizeResult === null
           ? 'いま選んでいるスキルの先頭から'
           : '直前の探索の最良の構成と、効きの大きい候補から'}{' '}
-        {candidates.length} 個である。
-        {optimizeResult === null && ' 先に探索を走らせると、効いているものから選ばれる。'}
+        {candidates.length} 個です。
+        {optimizeResult === null && ' 先に探索を走らせると、効いているものから選ばれます。'}
       </p>
 
       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -211,7 +211,7 @@ export function SensitivityPanel() {
           onClick={() => void run()}
           disabled={running || busy || optimizeRunning || candidates.length === 0}
         >
-          {running ? '測っている' : '近似の幅を測る'}
+          {running ? '測定中' : '近似の幅の測定'}
         </button>
         {running ? (
           <CancelButton />
@@ -221,8 +221,8 @@ export function SensitivityPanel() {
             data-testid="sensitivity-estimate"
             title={
               estimate.measured
-                ? '直前の実測から出している'
-                : '作り付けの目安。1 回走らせると実測に置き換わる'
+                ? '直前の実測から出しています。'
+                : '作り付けの目安です。1 回走らせると実測に置き換わります。'
             }
           >
             {`${estimate.measured ? '見込み' : '目安'} 約 ${formatDuration(estimate.ms)}`}
@@ -248,7 +248,7 @@ export function SensitivityPanel() {
       {result !== null && (
         <div className="mt-4 space-y-4" data-testid="sensitivity-result">
           <div className="overflow-x-auto">
-            <h3 className="text-xs font-semibold">平均タイム（候補を 1 つも取らない構成）</h3>
+            <h3 className="text-xs font-bold">平均タイム（候補を 1 つも取らない構成）</h3>
             <table className="mt-1 w-full text-xs">
               <thead className="text-ink3">
                 <tr>
@@ -279,19 +279,19 @@ export function SensitivityPanel() {
               </tbody>
             </table>
             <p className="mt-1 text-xs text-ink3">
-              平均タイムの幅は <strong>{timeWidth.toFixed(4)}</strong> 秒である。
-              これが「{AXIS[axis].label}の置き方だけで動く量」で、試行数を増やしても縮まない。
+              平均タイムの幅は <strong>{timeWidth.toFixed(4)}</strong> 秒です。
+              これが「{AXIS[axis].label}の置き方だけで動く量」で、試行数を増やしても縮みません。
             </p>
           </div>
 
           <div className="overflow-x-auto">
-            <h3 className="text-xs font-semibold">スキルごとの短縮量（幅の広い順）</h3>
+            <h3 className="text-xs font-bold">スキルごとの短縮量（幅の広い順）</h3>
             <p className="text-xs text-ink3">
-              幅 ÷ 誤差が 1 を超えるスキルは、短縮量が測り方の揺れではなく置き方で動いている。
-              その差は近似の中に消えるものとして読む。
-              振っても動かないものは、その軸に依っていないか、確率が既に 1.0 で頭打ちになっている。
+              幅 ÷ 誤差が 1 を超えるスキルは、短縮量が測り方の揺れではなく置き方で動いています。
+              その差は近似の中に消えるものとして読みます。
+              振っても動かないものは、その軸に依っていないか、確率が既に 1.0 で頭打ちになっています。
               「{AXIS[axis].column}」の列が − なのに幅が出たときは、そのスキルの条件ではなく、
-              走りが変わったことの間接の影響を拾っている。
+              走りが変わったことの間接の影響を拾っています。
             </p>
             <table className="mt-1 w-full text-xs" data-testid="sensitivity-table">
               <thead className="text-ink3">
@@ -344,12 +344,12 @@ export function SensitivityPanel() {
 
           <p className="text-xs text-ink3" data-testid="sensitivity-verdict">
             {shaky.length === 0
-              ? `測った ${result.skills.length} 個は、${AXIS[axis].label}を振っても短縮量が誤差の中に収まっている。この軸については、順位の付け方が置き方に依っていない。`
-              : `測った ${result.skills.length} 個のうち ${shaky.length} 個は、${AXIS[axis].label}の置き方で短縮量が誤差より大きく動く（${shaky
+              ? `測った ${result.skills.length} 個は、${AXIS[axis].label}を振っても短縮量が誤差の中に収まっています。この軸については、順位の付け方が置き方に依っていません。`
+              : `測った ${result.skills.length} 個のうち ${shaky.length} 個は、${AXIS[axis].label}の置き方で短縮量が誤差より大きく動きます（${shaky
                   .slice(0, 3)
                   .map((skill) => name(skill.skillId))
-                  .join('、')}${shaky.length > 3 ? ' ほか' : ''}）。この差は近似の中に消えるので、これらどうしの順位はこの分析の中では決められない。`}
-            {' もう一方の軸は別に測ること。片方で動かなくても、もう一方で動くことがある。'}
+                  .join('、')}${shaky.length > 3 ? ' ほか' : ''}）。この差は近似の中に消えるので、これらどうしの順位はこの分析の中では決められません。`}
+            {' もう一方の軸は別に測ってください。片方で動かなくても、もう一方で動くことがあります。'}
           </p>
         </div>
       )}

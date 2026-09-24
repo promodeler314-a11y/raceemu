@@ -88,7 +88,7 @@ export function PlanInput() {
   return (
     <div className="rounded-sm border border-rule p-3">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="text-xs font-semibold">候補の出どころ</span>
+        <span className="text-xs font-bold">候補の出どころ</span>
         {SOURCES.map((choice) => (
           <label key={choice.value} className="flex items-center gap-1 text-sm">
             <input
@@ -104,22 +104,22 @@ export function PlanInput() {
 
       {plan.source === 'selected' && (
         <p className="mt-2 text-xs text-ink3">
-          育成計画に切り替えると、候補を育成ウマ娘とデッキ、それに継承から組み立てる。
-          育て終わった馬の買い物ではなく、何を狙って育てるかを探せる。
-          全スキルに切り替えると入手経路も問わなくなるが、候補が数百になるので
-          ブラウザでは回りきらない。サーバに投げる設定と併せて使う。
+          育成計画に切り替えると、候補を育成ウマ娘とデッキ、それに継承から組み立てます。
+          育て終わった馬の買い物ではなく、何を狙って育てるかを探せます。
+          全スキルに切り替えると入手経路も問わなくなりますが、候補が数百になるので
+          ブラウザでは回りきりません。サーバに投げる設定と併せて使います。
         </p>
       )}
 
       {plan.source === 'plan' && deck === null && (
-        <p className="mt-2 text-xs text-ink3">サポートカードと育成ウマ娘のデータを読み込んでいる。</p>
+        <p className="mt-2 text-xs text-ink3">サポートカードと育成ウマ娘のデータを読み込んでいます。</p>
       )}
 
       {plan.source === 'all' && (
         <p className="mt-2 text-xs text-ink3">
-          買えるスキル全体を候補にする。どのデッキで取れるかは問わないので、割引も当たらない
-          （費用は表示どおりの総額になる）。これが本来の問いだが、候補が数百になり
-          ブラウザの数コアでは回りきらない。下のサーバの宛先と併せて使う。
+          買えるスキル全体を候補にします。どのデッキで取れるかは問わないので、割引も当たりません
+          （費用は表示どおりの総額になります）。これが本来の問いですが、候補が数百になり
+          ブラウザの数コアでは回りきりません。下のサーバの宛先と併せて使います。
         </p>
       )}
 
@@ -283,19 +283,19 @@ export function PlanInput() {
         <p className="mt-2 text-xs text-ink3" data-testid="plan-candidates">
           {/* 全スキルは経路を問わないので 1 通りしかない。内訳は 2 通り以上あるときだけ出す。 */}
           候補 {preview.skillIds.length} 個{routeParts.length > 1 ? `：${routeParts.join('、')}` : ''}
-          。いまのコースと脚質で発動しようがないものは、走らせる前に落としてある。
+          。いまのコースと脚質で発動しようがないものは、走らせる前に落としてあります。
           {preview.droppedByIgnored.length > 0 && (
             <>
               {' '}
               順位や他のウマ娘の顔ぶれに依る条件はモデルが判定できず、必ず発動する扱いになるため、
-              それしか条件を持たない {preview.droppedByIgnored.length} 個も外してある。
+              それしか条件を持たない {preview.droppedByIgnored.length} 個も外してあります。
             </>
           )}
           {preview.droppedByFidelity.length > 0 && (
             <>
               {' '}
-              条件の一部を落としている（▲）{preview.droppedByFidelity.length} 個も外してある。
-              落とした条件は満たしている扱いになるので、入れると上位がそれで埋まる。
+              条件の一部を落としている（▲）{preview.droppedByFidelity.length} 個も外してあります。
+              落とした条件は満たしている扱いになるので、入れると上位がそれで埋まります。
             </>
           )}
         </p>
@@ -310,8 +310,8 @@ export function PlanInput() {
         preview.skillIds.length > 100 &&
         !(searchEndpoint.trim() !== '' && searchTarget === 'server') && (
           <p className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink">
-            候補 {preview.skillIds.length} 個をブラウザで回すと、数コアでは数十分かかる。
-            サーバの宛先を入れて投げ先をサーバにするか、種類を絞って候補を減らす。
+            候補 {preview.skillIds.length} 個をブラウザで回すと、数コアでは数十分かかります。
+            サーバの宛先を入れて投げ先をサーバにするか、種類を絞って候補を減らしてください。
           </p>
         )}
     </div>

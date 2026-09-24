@@ -285,7 +285,7 @@ export function Chart({
   const skillHint =
     !showSkillHint || bands.skills.length === 0
       ? undefined
-      : '薄い縦線と三角の印はスキル発動位置。カーソルを合わせると名前を表示。';
+      : '薄い縦線と三角の印はスキル発動位置です。カーソルを合わせると名前を表示します。';
   const caption =
     hoverSkill !== null
       ? `${hoverSkill.caption ?? `${hoverSkill.position.toFixed(0)} m`} ・ ${hoverSkill.labels.join('、')}`
@@ -360,7 +360,7 @@ export function FrameCharts() {
   if (prepared === null) {
     return (
       <Panel title="レースの詳細">
-        <p className="text-sm text-ink3">実行すると 1 本目のレースを表示する。</p>
+        <p className="text-sm text-ink3">実行すると 1 本目のレースを表示します。</p>
       </Panel>
     );
   }
@@ -371,7 +371,7 @@ export function FrameCharts() {
         <TrialNavigation />
         <Chart
           title="速度"
-          subtitle="灰色の帯はコーナー、破線は序盤と中盤と終盤とラストの境界。"
+          subtitle="灰色の帯はコーナー、破線は序盤と中盤と終盤とラストの境界です。"
           x={prepared.x}
           height={220}
           includeZero={false}
@@ -392,7 +392,7 @@ export function FrameCharts() {
         <Chart
           title="勾配"
           skillHint={false}
-          subtitle="エミュレータ内部の勾配値。1.0 以上を上り坂、-1.0 以下を下り坂として扱う。"
+          subtitle="エミュレータ内部の勾配値です。1.0 以上を上り坂、-1.0 以下を下り坂として扱います。"
           x={prepared.x}
           height={120}
           bands={prepared.bands}
@@ -478,7 +478,7 @@ function EventList({ events }: { events: readonly RaceEvent[] }) {
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-2">
-        <h3 className="text-sm font-medium">イベント</h3>
+        <h3 className="text-sm font-bold">イベント</h3>
         <span className="text-xs text-ink3">{events.length} 件</span>
       </div>
       <div className="mt-2 max-h-96 overflow-y-auto">
@@ -582,18 +582,18 @@ export function TimeHistogram() {
   const peakFrom = bins.min + peakIndex * bins.width;
   // 図を見られない場合に、形の要点だけでも伝える。
   const description =
-    `${bins.total} 試行のタイムの分布。` +
+    `${bins.total} 試行のタイムの分布です。` +
     `${formatTime(bins.fastest)} から ${formatTime(bins.slowest)} に広がり、` +
     (bins.below + bins.above > 0
-      ? `図は ${formatTime(bins.min)} から ${formatTime(bins.max)} の範囲を描いている（外れた ${bins.below + bins.above} 試行を除く）。`
+      ? `図は ${formatTime(bins.min)} から ${formatTime(bins.max)} の範囲を描いています（外れた ${bins.below + bins.above} 試行を除く）。`
       : '') +
-    `最も多いのは ${formatTime(peakFrom)} あたりで ${bins.peak} 件。` +
-    `p5 は ${formatTime(bins.p5)}、p50 は ${formatTime(bins.p50)}、p95 は ${formatTime(bins.p95)}。`;
+    `最も多いのは ${formatTime(peakFrom)} あたりで ${bins.peak} 件です。` +
+    `p5 は ${formatTime(bins.p5)}、p50 は ${formatTime(bins.p50)}、p95 は ${formatTime(bins.p95)} です。`;
 
   return (
     <div>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-        <h3 className="text-sm font-medium">タイムの分布</h3>
+        <h3 className="text-sm font-bold">タイムの分布</h3>
         <span className="text-xs text-ink3">
           {/* 試行数は結果の見出しにある。ここでは繰り返さない */}
           ビン幅 {bins.width.toFixed(2)} 秒
@@ -664,13 +664,13 @@ export function TimeHistogram() {
           {bins.below > 0 && <span className="block">これより速い {bins.below.toLocaleString('ja-JP')} 試行は図の外</span>}
         </span>
         {hover !== null ? (
-          <span className="font-medium text-ink2">
+          <span className="font-bold text-ink2">
             {formatTime(bins.min + hover * bins.width)} – {formatTime(bins.min + (hover + 1) * bins.width)} ・{' '}
             {bins.counts[hover]!.toLocaleString('ja-JP')} 試行 ・{' '}
             {((bins.counts[hover]! / bins.total) * 100).toFixed(1)}%
           </span>
         ) : (
-          <span>バーにカーソルを合わせると帯の内訳を表示</span>
+          <span>バーにカーソルを合わせると帯の内訳を表示します</span>
         )}
         <span className="text-right">
           {formatTime(bins.max)}

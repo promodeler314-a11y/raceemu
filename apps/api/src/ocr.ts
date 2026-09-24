@@ -185,7 +185,7 @@ export class OcrEngine {
       } catch (error) {
         await this.dispose().catch(() => undefined);
         const reason = error instanceof Error && error.message !== '' ? error.message : '理由不明';
-        throw new Error(`読み取りに失敗した: ${reason}`);
+        throw new Error(`読み取りに失敗しました: ${reason}`);
       }
     });
     // 失敗しても行列は止めない

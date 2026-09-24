@@ -263,7 +263,7 @@ export async function readStatusHeader(
     // 上半分が写っていない（スキル一覧だけを切り抜いた画像など）。
     // 当てずっぽうの数字を返すより、読めなかったことをそのまま返す。
     throw new StatusOutOfFrameError(
-      'ステータスの位置が画像の外に出る。「ウマ娘詳細」画面の上半分が写った画像を渡す',
+      'ステータスの位置が画像の外に出ます。「ウマ娘詳細」画面の上半分が写った画像を渡してください。',
     );
   }
 
@@ -298,7 +298,7 @@ export async function readStatusHeader(
   const read = status.filter((value) => value !== null).length;
   if (read < MIN_STATUS_READ) {
     throw new StatusOutOfFrameError(
-      `ステータスが ${read} 個しか読めない。「ウマ娘詳細」画面の上半分が写った画像を渡す`,
+      `ステータスが ${read} 個しか読めません。「ウマ娘詳細」画面の上半分が写った画像を渡してください。`,
     );
   }
 

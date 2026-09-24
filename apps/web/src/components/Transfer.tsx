@@ -25,11 +25,11 @@ export function TransferPanel() {
     ].filter((x): x is string => x !== null);
     setUnknown(parsed.unknown);
     if (counts.length === 0) {
-      setMessage('読めるものが無かった。区切りはカンマ、改行、タブ、コロン、スラッシュのどれでもよい。');
+      setMessage('読めるものがありませんでした。区切りはカンマ、改行、タブ、コロン、スラッシュのどれでも構いません。');
       return;
     }
     applyTransfer(parsed);
-    setMessage(`${counts.join(' ／ ')} を入れた。`);
+    setMessage(`${counts.join(' ／ ')} を入れました。`);
   };
 
   const write = () => {
@@ -39,15 +39,15 @@ export function TransferPanel() {
     // クリップボードは許可が要る環境があるので、失敗しても欄には残す。
     void navigator.clipboard
       ?.writeText(out)
-      .then(() => setMessage('書き出して、クリップボードに入れた。'))
-      .catch(() => setMessage('書き出した。欄から写して使う。'));
+      .then(() => setMessage('書き出して、クリップボードに入れました。'))
+      .catch(() => setMessage('書き出しました。欄から写して使ってください。'));
   };
 
   return (
     <Panel title="本家と設定をやり取りする" variant="plain">
       <p className="text-xs text-ink3">
-        キャラ名、ステータス 5 つ、適性 3 つ（距離・バ場・脚質）、スキル名を並べた 1 行である。
-        脚質、やる気、コース、人気、枠番はこの形式に無いので触らない。
+        キャラ名、ステータス 5 つ、適性 3 つ（距離・バ場・脚質）、スキル名を並べた 1 行です。
+        脚質、やる気、コース、人気、枠番はこの形式に無いので触りません。
       </p>
       <textarea
         className="mt-2 h-20 w-full rounded-sm border border-rule2 bg-surface px-2 py-1 font-mono text-xs text-ink"
@@ -64,14 +64,14 @@ export function TransferPanel() {
           onClick={read}
           disabled={text.trim() === ''}
         >
-          読み込む
+          読み込み
         </button>
         <button
           type="button"
           className="rounded-sm border border-rule2 px-3 py-1.5 text-xs"
           onClick={write}
         >
-          いまの設定を書き出す
+          いまの設定の書き出し
         </button>
       </div>
       {message !== null && (
@@ -84,7 +84,7 @@ export function TransferPanel() {
           className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink"
           data-testid="transfer-unknown"
         >
-          引き当てられなかった語が {unknown.length} 個ある: {unknown.join('、')}
+          引き当てられなかった語が {unknown.length} 個あります:{unknown.join('、')}
         </p>
       )}
     </Panel>
