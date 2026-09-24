@@ -4,6 +4,12 @@
 **これは現状の記録であって、こうあるべきという指針ではない。** 指針を作るときの出発点として使う。
 
 > [#94](https://github.com/promodeler314-a11y/raceemu/pull/94) で、値は共有リポジトリの `design-system/tokens.css` に移った。名前は `--color-paper` から `--uma-paper` のように接頭辞が変わり、`index.css` は `@theme inline` で橋渡しするだけになった。値とユーティリティの名前（`bg-paper` など）は変えていないので、下の表の値と使用数はそのまま有効である。
+>
+> [#100](https://github.com/promodeler314-a11y/raceemu/pull/100) で、次の 3 つがこの表から変わった（DESIGN.md の 3〜4 節）。色の表のそのほかの値は変わっていない。
+>
+> - 書体：`--uma-font-sans` は BIZ UDPゴシック、`--uma-font-mono`（数値）は BIZ UDゴシック。BIZ UDPゴシックの数字は `tabular-nums` に対応していなかった
+> - 太さ：`font-semibold` と `font-medium` は無くなり、`font-normal` と `font-bold` の 2 段になった
+> - 主ボタン：`--uma-primary-bg` / `--uma-primary-fg` は強調色の朱 `--uma-accent`（明 `#b8391a`、暗 `#f07a52`）を指す。使い所は計算を走らせるボタンだけ
 
 - 版：`ui-refresh` ブランチ、コミット `12e59a2`（[#94](https://github.com/promodeler314-a11y/raceemu/pull/94) の前）
 - 対象：`apps/web/src/`（`.ts` `.tsx` `.css`）と `apps/web/index.html`
