@@ -1,0 +1,3 @@
+# ゲートウェイのソースは kustomize がそのまま ConfigMap に詰める。
+# Windows で CRLF に変わると、クラスタに置く中身まで変わってしまう。
+deploy/gate/gate.js text eol=lf

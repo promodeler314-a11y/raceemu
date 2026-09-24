@@ -14,7 +14,7 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 git submodule update --init    # design-system（見た目のトークン）。無いとビルドが止まる
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
-pnpm test                      # vitest run。34 ファイル 426 件
+pnpm test                      # vitest run。34 ファイル 429 件
 pnpm test packages/sim/test/plan.test.ts    # ファイルを絞る
 pnpm exec vitest run packages/sim/test/optimize.test.ts -t '予算を超える構成は返さない'  # テスト名で絞る
 pnpm dev                       # UI の開発サーバ
@@ -49,7 +49,7 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 
 ### テストの前提
 
-426 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
+429 件のうち 13 件は手元の材料に依り、無ければ静かに飛ぶ。**緑でも全部通ったとは限らない。**
 
 - 読み取りの 7 件：`.tessdata/jpn.traineddata`（`pnpm fetch-tessdata`）が必要。
 - ステータス読み取りの 6 件：`RACEEMU_REAL_SCREENSHOT_DIR` に実機の写真を置いた場所を指す。写真はゲームの著作物なのでリポジトリに無い。
@@ -141,7 +141,7 @@ zustand が変化と見て描画が止まらなくなる（React error #185、�
 - `packages/sim/test/reference.test.ts`：本家との突き合わせ。導出値は小数第 9 位まで一致、タイムは平均の差が標準誤差の 4 倍以内。参照値の作り直し手順は `packages/sim/test/golden/README.md`。
 - `packages/sim/test/skill-coverage.test.ts`：未対応・近似扱いの条件型の集合を固定する。データに新しい型が増えるとここが落ちて気付ける。
 - `test/workflows.test.ts`：ワークフローのパイプが `set -o pipefail` で失敗を握り潰していないかを見る。実際に取得失敗を緑にした事故がある。`check-race-model` については、ワークフローが見るパスとスクリプトが書くパスが同じであることも見る（食い違うと毎週「差分なし」で緑になる）。
-- `test/deploy.test.ts`：本番のマニフェスト（`deploy/k8s.yaml` と `deploy/sync.yaml`）が同じタグと名前で繋がっているか、個体の保存先が PVC にあるかを見る。ずれても両方正しい YAML なので、古いイメージが黙って動き続ける。
+- `test/deploy.test.ts`：本番のマニフェスト（`deploy/k8s.yaml`、`deploy/sync.yaml`、`deploy/gate/`）が同じタグと名前で繋がっているか、個体の保存先が PVC にあるか、ゲートの集計画面がクラスタの外に出ていないかを見る。ずれても両方正しい YAML なので、古いイメージが黙って動き続ける。
 
 ## 残課題は issue が持つ。設計書は理由を持つ
 

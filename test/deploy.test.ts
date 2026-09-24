@@ -1,8 +1,9 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * 本番のマニフェスト（deploy/k8s.yaml と deploy/sync.yaml）どうしの食い違いを見る。
+ * 本番のマニフェスト（deploy/k8s.yaml、deploy/sync.yaml、deploy/gate/）どうしの食い違いを見る。
  *
  * 2 つは名前とタグだけで繋がっている。ビルドが置くタグと Deployment が引くタグ、
  * sync.sh が入れ替える Deployment の名前がずれても、どちらも正しい YAML のままで
@@ -19,6 +20,7 @@ function read(path: string): string {
 
 const k8s = read('deploy/k8s.yaml');
 const sync = read('deploy/sync.yaml');
+const gate = read('deploy/gate/gate.yaml');
 
 /** sync.sh の `NAME="value"` を読む。 */
 function shellVar(name: string): string {
@@ -27,11 +29,24 @@ function shellVar(name: string): string {
   return match[1]!;
 }
 
-/** k8s.yaml から kind の塊を 1 つ取り出す。 */
-function k8sBlock(kind: string): string {
-  const block = k8s.split('\n---\n').find((part) => new RegExp(`^kind: ${kind}$`, 'm').test(part));
-  if (block === undefined) throw new Error(`k8s.yaml に ${kind} が無い`);
+/** マニフェストから kind の塊を 1 つ取り出す。 */
+function blockOf(manifest: string, kind: string): string {
+  const block = manifest
+    .split('\n---\n')
+    .find((part) => new RegExp(`^kind: ${kind}$`, 'm').test(part));
+  if (block === undefined) throw new Error(`${kind} が無い`);
   return block;
+}
+
+function k8sBlock(kind: string): string {
+  return blockOf(k8s, kind);
+}
+
+/** env の `- name: X` に続く `value:` を読む。 */
+function envValue(block: string, name: string): string {
+  const match = new RegExp(`- name: ${name}\\n +value: "?([^"\\n]+)"?`).exec(block);
+  if (match === null) throw new Error(`${name} が無い`);
+  return match[1]!;
 }
 
 describe('本番のマニフェスト', () => {
@@ -66,5 +81,29 @@ describe('本番のマニフェスト', () => {
     expect(deployment).toMatch(/claimName: raceemu-data/);
     // ReadWriteOnce を新旧の Pod が同時に掴まないよう、止めてから立てる。
     expect(deployment).toMatch(/^ +type: Recreate$/m);
+  });
+
+  it('ゲートウェイの上流はアプリの Service である', () => {
+    // ずれるとゲートは 502 を返し続ける。どちらのマニフェストも正しいままである。
+    const service = k8sBlock('Service');
+    const name = /^  name: (\S+)$/m.exec(service)![1];
+    const namespace = /^  namespace: (\S+)$/m.exec(service)![1];
+    const port = /^ +port: (\d+)$/m.exec(service)![1];
+    const deployment = blockOf(gate, 'Deployment');
+    expect(envValue(deployment, 'UPSTREAM_HOST')).toBe(`${name}.${namespace}.svc.cluster.local`);
+    expect(envValue(deployment, 'UPSTREAM_PORT')).toBe(port);
+  });
+
+  it('ゲートウェイの集計画面をクラスタの外に出さない', () => {
+    // gate.js の :8090 は認証を持たない。Cloudflare Access を通さずに出すと誰でも見られる。
+    expect(blockOf(gate, 'Service')).toMatch(/^  type: ClusterIP$/m);
+  });
+
+  it('ゲートウェイのソースは LF のまま、Node で読める', () => {
+    // kustomize は中身をそのまま ConfigMap に詰める。CRLF に変わるとクラスタの中身も変わる。
+    const source = readFileSync('deploy/gate/gate.js', 'utf8');
+    expect(source.includes('\r'), '.gitattributes の eol=lf が効いていない').toBe(false);
+    const check = spawnSync(process.execPath, ['--check', 'deploy/gate/gate.js'], { encoding: 'utf8' });
+    expect(check.status, check.stderr).toBe(0);
   });
 });

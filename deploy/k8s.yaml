@@ -18,7 +18,7 @@
 # ゲートウェイ（raceemu-gate）の上流の宛先がこの名前なので、ここで固定する。
 #
 # アプリは認証を持たない。外への口は raceemu-gate（マジックリンク）を通す。
-# ゲートウェイの構成はこのリポジトリに無い（docs/deploy.md の 4.4 節）。
+# ゲートウェイは deploy/gate/ にある（docs/deploy.md の 4.4 節）。
 apiVersion: v1
 kind: Namespace
 metadata:
