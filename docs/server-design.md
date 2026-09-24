@@ -109,6 +109,10 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 アプリにもサーバにも認証の実装を持たない。
 狭いコミュニティに配るのであれば、これで足りる。
 
+実際には、アプリの前に置いたのは Cloudflare Access ではなく、Discord の Bot が配るマジックリンクを確かめるゲートウェイ（`raceemu-gate`）である。
+Cloudflare Access は、そのゲートウェイの集計画面を絞るのに使う前提である。
+アプリ側に認証を持たないことは変わらない（[配信](deploy.md)の 4.4 節）。
+
 **アプリと API を同一オリジンで配る。**
 別オリジンにすると CORS の設定が要り、平文で出そうとすると mixed content で落ちる。
 同じホスト名の下に静的ファイルと `/api` を並べれば、どちらも起きない。
@@ -205,7 +209,7 @@ Cloudflare Tunnel が既に通っているので、TLS と経路はそちらに�
 
 1. ~~`apps/api` を作る~~ 済み。
 2. ~~イメージとマニフェスト~~ 済み（`deploy/`）。`tsx` は実行時に要るので devDependencies を落とさずに入れている。
-3. ~~イメージを置く経路~~ 済み（`.github/workflows/image.yml`）。`main` への取り込みごとに `ghcr.io` を更新する。置き方は[配信](deploy.md)の 5 節にある。
+3. ~~イメージを置く経路~~ 済み（`.github/workflows/image.yml`）。`main` への取り込みごとに `ghcr.io` を更新する。ただし本番はこれを引かず、クラスタの中で組んだものを使う。置き方は[配信](deploy.md)の 4 節にある。
 4. **ポッドの中で並列数がどう決まるかを実測する**（[#48](https://github.com/promodeler314-a11y/raceemu/issues/48)）**。** 4.1 の前提の確認である。`GET /api/health` が `concurrencySource` を返すので、`cgroup` と出ていれば読めている。
 5. ~~アプリ側に宛先の設定と、投げ先を選ぶ口を足す~~ 済み（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)）。8.1 節。
 6. ~~コミットの SHA をフッタに出す~~ 済み（[#59](https://github.com/promodeler314-a11y/raceemu/issues/59)）。8.2 節。
