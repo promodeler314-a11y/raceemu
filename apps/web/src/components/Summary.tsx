@@ -1,7 +1,6 @@
 import { useMemo } from 'react';
 import { formatTime, percentile } from '../format.ts';
 import {
-  currentTrackDetail,
   gameData,
   skillFidelities,
   useStore,
@@ -60,7 +59,6 @@ export function SummaryOutput() {
   const runBand = useStore((s) => s.runBand);
   const running = useStore((s) => s.running);
   const useField = useStore((s) => s.useField);
-  const detail = currentTrackDetail(track);
 
   // 近似の印。値は個別に選び、組み立ては useMemo で行う。
   // セレクタの中で組み立てると毎回新しい参照が返り、描画が止まる。
@@ -114,7 +112,7 @@ export function SummaryOutput() {
       <p className="text-xs text-ink3">
         <span data-testid="trial-count">{summary.all.count.toLocaleString('ja-JP')}</span> 試行 ・{' '}
         {(summary.elapsedMs / 1000).toFixed(2)} 秒
-        {detail !== undefined && ` ・ ${detail.name}`}
+        {/* コースはヘッダの「いまの条件」に出ているので繰り返さない */}
       </p>
 
       {/* 主数字とタイル。結果パネルは画面の半分ほどの幅しかないので、横並びにはしない。 */}
@@ -146,22 +144,28 @@ export function SummaryOutput() {
             )}
           </span>
         </div>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3">
+        {/*
+          脇の指標は 4 つに絞る。最速と最遅は「タイムの幅」として 1 つにまとめた。
+          5 つを同じ大きさで格子に並べると空きマスができ、重さの違いも見えない
+          （docs/ui-audit-race-emulator.md 第1節「数値タイル」）。4 つなら 2 列でも 4 列でも埋まる。
+        */}
+        <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-ink3">最速タイム</span>
-            <span className="font-mono text-lg font-semibold tabular-nums">{formatTime(summary.all.bestTime)}</span>
-          </div>
-          <div className="flex flex-col gap-0.5">
-            <span className="text-xs text-ink3">最遅タイム</span>
-            <span className="font-mono text-lg font-semibold tabular-nums">{formatTime(summary.all.worstTime)}</span>
+            <span className="text-xs text-ink3">タイムの幅</span>
+            <span className="font-mono text-base font-semibold tabular-nums">
+              {formatTime(summary.all.bestTime)}
+            </span>
+            <span className="text-xs text-ink3">
+              〜 <span className="font-mono tabular-nums">{formatTime(summary.all.worstTime)}</span>
+            </span>
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-xs text-ink3">完走率</span>
-            <span className="font-mono text-lg font-semibold tabular-nums">{percent(summary.finishRate)}</span>
+            <span className="font-mono text-base font-semibold tabular-nums">{percent(summary.finishRate)}</span>
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-xs text-ink3">最大スパート率</span>
-            <span className="font-mono text-lg font-semibold tabular-nums">{percent(summary.spurtRate)}</span>
+            <span className="font-mono text-base font-semibold tabular-nums">{percent(summary.spurtRate)}</span>
             {Number.isFinite(spurtRateDelta) && (
               <span className="text-xs text-ink3">
                 基準比 <span className="font-mono tabular-nums">{signed(spurtRateDelta, 1)}</span> pt
@@ -170,7 +174,7 @@ export function SummaryOutput() {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-xs text-ink3">ゴール時の残り体力</span>
-            <span className="font-mono text-lg font-semibold tabular-nums">
+            <span className="font-mono text-base font-semibold tabular-nums">
               {summary.all.averageGoalSp.toFixed(1)}
             </span>
             {Number.isFinite(goalSpP5) && (
@@ -196,7 +200,8 @@ export function SummaryOutput() {
             className="rounded-sm border border-rule2 px-2 py-0.5 text-xs"
             onClick={() => showTrial(entry!.trial)}
           >
-            {label}（{formatTime(entry!.time)}）
+            {/* タイムは上の「タイムの幅」と分布の軸に出ているので、ボタンには繰り返さない */}
+            {label}
           </button>
         ))}
       </div>
@@ -207,7 +212,7 @@ export function SummaryOutput() {
           <div className="flex items-baseline gap-2">
             <h3 className="text-sm font-medium">スキル別の発動状況</h3>
             <span className="text-xs text-ink3">
-              数値は {summary.all.count.toLocaleString('ja-JP')} 試行の平均
+              数値は全試行の平均
             </span>
             {/*
               発動率は相手の想定に依る。1 つの数字だけを出すと、そのことが見えない。

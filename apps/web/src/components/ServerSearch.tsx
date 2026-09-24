@@ -106,8 +106,7 @@ export function ServerSearchInput() {
 
       {!configured && (
         <p className="mt-2 text-xs text-ink3">
-          宛先を入れるとサーバに投げられる。入れなければ今までどおりブラウザの Worker で回す。
-          サーバは加速装置であって、無くてもこのアプリは全部動く。
+          宛先を入れるとサーバに投げられる。入れなければ今までどおりブラウザの中で回す。
         </p>
       )}
       {health !== null && (

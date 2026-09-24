@@ -312,10 +312,8 @@ export function CourseInput() {
           <CourseShape detail={detail} />
           <p className="text-[11px] text-ink3">
             {detail.surface === 1 ? '芝' : 'ダート'} ・ 基準タイム{' '}
-            <span className="num">
-              {detail.finishTimeMin} から {detail.finishTimeMax}
-            </span>{' '}
-            秒
+            <span className="num">{detail.finishTimeMin}</span> から{' '}
+            <span className="num">{detail.finishTimeMax}</span> 秒
           </p>
         </>
       )}
@@ -889,8 +887,6 @@ export function RunPanel() {
   const { count, seed, running, progress, setCount, setSeed, run, useField, setUseField } =
     useStore();
   const gateCount = useStore((s) => s.track.gateCount);
-  const elapsedMs = useStore((s) => s.elapsedMs);
-  const summary = useStore((s) => s.summary);
   // 押す前に、どれくらい待つのかを出す。20 万試行は条件次第で数分かかる。
   //
   // セレクタの中で組み立ててはいけない。毎回新しいオブジェクトが返り、
@@ -961,7 +957,7 @@ export function RunPanel() {
         <span className="text-ink3">（相手 {gateCount - 1} 頭）</span>
       </label>
       <span className="ml-auto text-[11px] text-ink3">
-        {summary !== null && <span className="num mr-3">前回 {(elapsedMs / 1000).toFixed(2)} 秒</span>}
+        {/* 前回の所要時間は結果の見出しにある。ここでは実行前の見込みだけを出す */}
         Ctrl+Enter で実行、Esc で中断
       </span>
     </div>

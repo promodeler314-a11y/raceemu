@@ -197,6 +197,11 @@ export interface ChartProps {
   readonly syncKey?: string;
   /** 凡例を出すか。系列が多いときに畳める。 */
   readonly legend?: boolean;
+  /**
+   * スキルの印の読み方を図の下に書くか。図を縦に並べるときは最初の 1 枚だけにする。
+   * 同じ説明を図ごとに繰り返さない（docs/ui-audit-race-emulator.md 第1節「操作説明の繰り返し」）。
+   */
+  readonly skillHint?: boolean;
 }
 
 export function Chart({
@@ -210,6 +215,7 @@ export function Chart({
   xLabel = '距離 (m)',
   syncKey = 'race',
   legend = true,
+  skillHint: showSkillHint = true,
 }: ChartProps) {
   const ref = useRef<HTMLDivElement>(null);
   const plot = useRef<uPlot | null>(null);
@@ -277,7 +283,7 @@ export function Chart({
   }, [title, height, x, series, bands, includeZero, xLabel, syncKey, legend, theme]);
 
   const skillHint =
-    bands.skills.length === 0
+    !showSkillHint || bands.skills.length === 0
       ? undefined
       : '薄い縦線と三角の印はスキル発動位置。カーソルを合わせると名前を表示。';
   const caption =
@@ -377,6 +383,7 @@ export function FrameCharts() {
         />
         <Chart
           title="残り体力"
+          skillHint={false}
           x={prepared.x}
           height={160}
           bands={prepared.bands}
@@ -384,6 +391,7 @@ export function FrameCharts() {
         />
         <Chart
           title="勾配"
+          skillHint={false}
           subtitle="エミュレータ内部の勾配値。1.0 以上を上り坂、-1.0 以下を下り坂として扱う。"
           x={prepared.x}
           height={120}
@@ -436,8 +444,9 @@ function TrialNavigation() {
           次 →
         </button>
       </div>
-      <span className="num text-ink2">
-        試行 {detail.trial} / {results.length - 1} ・ シード {seed}
+      <span className="text-ink2">
+        試行 <span className="num">{detail.trial}</span> / <span className="num">{results.length - 1}</span> ・ シード{' '}
+        <span className="num">{seed}</span>
       </span>
       {time !== undefined && percentile !== null && (
         <span className="text-ink3">
@@ -586,10 +595,14 @@ export function TimeHistogram() {
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
         <h3 className="text-sm font-medium">タイムの分布</h3>
         <span className="text-xs text-ink3">
-          {bins.total.toLocaleString('ja-JP')} 試行 ・ ビン幅 {bins.width.toFixed(2)} 秒
+          {/* 試行数は結果の見出しにある。ここでは繰り返さない */}
+          ビン幅 {bins.width.toFixed(2)} 秒
         </span>
-        <span className="font-mono text-xs text-ink3">
-          p5 {formatTime(bins.p5)} ・ p50 {formatTime(bins.p50)} ・ p95 {formatTime(bins.p95)}
+        {/* 統計の記法（p5 / p50 / p95）ではなく言葉で書く。破線 3 本はこの 3 つの位置 */}
+        <span className="text-xs text-ink3">
+          中央 <span className="num">{formatTime(bins.p50)}</span> ・ 9 割が{' '}
+          <span className="num">{formatTime(bins.p5)}</span> 〜 <span className="num">{formatTime(bins.p95)}</span>
+          （破線）
         </span>
       </div>
       <svg

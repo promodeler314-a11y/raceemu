@@ -68,7 +68,7 @@ try {
 
   await page.goto(`http://localhost:${port}/`, { waitUntil: 'load' });
   // 左の面全体も section なので、内側のパネルを取る
-  const section = 'section.rounded-sm:has(h2:text("画面から取り込む"))';
+  const section = 'section:has(> h2:text("画面から取り込む"))';
   await page.setInputFiles(`${section} input[type=file]`, 'apps/api/test/fixtures/skill-list.png');
   await page.waitForSelector(`${section} table`, { timeout: 120000 });
 
@@ -103,7 +103,7 @@ try {
   // ステータスと適性の取り込み。見本は合成したもの（scripts/render-status-header.mjs）で、
   // 8 階級すべての色を入れてある。実機の写真はゲームの著作物なので置いていない。
   {
-    const statusSection = 'section.rounded-sm:has(h2:text("画面からステータスを取り込む"))';
+    const statusSection = 'section:has(> h2:text("画面からステータスを取り込む"))';
     await page.setInputFiles(
       `${statusSection} input[type=file]`,
       'apps/api/test/fixtures/status-header.png',

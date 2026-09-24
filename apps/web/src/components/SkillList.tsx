@@ -587,7 +587,7 @@ function Recommend({
           <button
             key={row.skillId}
             type="button"
-            className="rounded-full border border-rule2 px-2 py-0.5 text-xs hover:bg-sunken"
+            className="rounded-sm border border-rule2 px-2 py-0.5 text-xs hover:bg-sunken"
             aria-label={`${nameOf(row.skillId)} を所持に加えて探索の面へ`}
             onClick={() => onPick(row.skillId)}
           >

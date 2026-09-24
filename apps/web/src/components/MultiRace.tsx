@@ -167,6 +167,9 @@ export function MultiRaceDetail() {
         />
         <Chart
           title="速度"
+          // 凡例と印の説明は上の図と同じなので繰り返さない。頭の並びは下の表にもある
+          legend={false}
+          skillHint={false}
           x={prepared.times}
           height={200}
           includeZero={false}

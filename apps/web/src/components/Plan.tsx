@@ -222,7 +222,7 @@ export function PlanInput() {
                   <button
                     key={card.id}
                     type="button"
-                    className="rounded-full border border-rule2 px-2 py-0.5 text-xs hover:bg-sunken"
+                    className="rounded-sm border border-rule2 px-2 py-0.5 text-xs hover:bg-sunken"
                     onClick={() => toggleCard(card.id)}
                   >
                     {card.name} <span className="text-ink3">×</span>
