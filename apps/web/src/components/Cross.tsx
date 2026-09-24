@@ -2,7 +2,7 @@ import { Fragment, useMemo } from 'react';
 import type { CrossCourseRow } from '../../../../packages/sim/src/parallel/cross.ts';
 import { formatDuration } from '../format.ts';
 import { crossCourses, distancesOf, estimateCross, startSp, useStore, type CrossResult } from '../store.ts';
-import { CancelButton, Panel } from './Inputs.tsx';
+import { CancelButton, Explain, Panel } from './Inputs.tsx';
 
 /**
  * コース横断の評価。
@@ -97,11 +97,13 @@ export function CrossPanel() {
 
   return (
     <Panel title="コース横断">
-      <p className="text-xs text-ink3">
-        いまの個体を、選んだ距離とバ場に当たる全コースで走らせて並べます。
-        チャンピオンズミーティングのコースが決まる前に候補を見るときと、
-        育成中に「どのコースなら走れるか」を見るときに使います。
-      </p>
+      <p className="text-xs text-ink3">いまの個体を、選んだ距離とバ場に当たる全コースで走らせて並べます。</p>
+      <Explain className="mt-1">
+        <p>
+          チャンピオンズミーティングのコースが決まる前に候補を見るときと、
+          育成中に「どのコースなら走れるか」を見るときに使います。
+        </p>
+      </Explain>
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
         <label className="block">

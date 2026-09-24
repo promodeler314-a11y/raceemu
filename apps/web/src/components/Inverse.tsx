@@ -6,7 +6,7 @@ import {
 } from '../../../../packages/solver/src/critical.ts';
 import { GOAL_LABEL, STATUS_LABEL, type Goal, type TargetStatus } from '../../../../packages/solver/src/target.ts';
 import { useStore } from '../store.ts';
-import { CancelButton, Panel } from './Inputs.tsx';
+import { CancelButton, Explain, Panel } from './Inputs.tsx';
 
 /** 回数の見出し。最後の区切りはそれ以上をまとめて受け持つ。 */
 function bucketLabel(count: number): string {
@@ -164,13 +164,21 @@ export function InversePanel() {
 
   return (
     <Panel title="逆算">
-      <p className="mb-3 text-xs text-ink3">
-        目標を先に決めて、必要なステータスを求めます。試行ごとに目標を満たす最小値を探し、その分布から達成率ごとの必要値を読みます。
-        返すのは最小値なので、この水準では持久力温存の側に落ちます。つまり<strong>位置取り調整をほとんど払わない走りを前提にした答え</strong>です。
-        調整が毎回起きる前提だと、必要なスタミナは 170 から 210 ほど上がります。
-        下の「位置取り調整の回数ごとに表示」を付けると、調整が 0 回・1 回・2 回…だけ起きた場合の必要値をそれぞれ求めます。
-        同じ試行でもステータスの値によって調整が起きるかどうかが変わるため、これは全走査になり通常より遅くなります。
+      <p className="text-xs text-ink3">
+        目標を先に決めて、必要なステータスを求めます。答えは
+        <strong>位置取り調整をほとんど払わない走りを前提にした値</strong>です。
       </p>
+      <Explain className="mb-3 mt-1">
+        <p>
+          試行ごとに目標を満たす最小値を探し、その分布から達成率ごとの必要値を読みます。
+          返すのは最小値なので、この水準では持久力温存の側に落ちます。
+          調整が毎回起きる前提だと、必要なスタミナは 170 から 210 ほど上がります。
+        </p>
+        <p>
+          下の「位置取り調整の回数ごとに表示」を付けると、調整が 0 回・1 回・2 回…だけ起きた場合の必要値をそれぞれ求めます。
+          同じ試行でもステータスの値によって調整が起きるかどうかが変わるため、これは全走査になり通常より遅くなります。
+        </p>
+      </Explain>
       <label className="mb-3 flex items-center gap-2 text-xs text-ink3">
         <input
           type="checkbox"

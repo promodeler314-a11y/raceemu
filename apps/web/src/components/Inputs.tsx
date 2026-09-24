@@ -204,6 +204,22 @@ export function HorizontalScroll({ className = '', children }: { className?: str
   );
 }
 
+/**
+ * 仕組みの説明を畳んでおく入れ物。
+ *
+ * 各区画の冒頭に仕組みの説明が 2〜4 行あり、入力と結果が文章の間に埋もれていた
+ * （#106、UI 診断 第2節 C-1）。目的を言う 1 文と、結果を読むのに要る注意は外に出し、
+ * 残りをここに畳む。削らないのは、読み方の手がかりとして要る人がいるため。
+ */
+export function Explain({ className = '', children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <details className={`text-xs text-ink3 ${className}`}>
+      <summary className="cursor-pointer select-none text-ink2">詳しい説明</summary>
+      <div className="mt-1 flex flex-col gap-1">{children}</div>
+    </details>
+  );
+}
+
 export function Panel({
   title,
   variant = 'card',
