@@ -73,6 +73,21 @@ export function defaultShareOptions(): ShareOptions {
   };
 }
 
+/** 出走頭数が読めなかったときの値。チャンピオンズミーティングの 9 頭。 */
+export const DEFAULT_GATE_COUNT = 9;
+
+/**
+ * 出走頭数を整数の 1 から 18 に丸める。数として読めなければ 9 にする。
+ *
+ * 頭数は枠の表（`gateNumberToPostNumber`、1 から 18 頭ぶん）を引くのに使われ、
+ * 19 以上や NaN が入ると表の外に出て Worker が落ちる。外から入ってくる値
+ * （共有 URL、保存してあった設定、スナップショット）は、ここを通してから使う。
+ */
+export function normalizeGateCount(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return DEFAULT_GATE_COUNT;
+  return Math.min(18, Math.max(1, Math.round(value)));
+}
+
 /** `id:値` を `;` で連ねる。値が 0 の項目は書かない。 */
 function encodeCounts(counts: Readonly<Record<string, number>>): string {
   return Object.entries(counts)
@@ -179,7 +194,7 @@ export function decodeShareState(encoded: string): ShareState | null {
         location: track[0]!,
         course: track[1]!,
         condition: track[2]!,
-        gateCount: track[3]!,
+        gateCount: normalizeGateCount(track[3]),
         season: track[4] ? track[4] : undefined,
         weather: track[5] ? track[5] : undefined,
         time: track[6] ? track[6] : undefined,

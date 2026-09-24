@@ -51,6 +51,15 @@ const baseSetting: RaceSetting = {
 
 const derived = new DerivedSetting(baseSetting, emptyPassiveBonus(), data.trackData);
 
+/** 頭数だけを変えた設定 */
+function derivedAt(gateCount: number): DerivedSetting {
+  return new DerivedSetting(
+    { ...baseSetting, track: { ...baseSetting.track, gateCount } },
+    emptyPassiveBonus(),
+    data.trackData,
+  );
+}
+
 /** データに現れる条件の型を、分類ごとに集める。 */
 function typesByFidelity(hasField: boolean): Record<Fidelity, string[]> {
   const result: Record<Fidelity, Set<string>> = {
@@ -214,6 +223,94 @@ describe('スキルの再現度の分類', () => {
     }
   });
 
+  /**
+   * 9 頭と 12 頭以外の順位率（docs/order-condition.md 2.2 節）。
+   *
+   * 以前は対応表に無い頭数を落とす側に置き、理由の文に内部の鍵（`>=:40:18` のような形）と
+   * 型名を出していた。今は式で延ばした境界で判定するので近似の側に置き、
+   * 注記から引いた境界と同じ信頼度に見えないよう理由を分ける。
+   */
+  it('9 頭と 12 頭以外の順位率は近似に置き、式で延ばしたことを理由で分ける', () => {
+    const conditions = [
+      new SkillCondition('order_rate', '<=', 50),
+      new SkillCondition('order_rate', '>', 50),
+      new SkillCondition('order_rate_in40_continue', '==', 1),
+      new SkillCondition('order_rate_out70_continue', '==', 1),
+    ];
+    const internal = /[<>]=?:|order_rate|_continue/;
+    for (const condition of conditions) {
+      const listed = classifyCondition(condition, derivedAt(9), { hasField: true });
+      expect(listed.fidelity, condition.type).toBe('approximate');
+      // 9 頭と 12 頭は注記から引いた境界の理由で、式で延ばした理由ではない。
+      expect(listed.reason).toContain('注記からの読み取り');
+      expect(listed.reason).not.toContain('式で延ばした');
+      expect(classifyCondition(condition, derivedAt(12), { hasField: true }).reason).toBe(listed.reason);
+      for (const gateCount of [2, 3, 10, 11, 13, 18]) {
+        const extended = classifyCondition(condition, derivedAt(gateCount), { hasField: true });
+        expect(extended.fidelity, `${condition.type} ${gateCount}`).toBe('approximate');
+        expect(extended.reason, `${condition.type} ${gateCount}`).not.toBe(listed.reason);
+        expect(extended.reason).toContain('9 頭立てと 12 頭立て以外では式で延ばした');
+        expect(extended.reason).not.toMatch(internal);
+        // フィールドが無ければ、頭数によらず落とす側のまま。
+        expect(classifyCondition(condition, derivedAt(gateCount), { hasField: false }).fidelity).toBe(
+          'dropped',
+        );
+      }
+      // 頭数が 1〜18 の整数でなければ境界を決められないので落とす。理由に内部の値を出さない。
+      const broken = classifyCondition(condition, derivedAt(19), { hasField: true });
+      expect(broken.fidelity).toBe('dropped');
+      expect(broken.reason).not.toMatch(internal);
+      expect(broken.reason).not.toContain('19');
+    }
+  });
+
+  /**
+   * 9 頭と 12 頭で注記の表に無い値（docs/order-condition.md 2.2 節）。
+   *
+   * 式で埋めず、以前と同じく落とす側に置き、コンパイルは未対応として記録する。
+   * データの取り直しで注記に無い値が増えたとき、skill-coverage.test.ts がこの記録で落ちる。
+   * 理由の文は、以前と違って内部の鍵（`<=:35:9` の形）を出さない。
+   */
+  it('9 頭と 12 頭で表に無い順位率は、式で延ばさずに落とし、未対応として記録する', () => {
+    const internal = /[<>]=?:|order_rate|_continue/;
+    const cases = [
+      new SkillCondition('order_rate', '<=', 35),
+      new SkillCondition('order_rate', '>=', 35),
+      new SkillCondition('order_rate', '<', 50),
+    ];
+    for (const gateCount of [9, 12]) {
+      const setting = derivedAt(gateCount);
+      for (const condition of cases) {
+        const label = `${condition.operator} ${condition.value} ${gateCount}`;
+        const note = classifyCondition(condition, setting, { hasField: true });
+        expect(note.fidelity, label).toBe('dropped');
+        expect(note.reason, label).not.toMatch(internal);
+        expect(note.reason, label).not.toContain('式で延ばした');
+
+        unsupportedConditions.clear();
+        const predicate = compileConditions(
+          named('末脚'),
+          [[condition]],
+          setting,
+          new RngSet(1, 0),
+          newSkillScratch(),
+        );
+        expect([...unsupportedConditions], label).toEqual([
+          `order_rate ${condition.operator} ${condition.value} (${gateCount}頭)`,
+        ]);
+        // 満たしている前提のまま。順位によらず真になる。
+        for (let order = 1; order <= gateCount; order++) {
+          const state = { order, beforeStart: false } as unknown as Parameters<typeof predicate>[0];
+          expect(predicate(state), `${label} ${order}`).toBe(true);
+        }
+      }
+      // ほかの頭数では式で延ばすので、同じ条件でも落とさない。
+      const extended = classifyCondition(cases[0]!, derivedAt(gateCount + 1), { hasField: true });
+      expect(extended.fidelity).toBe('approximate');
+    }
+    unsupportedConditions.clear();
+  });
+
   it('理由は条件の型ごとに 1 つだけ並ぶ', () => {
     const notes = classifySkill(named('アクセルX'), derived, { hasField: false }).notes;
     expect(notes.length).toBeGreaterThan(0);
@@ -245,6 +342,24 @@ describe('分類とコンパイルの突き合わせ', () => {
     const recorded = new Set([...unsupportedConditions].map((entry) => entry.split(' ')[0]!));
     const dropped = new Set(typesByFidelity(true).dropped);
     for (const type of recorded) expect([type, dropped.has(type)]).toEqual([type, true]);
+  });
+
+  it('9 頭と 12 頭以外でも、順位率は未対応として記録されない', () => {
+    // 2〜18 頭は式で延ばした境界で判定する。分類が近似に置いているのと揃っていること。
+    for (const gateCount of [2, 18]) {
+      unsupportedConditions.clear();
+      const setting = derivedAt(gateCount);
+      const rng = new RngSet(1, 0);
+      for (const skill of data.skills) {
+        for (const invoke of skill.invokes) {
+          const scratch = newSkillScratch();
+          compileConditions(skill, invoke.preConditions, setting, rng, scratch);
+          compileConditions(skill, invoke.conditions, setting, rng, scratch);
+        }
+      }
+      const orderRate = [...unsupportedConditions].filter((entry) => entry.startsWith('order_rate'));
+      expect(orderRate, String(gateCount)).toEqual([]);
+    }
   });
 
   it('落としていると分類した型は、無視の表か本家も未対応の型に載っている', () => {

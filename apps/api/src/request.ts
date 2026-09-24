@@ -51,6 +51,13 @@ export function finite(value: unknown, name: string, min: number, max: number): 
   return value;
 }
 
+/** 範囲は `finite` と同じに見たうえで、小数を弾く。頭数や枠のように数えるものに使う。 */
+export function integer(value: unknown, name: string, min: number, max: number): number {
+  const checked = finite(value, name, min, max);
+  if (!Number.isInteger(checked)) fail(`${name} は整数で指定してください。`);
+  return checked;
+}
+
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -104,7 +111,7 @@ function checkBase(raw: unknown, data: GameData): SerializableRaceSetting {
   const place = data.trackData[location];
   if (place === undefined) fail(`知らないレース場です: ${location}`);
   if (place.courses[course] === undefined) fail(`知らないコースです: ${course}`);
-  finite(track['gateCount'], 'base.track.gateCount', 1, 18);
+  integer(track['gateCount'], 'base.track.gateCount', 1, 18);
 
   // 土台に付いているスキル（候補ではなく、常に持っているもの）
   const skillIds = raw['skillIds'];
@@ -166,7 +173,17 @@ export function checkRequest(raw: unknown, data: GameData): ResolvedRequest {
   const fieldRaw = raw['field'];
   if (fieldRaw !== undefined && fieldRaw !== null) {
     if (!isRecord(fieldRaw)) fail('field はオブジェクトか null で指定してください。');
-    const gateCount = finite(fieldRaw['gateCount'], 'field.gateCount', 2, 18);
+    const gateCount = integer(fieldRaw['gateCount'], 'field.gateCount', 2, 18);
+    // 束は相手 gateCount - 1 頭を base.track の枠で走らせる（下の track: base.track）。
+    // 頭数が枠より多いと runMultiRace が Worker の中で例外を投げ、ジョブごと落ちる。
+    // 画面（apps/web の searchApi）は両方に同じ頭数を入れるので、ここでも一致を求める。
+    const trackGateCount = base.track.gateCount;
+    if (gateCount !== trackGateCount) {
+      fail(
+        `field.gateCount（${gateCount}）は base.track.gateCount（${trackGateCount}）と同じ値にしてください。` +
+          '順位条件の相手は base.track の枠で走らせるので、頭数が食い違うと作れません。',
+      );
+    }
     const fieldSeed = fieldRaw['seed'] === undefined ? 9001 : finite(fieldRaw['seed'], 'field.seed', 0, 2 ** 32 - 1);
     const samples = fieldRaw['samples'] === undefined ? 64 : finite(fieldRaw['samples'], 'field.samples', 1, 256);
     // プロフィールは受け取らずこちらで作る。任意の相手を渡せるようにすると
