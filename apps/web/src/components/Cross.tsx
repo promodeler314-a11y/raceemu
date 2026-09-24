@@ -96,7 +96,8 @@ export function CrossPanel() {
   const groups = useMemo(() => (result === null ? [] : groupByDistance(result.rows)), [result]);
 
   return (
-    <Panel title="コース横断">
+    // 比較の面の主役は「比較」。コース横断は別の道具なので、カードにせず線の区切りにする（#101）
+    <Panel title="コース横断" variant="plain">
       <p className="text-xs text-ink3">いまの個体を、選んだ距離とバ場に当たる全コースで走らせて並べます。</p>
       <Explain className="mt-1">
         <p>

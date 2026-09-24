@@ -332,6 +332,11 @@ if (/JSON|Unexpected token/i.test(healthText)) fail(`生の例外が画面に出
 // （この段に来るまでに外してある）。軸を切り替えると注意の文が入れ替わることも見る。
 const sensitivitySection = 'section:has(h2:text("近似の感度"))';
 console.log('--- 近似の感度');
+// 探索の面の脇役なので畳んで始まる（#101）。開いてから触る
+// 中に「詳しい説明」の畳みもあるので、外側の畳みだけを見る
+if (!(await page.locator(`${sensitivitySection} > details`).evaluate((d) => d.open))) {
+  await page.click(`${sensitivitySection} > details > summary`);
+}
 if (!(await page.isChecked('[data-testid=sensitivity-axis-near]'))) {
   fail('既定の軸が「近く」の距離になっていない');
 }

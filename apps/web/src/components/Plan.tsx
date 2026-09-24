@@ -86,7 +86,7 @@ export function PlanInput() {
     .filter((card): card is NonNullable<typeof card> => card !== undefined);
 
   return (
-    <div className="rounded-sm border border-rule p-3">
+    <div className="border-t border-rule pt-3">
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-xs font-bold">候補の出どころ</span>
         {SOURCES.map((choice) => (

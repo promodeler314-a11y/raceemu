@@ -60,7 +60,7 @@ export function ServerSearchInput() {
   };
 
   return (
-    <div className="mt-3 rounded-sm border border-rule p-3">
+    <div className="mt-3 border-t border-rule pt-3">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label className="block">
           <span className="block text-xs text-ink3">探索を投げるサーバ</span>
