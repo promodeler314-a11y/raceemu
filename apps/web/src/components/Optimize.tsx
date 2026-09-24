@@ -191,7 +191,7 @@ export function OptimizePanel() {
               {result.best.map((id) => (
                 <span
                   key={id}
-                  className="rounded-full border border-rule2 px-2 py-0.5 text-xs"
+                  className="rounded-sm border border-rule2 px-2 py-0.5 text-xs"
                 >
                   <SkillNameWithMark name={name(id)} fidelity={fidelities.get(id)} />{' '}
                   <span className="text-ink3">{costModel.cost(id)} pt</span>

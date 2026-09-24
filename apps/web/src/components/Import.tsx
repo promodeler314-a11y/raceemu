@@ -121,10 +121,11 @@ export function ImportPanel() {
   };
 
   return (
-    <Panel title="画面から取り込む">
+    // 設定の列の脇役なので、主役の入力と同じ線だけの区切りにする。枠付きの箱にすると
+    // 主役より目立つ（docs/ui-audit-race-emulator.md 第1節「同じカード枠」）。
+    <Panel title="画面から取り込む" variant="plain">
       <p className="text-xs text-ink3">
         スキル一覧の写真を送ると、写っているスキル名を読み取って所持スキルの候補にする。
-        読み取りはサーバ側で動くので、自前で立てた版でだけ使える。
       </p>
       <p className="mt-1 text-xs text-ink3">
         ステータスやキャラの写真を含む画面全体ではなく、スキル名が並んだ部分だけを切り抜いて送る。
@@ -348,7 +349,7 @@ export function StatusImportPanel() {
   };
 
   return (
-    <Panel title="画面からステータスを取り込む">
+    <Panel title="画面からステータスを取り込む" variant="plain">
       <p className="text-xs text-ink3">
         「ウマ娘詳細」画面の<strong>上半分</strong>（ステータスの数字と適性が写っている部分）を送る。
         スキル一覧と違い、切り抜かずに画面全体のまま送ってよい。位置は画面の横幅に対する割合で決まる。

@@ -156,19 +156,24 @@ function EmptyOrSummary() {
           スキルごとの発動状況が出ます。まず試すなら、下のプリセットから始めるのが早いです。
         </p>
       </div>
-      <div className="grid w-full max-w-xl grid-cols-1 gap-2.5 text-left sm:grid-cols-3">
+      {/*
+        プリセットは罫線で区切った一覧にする。同じ形のカードを 3 枚横に並べる
+        構成は使わない（docs/ui-audit-race-emulator.md 第1節「レイアウト」）。
+      */}
+      <ul className="w-full max-w-xl divide-y divide-rule border-y border-rule text-left">
         {PRESETS.map((preset) => (
-          <button
-            key={preset.id}
-            type="button"
-            onClick={() => applyPreset(preset)}
-            className="flex flex-col gap-1.5 rounded-sm border border-rule2 bg-surface p-3 text-left hover:bg-sunken"
-          >
-            <span className="text-[13px] font-semibold">{preset.name}</span>
-            <span className="text-[11px] text-ink3">{preset.note}</span>
-          </button>
+          <li key={preset.id}>
+            <button
+              type="button"
+              onClick={() => applyPreset(preset)}
+              className="flex w-full flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-2 py-2.5 text-left hover:bg-sunken"
+            >
+              <span className="text-[13px] font-semibold">{preset.name}</span>
+              <span className="text-[11px] text-ink3">{preset.note}</span>
+            </button>
+          </li>
         ))}
-      </div>
+      </ul>
     </div>
   );
 }

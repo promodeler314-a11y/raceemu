@@ -44,7 +44,7 @@ export function TransferPanel() {
   };
 
   return (
-    <Panel title="本家と設定をやり取りする">
+    <Panel title="本家と設定をやり取りする" variant="plain">
       <p className="text-xs text-ink3">
         キャラ名、ステータス 5 つ、適性 3 つ（距離・バ場・脚質）、スキル名を並べた 1 行である。
         脚質、やる気、コース、人気、枠番はこの形式に無いので触らない。

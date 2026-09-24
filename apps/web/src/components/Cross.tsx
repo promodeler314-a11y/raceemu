@@ -165,8 +165,11 @@ export function CrossPanel() {
         {running ? (
           <>
             <CancelButton />
-            <span className="num text-sm text-ink3">
-              {progress} / {courses.length} コース
+            <span className="text-sm text-ink3">
+              <span className="num">
+                {progress} / {courses.length}
+              </span>{' '}
+              コース
             </span>
           </>
         ) : (
@@ -209,9 +212,10 @@ function CrossTable({
   return (
     <div className="mt-4">
       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 text-xs text-ink3">
-        <span className="num">
-          {result.rows.length} コース ・ {result.trials.toLocaleString('ja-JP')} 試行 / コース ・{' '}
-          {(result.elapsedMs / 1000).toFixed(1)} 秒
+        <span>
+          <span className="num">{result.rows.length}</span> コース ・{' '}
+          <span className="num">{result.trials.toLocaleString('ja-JP')}</span> 試行 / コース ・{' '}
+          <span className="num">{(result.elapsedMs / 1000).toFixed(1)}</span> 秒
         </span>
         <span>{result.useField ? '順位条件を判定した' : '順位条件は満たしている前提'}</span>
         {result.cancelled && <span>中断したので、走り終えたコースまでである</span>}

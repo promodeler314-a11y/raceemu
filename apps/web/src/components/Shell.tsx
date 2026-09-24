@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { saveIndividual } from '../individualsApi.ts';
 import { currentTrackDetail, gameData, useStore, type Tab } from '../store.ts';
+import { formatTime } from '../format.ts';
 import { ShareButton } from './Compare.tsx';
 
 /**
@@ -151,7 +152,11 @@ export function Header() {
 
   return (
     <header className="flex flex-none flex-wrap items-center gap-x-5 gap-y-2 border-b border-rule2 bg-surface px-5 py-2 md:h-[52px] md:flex-nowrap md:py-0">
-      <h1 className="font-mono text-[11px] tracking-[0.14em] text-ink2">RACE EMULATOR</h1>
+      {/*
+        題字は画面の言葉（日本語）で、本文と同じ書体にする。以前は英大文字を等幅と
+        字間で組んでいた（docs/ui-audit-race-emulator.md 第1節「等幅」「欧文スタイル」）。
+      */}
+      <h1 className="whitespace-nowrap text-[13px] font-semibold text-ink">レースエミュレータ</h1>
       {/* タブが増えると狭い幅では収まらないので、はみ出すぶんは横に送る */}
       <nav className="flex min-w-0 max-w-full gap-0.5 self-stretch overflow-x-auto" aria-label="画面">
         {TABS.map(({ id, label }) => (
@@ -193,16 +198,13 @@ declare const __COMMIT_SHA__: string | undefined;
 const COMMIT_SHA = typeof __COMMIT_SHA__ === 'string' ? __COMMIT_SHA__ : '';
 
 export function Footer() {
-  const summary = useStore((s) => s.summary);
-  const elapsedMs = useStore((s) => s.elapsedMs);
   return (
     <footer className="flex flex-none items-center gap-4 border-t border-rule bg-surface px-5 py-1.5 text-[11px] text-ink3">
+      {/*
+        試行数と所要時間は結果の見出しにある。ここにも出すと同じ面に 2 度出る
+        （docs/ui-audit-race-emulator.md 第1節「情報の重複」）。
+      */}
       <span>設定は自動で保存されます</span>
-      {summary !== null && (
-        <span className="num">
-          {summary.all.count.toLocaleString('ja-JP')} 試行 ・ {(elapsedMs / 1000).toFixed(2)} 秒
-        </span>
-      )}
       <span className="flex-1" />
       <span>
         計算モデルは{' '}
@@ -256,13 +258,12 @@ export function SettingsRail() {
   const snapshots = useStore((s) => s.snapshots);
   const setTab = useStore((s) => s.setTab);
   const detail = currentTrackDetail(track);
-  const place = gameData.trackData[track.location]?.name ?? '';
 
   const rows: readonly [string, string][] = [
     ['ウマ娘', `${STYLE_LABELS[uma.style] ?? uma.style} ・ 適性 ${uma.distanceFit}/${uma.surfaceFit}/${uma.styleFit}`],
     ['', `${uma.speed} / ${uma.stamina} / ${uma.power} / ${uma.guts} / ${uma.wisdom}`],
-    ['コース', `${place} ${detail === undefined ? '' : `${surfaceName(detail.surface)}${detail.distance}m`}`],
-    ['', `${track.gateCount} 頭 ・ コーナー ${detail?.corners.length ?? 0}`],
+    // コース名と距離はヘッダの「いまの条件」に常に出ているので、ここでは繰り返さない。
+    ['コース', `${track.gateCount} 頭 ・ コーナー ${detail?.corners.length ?? 0}`],
     ['所持スキル', `${skillIds.length} 件`],
   ];
 
@@ -293,7 +294,7 @@ export function SettingsRail() {
             <div key={snapshot.id} className="rounded-sm border border-rule px-2.5 py-2">
               <div className="text-xs font-semibold">{snapshot.label}</div>
               <div className="num text-xs text-ink2">
-                {snapshot.summary.all.averageTime.toFixed(3)}
+                {formatTime(snapshot.summary.all.averageTime)}
               </div>
             </div>
           ))}

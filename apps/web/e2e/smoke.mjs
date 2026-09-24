@@ -846,7 +846,7 @@ if (optionState.adjust === 0) fail('スキル発動率の選択が反映され�
 // 読み取り: 静的配信だけの環境では、口が無いことを伝えて終わる。
 // 状態番号ではなく中身が JSON かどうかで判断していないと、HTML を読もうとして落ちる。
 await goTab('設定');
-const importSection = 'section.rounded-sm:has(h2:text("画面から取り込む"))';
+const importSection = 'section:has(> h2:text("画面から取り込む"))';
 await page.setInputFiles(`${importSection} input[type=file]`, 'apps/api/test/fixtures/skill-list.png');
 await page.waitForTimeout(1200);
 const importNotes = await page.$$eval(`${importSection} p`, (ps) => ps.map((p) => p.textContent?.trim() ?? ''));

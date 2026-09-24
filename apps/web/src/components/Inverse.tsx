@@ -242,9 +242,9 @@ export function InversePanel() {
           </>
         )}
         {inverseResult !== null && !running && (
-          <span className="num text-xs text-ink3">
-            レース {inverseResult.races.toLocaleString()} 本 ・{' '}
-            {(inverseResult.elapsedMs / 1000).toFixed(2)} 秒 ・ 探し方は
+          <span className="text-xs text-ink3">
+            レース <span className="num">{inverseResult.races.toLocaleString()}</span> 本 ・{' '}
+            <span className="num">{(inverseResult.elapsedMs / 1000).toFixed(2)}</span> 秒 ・ 探し方は
             {inverseResult.method === 'bisect' ? '二分探索' : '全走査'}
           </span>
         )}

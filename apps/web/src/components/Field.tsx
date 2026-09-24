@@ -168,7 +168,7 @@ function OpponentRow({ id, index, savedIndividuals, savedMessage, onRequestSaved
                   <button
                     key={skillId}
                     type="button"
-                    className="rounded-full border border-rule2 px-2 py-0.5 text-xs"
+                    className="rounded-sm border border-rule2 px-2 py-0.5 text-xs"
                     onClick={() => toggleSkill(id, skillId)}
                     title="クリックで外す"
                   >
