@@ -128,7 +128,8 @@ export function SensitivityPanel() {
   const shaky = result === null ? [] : result.skills.filter((skill) => skill.widthPerError >= 1);
 
   return (
-    <Panel title="近似の感度">
+    // 探索の面の脇役。探索の結果を確かめるための道具なので、畳んで始める（#101）
+    <Panel title="近似の感度" variant="plain" collapsible defaultOpen={false}>
       <p className="text-xs text-ink3">
         近似の置き方を半分と倍に振って走らせ、短縮量がどれだけ動くかを見ます。
         幅が誤差より広いスキルは、順位を置き方のほうが決めています。

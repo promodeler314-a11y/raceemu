@@ -230,7 +230,8 @@ export function FieldPanel() {
 
   return (
     <>
-      <Panel title="相手">
+      {/* 勝率の面の主役は結果（着順）。入力の「相手」はカードにせず線の区切りにする（#101） */}
+      <Panel title="相手" variant="plain">
         <p className="text-xs text-ink3">
           出走する {gateCount} 頭を同時に走らせ、着順の分布と勝率を出します。
           試行回数はここで指定し、シードは実行バーの値を使います。

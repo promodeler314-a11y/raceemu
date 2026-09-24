@@ -224,6 +224,7 @@ export function Panel({
   title,
   variant = 'card',
   collapsible = false,
+  defaultOpen,
   summary,
   children,
 }: {
@@ -237,13 +238,17 @@ export function Panel({
   collapsible?: boolean;
   /** 畳んだときも見出しの右に出す要約 */
   summary?: React.ReactNode;
+  /** 初めに開いておくか。省くと、広い幅では開いて狭い幅では畳む */
+  defaultOpen?: boolean;
   children: React.ReactNode;
 }) {
   const [initiallyOpen] = useState(
-    () => typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches,
+    () => defaultOpen ?? (typeof window === 'undefined' || window.matchMedia('(min-width: 768px)').matches),
   );
   if (variant === 'plain' && collapsible) {
+    // 外側を section にしておく。畳めない区切りと同じく、見出しで区画を探せるようにする
     return (
+      <section>
       <details className="group flex flex-col" open={initiallyOpen}>
         <summary className="flex h-[34px] cursor-pointer list-none items-center gap-1.5 border-b border-rule [&::-webkit-details-marker]:hidden">
           <svg
@@ -263,6 +268,7 @@ export function Panel({
         </summary>
         <div className="flex flex-col gap-2.5 pt-2.5">{children}</div>
       </details>
+      </section>
     );
   }
   if (variant === 'plain') {
