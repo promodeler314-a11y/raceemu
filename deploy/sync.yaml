@@ -1,0 +1,225 @@
+# main に入ったものを自動で本番に出す仕組み。
+#
+#   kubectl apply -f deploy/sync.yaml
+#
+# CronJob raceemu-sync が 5 分ごとに sync.sh を走らせる。
+# sync.sh は GitHub から main の SHA を取り、Deployment raceemu の注釈
+# raceemu.dev/commit と違えば、build-job.yaml を雛形にビルド Job を作る。
+# BuildKit が GitHub 上のその SHA から直に組み、LAN のレジストリに
+# :<短縮 SHA> と :current の 2 つのタグで置く。終わったら rollout restart し、
+# 立ち上がってから注釈を書き換える。途中で失敗すれば注釈が古いままなので、
+# 次の回がやり直す。
+#
+# 先に deploy/k8s.yaml を置いておくこと（名前空間と Deployment が要る）。
+# 手順と理由は docs/deploy.md の 4.2 節。
+#
+# ConfigMap の中身（sync.sh と build-job.yaml）はクラスタに置く文字列そのもの
+# なので、説明はこの外に書く。中に書くとクラスタ側の中身が変わる。
+---
+# sync.sh が使う権限。Job を作って消す、Deployment を入れ替えて注釈を書く、
+# ビルドに失敗したときにログを読む、の 3 つだけを許す。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: raceemu-deployer
+  namespace: raceemu
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: raceemu-deployer
+  namespace: raceemu
+rules:
+  - apiGroups: [batch]
+    resources: [jobs]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: [""]
+    resources: [pods, pods/log]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments]
+    verbs: [get, list, watch, patch, update]
+  # rollout status が ReplicaSet を見る。
+  - apiGroups: [apps]
+    resources: [replicasets]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: raceemu-deployer
+  namespace: raceemu
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: raceemu-deployer
+subjects:
+  - kind: ServiceAccount
+    name: raceemu-deployer
+    namespace: raceemu
+---
+# build-job.yaml：1 回ごとのビルド Job の雛形。__SHA__ と __SHORT__ を sync.sh が埋める。
+#   レジストリ 192.168.0.203:5000 は LAN の平文の HTTP なので registry.insecure を付ける。
+#   組む元は GitHub 上のその SHA で、design-system の submodule も BuildKit が取りに行く。
+#   uma-design-system を非公開にすると、資格情報を持たないここで止まる。
+# sync.sh：上の流れの本体。ビルドは 30 分で打ち切る。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: raceemu-sync
+  namespace: raceemu
+data:
+  build-job.yaml: |
+    # __SHA__ / __SHORT__ は sync.sh が埋める。
+    apiVersion: batch/v1
+    kind: Job
+    metadata:
+      name: raceemu-build
+      namespace: raceemu
+    spec:
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+            - name: buildkit
+              image: moby/buildkit:v0.33.0-rootless
+              securityContext:
+                # Ubuntu では既定の AppArmor プロファイルが rootless の
+                # ユーザー名前空間を止めるので、このコンテナだけ外す。
+                appArmorProfile: { type: Unconfined }
+                seccompProfile: { type: Unconfined }
+                runAsUser: 1000
+                runAsGroup: 1000
+              env:
+                # rootless で動かすので、BuildKit 側の追加のプロセス隔離は外す。
+                - name: BUILDKITD_FLAGS
+                  value: --oci-worker-no-process-sandbox
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  exec buildctl-daemonless.sh build \
+                    --frontend=dockerfile.v0 \
+                    --opt context=https://github.com/promodeler314-a11y/raceemu.git#__SHA__ \
+                    --opt filename=deploy/Dockerfile \
+                    --output 'type=image,"name=192.168.0.203:5000/raceemu:__SHORT__,192.168.0.203:5000/raceemu:current",push=true,registry.insecure=true' \
+                    --export-cache 'type=registry,ref=192.168.0.203:5000/raceemu:buildcache,mode=max,registry.insecure=true' \
+                    --import-cache 'type=registry,ref=192.168.0.203:5000/raceemu:buildcache,registry.insecure=true'
+              resources:
+                requests: { cpu: "2", memory: 2Gi }
+                limits: { cpu: "6", memory: 6Gi }
+              volumeMounts:
+                - name: buildkitd
+                  mountPath: /home/user/.local/share/buildkit
+          volumes:
+            - name: buildkitd
+              emptyDir: {}
+  sync.sh: |
+    #!/bin/sh
+    set -eu
+
+    REPO="promodeler314-a11y/raceemu"
+    BRANCH="main"
+    NS="raceemu"
+    DEPLOY="raceemu"
+    BUILD_JOB="raceemu-build"
+    BUILD_TIMEOUT=1800
+
+    log() { echo "[$(date -u '+%Y-%m-%d %H:%M:%SZ')] $*"; }
+
+    remote=$(curl -sS -m 30 -H 'Accept: application/vnd.github.sha' \
+      "https://api.github.com/repos/${REPO}/commits/${BRANCH}")
+
+    # GitHub がエラーを JSON で返すことがある。そのままタグにしないよう形を確かめる。
+    if ! echo "$remote" | grep -qE '^[0-9a-f]{40}$'; then
+      log "GitHub から SHA を取得できなかった: $remote"
+      exit 1
+    fi
+
+    current=$(kubectl -n "$NS" get deploy "$DEPLOY" \
+      -o jsonpath='{.metadata.annotations.raceemu\.dev/commit}')
+
+    if [ "$remote" = "$current" ]; then
+      log "変更なし ($(echo "$remote" | cut -c1-7))"
+      exit 0
+    fi
+
+    short=$(echo "$remote" | cut -c1-7)
+    log "新しいコミット: ${short}（デプロイ済み: ${current:-なし}）"
+
+    # 同じ名前では作り直せないので、前回のビルド Job を消してから作る。
+    kubectl -n "$NS" delete job "$BUILD_JOB" --ignore-not-found --wait=true
+    sed -e "s|__SHA__|${remote}|g" -e "s|__SHORT__|${short}|g" /script/build-job.yaml \
+      | kubectl apply -f -
+
+    log "ビルド中..."
+    waited=0
+    while true; do
+      ok=$(kubectl -n "$NS" get job "$BUILD_JOB" -o jsonpath='{.status.succeeded}')
+      ng=$(kubectl -n "$NS" get job "$BUILD_JOB" -o jsonpath='{.status.failed}')
+      if [ "${ok:-0}" -ge 1 ]; then
+        break
+      fi
+      if [ "${ng:-0}" -ge 1 ]; then
+        log "ビルド失敗。末尾のログ:"
+        kubectl -n "$NS" logs "job/${BUILD_JOB}" --tail=40 || true
+        exit 1
+      fi
+      if [ "$waited" -ge "$BUILD_TIMEOUT" ]; then
+        log "ビルドが ${BUILD_TIMEOUT} 秒で終わらなかった"
+        exit 1
+      fi
+      sleep 15
+      waited=$((waited + 15))
+    done
+    log "ビルド完了: 192.168.0.203:5000/raceemu:${short}"
+
+    kubectl -n "$NS" rollout restart "deploy/${DEPLOY}"
+    kubectl -n "$NS" rollout status "deploy/${DEPLOY}" --timeout=10m
+
+    # 印を付けるのは Pod が実際に立ち上がったあと。
+    # 途中で失敗したときは印が古いままなので、次回の実行でやり直しになる。
+    kubectl -n "$NS" annotate deploy "$DEPLOY" \
+      "raceemu.dev/commit=${remote}" --overwrite
+    log "デプロイ完了: ${short}"
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: raceemu-sync
+  namespace: raceemu
+spec:
+  schedule: "*/5 * * * *"
+  # 前の回がビルドを待っている間に次の回を重ねない。
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 120
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 0
+      # ビルドの打ち切り（30 分）と rollout status の待ち（10 分）が収まる長さ。
+      activeDeadlineSeconds: 2400
+      template:
+        spec:
+          serviceAccountName: raceemu-deployer
+          restartPolicy: Never
+          containers:
+            - name: sync
+              image: alpine/kubectl:1.36.2
+              command: [/bin/sh, /script/sync.sh]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  memory: 128Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+          volumes:
+            - name: script
+              configMap:
+                name: raceemu-sync

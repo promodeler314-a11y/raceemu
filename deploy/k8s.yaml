@@ -1,20 +1,24 @@
-# k3s に置くときの最小の構成。
+# 本番（自前の k3s）の構成。
 #
 #   kubectl apply -f deploy/k8s.yaml
+#   kubectl apply -f deploy/sync.yaml   # main を自動で出す仕組み
 #
-# イメージは .github/workflows/image.yml が main への取り込みごとに
-# ghcr.io に置く。手元で組んで転送する手順を挟まない。
-# 版を固定したいときは :main を :sha-xxxxxxx に書き換える。
+# イメージは deploy/sync.yaml の CronJob がクラスタの中で組み、
+# LAN のレジストリ（192.168.0.203:5000）に :current として置く。
+# 手元で組んで転送する手順を挟まない。GitHub Actions（image.yml）が
+# ghcr.io に置くものは本番では使っていない。docs/deploy.md の 4 節を参照。
+#
+# 注釈 raceemu.dev/commit（いま出ている SHA）はここに書かない。
+# sync.sh が書き換える値で、ここに書くと apply のたびに巻き戻る。
+# 書かなくても、apply で消えたときは次の回が main を組み直すだけで済む。
 #
 # 名前空間を明示している。指定が無いと kubectl apply を実行した人の
 # 現在のコンテキストの名前空間にそのまま入ってしまい、Service の DNS 名
 # （<名前>.<名前空間>.svc.cluster.local）が人によって変わる。
-# cloudflared の宛先を後から調べ直す手間を無くすため、ここで固定する。
+# ゲートウェイ（raceemu-gate）の上流の宛先がこの名前なので、ここで固定する。
 #
-# 認証は持たせていない。Cloudflare Access を前に置く前提である。
-# 外への口は Service（raceemu.raceemu.svc.cluster.local:80）を
-# cloudflared の宛先にすれば足りる。Ingress は要らない。
-# docs/server-design.md の 5 節と docs/deploy.md の 5 節を参照。
+# アプリは認証を持たない。外への口は raceemu-gate（マジックリンク）を通す。
+# ゲートウェイの構成はこのリポジトリに無い（docs/deploy.md の 4.4 節）。
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -22,6 +26,7 @@ metadata:
 ---
 # 個体（ステータス+スキル構成）を SQLite で持つ場所。
 # replicas は 1 のままなので ReadWriteOnce で足りる。
+# 既定の local-path は最初に置かれたノードに縛られるので、Pod もそのノードで立つ。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -40,6 +45,10 @@ metadata:
   namespace: raceemu
 spec:
   replicas: 1
+  # ReadWriteOnce の PVC を持つので、古い Pod を止めてから新しい Pod を立てる。
+  # RollingUpdate だと新旧が同時に同じ PVC を掴もうとする。
+  strategy:
+    type: Recreate
   selector:
     matchLabels: { app: raceemu }
   template:
@@ -53,12 +62,18 @@ spec:
         fsGroup: 1000
       containers:
         - name: raceemu
-          image: ghcr.io/promodeler314-a11y/raceemu:main
-          # :main は同じ名前のまま中身が変わる。入れ替えるたびに引き直す。
+          image: 192.168.0.203:5000/raceemu:current
+          # :current は同じ名前のまま中身が変わる。入れ替えるたびに引き直す。
+          # 版を固定したいときは :current を短縮 SHA のタグに書き換え、
+          # 先に raceemu-sync を suspend する（docs/deploy.md の 4.2 節）。
           imagePullPolicy: Always
           ports:
-            - containerPort: 8080
+            - name: http
+              containerPort: 8080
           env:
+            # これが無いと個体はメモリに置かれ、入れ替えのたびに消える。
+            - name: RACEEMU_DATA_DIR
+              value: /data
             # 並列数は cgroup のクォータから決まる。
             # os.availableParallelism() は CPU アフィニティしか見ないので、
             # limits.cpu だけではノードのコア数を答えてしまう。
@@ -71,8 +86,6 @@ spec:
               value: "8"
             - name: RACEEMU_MAX_RACES
               value: "2000000"
-            - name: RACEEMU_DATA_DIR
-              value: /data
           volumeMounts:
             - name: data
               mountPath: /data
@@ -97,13 +110,20 @@ spec:
         - name: data
           persistentVolumeClaim: { claimName: raceemu-data }
 ---
+# LAN には MetalLB で 192.168.0.206 に直に出している。ここはゲートウェイを通らない。
+# 外からはゲートウェイが raceemu.raceemu.svc.cluster.local:80 に流してくる。
 apiVersion: v1
 kind: Service
 metadata:
   name: raceemu
   namespace: raceemu
+  annotations:
+    metallb.universe.tf/loadBalancerIPs: 192.168.0.206
 spec:
+  type: LoadBalancer
   selector: { app: raceemu }
   ports:
-    - port: 80
+    - name: http
+      port: 80
       targetPort: 8080
+      protocol: TCP

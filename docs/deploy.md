@@ -35,7 +35,10 @@ GitHub Pages への配信は廃止した（5 節）。
 ## 2. 取り込む前に検査する
 
 [ワークフロー](../.github/workflows/ci.yml)は `typecheck`、`test`、`build`、`e2e` の順に走らせる。
-`main` と pull request の両方で走り、配信とは切り離してある。
+`main` と pull request の両方で走る。
+
+**本番への入れ替え（4.2 節）はこの結果を見ない。** `main` に入ったものは、`main` での検査が赤でもそのまま出る。
+止めるのは取り込む前、pull request での検査である。
 
 `e2e` を外さないのは、これがビルドした成果物を実際に配信してブラウザで叩く唯一の段だからである。
 バンドルの上限、フッタのソースリンク、名前のないボタンの数、幅 390 での横あふれは、ここでしか見ていない。
@@ -59,10 +62,19 @@ GitHub Pages への配信は廃止した（5 節）。
 [探索・画面の読み取り・個体の保存](server-design.md)をサーバ側で回すための置き場である。
 静的ファイルも `apps/api` が同じオリジンから配る。
 
-**この節は、動いているクラスタから読み取った実態を書いている（2026-09-24 時点）。**
-入れ替えの仕組み（4.2 節）とゲートウェイ（4.4 節）のマニフェストはリポジトリに無く、クラスタにだけある。
-`deploy/k8s.yaml` も本番とは食い違っている（4.3 節）。
-クラスタを作り直すときは、ここに書いたものを `kubectl get -o yaml` で取っておいてから始める。
+マニフェストは 2 つある。
+
+| ファイル | 中身 |
+| --- | --- |
+| [`deploy/k8s.yaml`](../deploy/k8s.yaml) | 名前空間、アプリの Deployment と Service、個体の保存に使う PVC（4.3 節） |
+| [`deploy/sync.yaml`](../deploy/sync.yaml) | `main` を自動で出す仕組み（4.2 節） |
+
+**どちらも本番と一致させてある。** 手で本番を触ったら、同じ変更をここにも入れる。
+`kubectl diff -f deploy/k8s.yaml -f deploy/sync.yaml` が、4.3 節の印の 1 行のほかに何も出さなければ揃っている。
+2 つを繋ぐ名前とタグの食い違いは `test/deploy.test.ts` が見ている。
+
+ゲートウェイ（4.4 節）のマニフェストだけはリポジトリに無く、クラスタにだけある。
+クラスタを作り直すときは、先に `kubectl get -o yaml` で取っておく。
 
 全体の流れは次のとおりである。
 
@@ -117,7 +129,11 @@ $ curl -s -H "Authorization: Bearer $(cat /tmp/t)" https://ghcr.io/v2/promodeler
 
 ### 4.2 入れ替えは CronJob が自動でやる
 
-名前空間 `raceemu` に次のものが置いてある。
+[`deploy/sync.yaml`](../deploy/sync.yaml) が次のものを置く。
+
+```
+kubectl apply -f deploy/sync.yaml
+```
 
 | 種類 | 名前 | 役目 |
 | --- | --- | --- |
@@ -165,20 +181,30 @@ kubectl set image deploy/raceemu raceemu=192.168.0.203:5000/raceemu:<短縮 SHA>
 戻すときは `current` に指し直してから `suspend` を外す。
 止めたまま忘れると、以後の `main` が出なくなる。
 
-### 4.3 本番の Deployment は `deploy/k8s.yaml` と違う
+### 4.3 アプリ本体
 
-本番の `raceemu` はリポジトリの `deploy/k8s.yaml` から置かれたものではない。
-いまの `deploy/k8s.yaml` をそのまま `apply` すると、イメージが ghcr.io に切り替わる。
-Service も `type` と MetalLB の注釈が無いので、LAN の `192.168.0.206` が外れる。
+[`deploy/k8s.yaml`](../deploy/k8s.yaml) が置く。
 
-| | `deploy/k8s.yaml` | 本番 |
-| --- | --- | --- |
-| イメージ | `ghcr.io/promodeler314-a11y/raceemu:main` | `192.168.0.203:5000/raceemu:current` |
-| 入れ替えの戦略 | 既定（RollingUpdate） | `Recreate` |
-| Service | ClusterIP | `LoadBalancer`（MetalLB、`192.168.0.206`） |
-| 注釈 `raceemu.dev/commit` | 無い | 4.2 節が使う |
+```
+kubectl apply -f deploy/k8s.yaml
+```
 
-そのほかの値（PVC `raceemu-data` と `RACEEMU_DATA_DIR=/data`、`fsGroup: 1000`、`RACEEMU_MAX_RUNNING=1`、`RACEEMU_MAX_QUEUED=8`、`RACEEMU_MAX_RACES=2000000`、requests と limits、2 つの probe）は同じである。
+| 項目 | 値 |
+| --- | --- |
+| イメージ | `192.168.0.203:5000/raceemu:current`（`imagePullPolicy: Always`） |
+| 入れ替えの戦略 | `Recreate`（ReadWriteOnce の PVC を新旧の Pod が同時に掴まないため） |
+| 個体の保存 | PVC `raceemu-data`（1 GiB、`local-path`）を `/data` に、`RACEEMU_DATA_DIR=/data` |
+| Service | `LoadBalancer`（MetalLB、`192.168.0.206`） |
+| 探索の上限 | `RACEEMU_MAX_RUNNING=1`、`RACEEMU_MAX_QUEUED=8`、`RACEEMU_MAX_RACES=2000000` |
+
+**注釈 `raceemu.dev/commit` はマニフェストに書かない。**
+4.2 節の `sync.sh` が書き換える値で、マニフェストに書くと `apply` のたびに巻き戻る。
+そのため `kubectl diff` には、この注釈を消す 1 行だけが必ず出る。
+`apply` して実際に消えても、次の回が `main` を組み直して印を付け直すだけで済む。
+
+2026-09-24 まで、本番はこのファイルから置かれたものではなかった。
+イメージを ghcr.io から引く古い形のままで、置いたあとに手で変えた値がリポジトリに戻っていなかった。
+いまは本番から読み取った値に揃えてある。
 
 **個体の保存は、2026-09-24 まで本番で消えていた。**
 本番の Deployment に PVC も `RACEEMU_DATA_DIR` も無く、`apps/api` は個体をメモリの SQLite に持っていた（起動時のログに「再起動で消える」と出る）。
