@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { Route } from '../../../../packages/solver/src/candidates.ts';
 import { planCandidatesOf, useStore, type CandidateSource } from '../store.ts';
+import { shortCharaName } from '../skills.ts';
 
 /**
  * 候補の出どころの入力。
@@ -27,12 +28,6 @@ const SOURCES: readonly { readonly value: CandidateSource; readonly label: strin
   { value: 'plan', label: '育成計画' },
   { value: 'all', label: '全スキル' },
 ];
-
-/** `[勝負服]ウマ娘名` から勝負服の名前を落とす。並べ替えと検索に使う。 */
-function charaNameOf(name: string): string {
-  const end = name.indexOf(']');
-  return end < 0 ? name : name.slice(end + 1);
-}
 
 export function PlanInput() {
   const plan = useStore((s) => s.plan);
@@ -61,7 +56,7 @@ export function PlanInput() {
       deck === null
         ? []
         : [...deck.charas].sort((a, b) =>
-            charaNameOf(a.name).localeCompare(charaNameOf(b.name), 'ja'),
+            shortCharaName(a.name).localeCompare(shortCharaName(b.name), 'ja'),
           ),
     [deck],
   );

@@ -5,6 +5,7 @@ import {
   defaultShareOptions,
   encodeShareState,
   hashWithTab,
+  normalizeGateCount,
   readTabFromHash,
   type ShareState,
 } from '../src/share.ts';
@@ -72,6 +73,63 @@ describe('共有 URL', () => {
     const decoded = decodeShareState(old);
     expect(decoded).not.toBeNull();
     expect(decoded?.field).toEqual(defaultShareField());
+  });
+});
+
+/** 符号化した文字列のコースの列だけを書き換える。手で壊したリンクを作るのに使う。 */
+function withTrackPart(encoded: string, track: string): string {
+  const parts = atob(encoded.replace(/-/g, '+').replace(/_/g, '/')).split('|');
+  parts[1] = track;
+  return btoa(parts.join('|')).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+describe('共有 URL の出走頭数', () => {
+  const gateCountOf = (track: string) =>
+    decodeShareState(withTrackPart(encodeShareState(base), track))?.track.gateCount;
+
+  it('9 と 12 はそのまま読む', () => {
+    expect(gateCountOf('10006,10606,1,9,1,1,1')).toBe(9);
+    expect(gateCountOf('10006,10606,1,12,1,1,1')).toBe(12);
+  });
+
+  it('19 以上は 18 に丸める。枠番の表の外に出ると Worker が落ちる', () => {
+    expect(gateCountOf('10006,10606,1,19,1,1,1')).toBe(18);
+    expect(gateCountOf('10006,10606,1,1000,1,1,1')).toBe(18);
+  });
+
+  it('0 以下は 1 に丸める', () => {
+    expect(gateCountOf('10006,10606,1,0,1,1,1')).toBe(1);
+    expect(gateCountOf('10006,10606,1,-3,1,1,1')).toBe(1);
+  });
+
+  it('数として読めなければ 9 にする', () => {
+    expect(gateCountOf('10006,10606,1,NaN,1,1,1')).toBe(9);
+    expect(gateCountOf('10006,10606,1,abc,1,1,1')).toBe(9);
+    // 列が途中で切れている。
+    expect(gateCountOf('10006,10606,1')).toBe(9);
+  });
+
+  it('小数は整数に丸める', () => {
+    expect(gateCountOf('10006,10606,1,11.6,1,1,1')).toBe(12);
+  });
+});
+
+describe('出走頭数の丸め', () => {
+  it('整数の 1 から 18 に収める', () => {
+    expect(normalizeGateCount(9)).toBe(9);
+    expect(normalizeGateCount(18)).toBe(18);
+    expect(normalizeGateCount(19)).toBe(18);
+    expect(normalizeGateCount(1)).toBe(1);
+    expect(normalizeGateCount(0)).toBe(1);
+    expect(normalizeGateCount(8.5)).toBe(9);
+  });
+
+  it('数でないものは 9 にする', () => {
+    expect(normalizeGateCount(Number.NaN)).toBe(9);
+    expect(normalizeGateCount(Number.POSITIVE_INFINITY)).toBe(9);
+    expect(normalizeGateCount('12')).toBe(9);
+    expect(normalizeGateCount(undefined)).toBe(9);
+    expect(normalizeGateCount(null)).toBe(9);
   });
 });
 

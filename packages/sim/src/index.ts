@@ -15,3 +15,10 @@ export { WorkerPool, SimulationCancelled } from './parallel/pool.ts';
 export type { WorkerFactory, WorkerHandle, RunOptions } from './parallel/pool.ts';
 export * from './field/field.ts';
 export { orderRateBoundaries } from './data/orderRate.ts';
+export {
+  orderRateBoundaryOf,
+  orderRateByFormula,
+  orderRateContinueOf,
+  ORDER_RATE_MAX_GATE_COUNT,
+  type ResolvedOrderRate,
+} from './data/orderRateResolve.ts';

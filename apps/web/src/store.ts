@@ -47,12 +47,18 @@ import {
 } from '../../../packages/solver/src/candidates.ts';
 import type { DeckData } from '../../../packages/data/src/deck.ts';
 import type { Goal, TargetStatus } from '../../../packages/solver/src/target.ts';
-import { decodeShareState, encodeShareState, hashWithTab, readTabFromHash } from './share.ts';
+import {
+  decodeShareState,
+  encodeShareState,
+  hashWithTab,
+  normalizeGateCount,
+  readTabFromHash,
+} from './share.ts';
 import type { Individual } from './individualsApi.ts';
 import { hasEndpoint, runServerSearch, ServerSearchUnavailable } from './searchApi.ts';
 import { debounceSave, isPersistenceAvailable, loadPersisted } from './persist.ts';
 import { resolveSkillIds, type Preset } from './presets.ts';
-import { gameData, skillChoices, skillIndex, NO_CHARA } from './skills.ts';
+import { entryLabel, gameData, skillChoices, skillIndex, NO_CHARA } from './skills.ts';
 import { buildTransferIndex, formatTransfer, type ParsedTransfer } from './transfer.ts';
 import type { RaceFrame, RaceSimulationResult, RaceState } from '../../../packages/sim/src/state.ts';
 
@@ -242,6 +248,143 @@ export interface Opponent {
   readonly id: number;
   readonly uma: UmaStatus;
   readonly skillIds: readonly string[];
+  /**
+   * 手を入れた相手の印。ステータス、脚質、スキル、キャラ、個体の割り当ての
+   * どれかを触ると立つ（`setOpponent`、`toggleOpponentSkill`、`setOpponentChara`、
+   * `setOpponentFromIndividual`）。
+   *
+   * 立っていない相手は既定のままで、頭数を変えるたびに作り直す（`fitOpponents`）。
+   * 既定の相手はこの項目を持たない。`false` は書かず、項目ごと無くす。
+   * `defaultOpponents` の戻り値を印を入れる前と同じ形に保つためである。
+   *
+   * 画面の状態だけの印で、Worker に送る設定（`RaceSetting`）には入れない。
+   */
+  readonly edited?: true;
+}
+
+/**
+ * 勝率の面の出走頭数。
+ *
+ * コースの欄の頭数（`track.gateCount`）とは別に持つ。あちらは単騎、順位条件の束、
+ * 探索、スキル一覧が使い、9 と 12 の選択のままにしてある。勝率の面は全頭を実際に
+ * 走らせるので、2 から 18 のどれでも回せる。9 と 12 以外では順位率の条件を
+ * 式で延ばした境界で判定する（docs/order-condition.md）。
+ *
+ * 既定はチャンピオンズミーティングの 9 頭。相手と試行回数と同じく保存しない。
+ */
+export const DEFAULT_MULTI_GATE_COUNT = 9;
+export const MIN_MULTI_GATE_COUNT = 2;
+export const MAX_MULTI_GATE_COUNT = 18;
+
+/**
+ * 勝率の面の出走頭数を整数の 2 から 18 に丸める。数として読めなければ `fallback` を返す。
+ *
+ * 下を 2 にするのは、自分 1 頭だけでは着順の分布にならないためである。
+ */
+export function normalizeMultiGateCount(value: unknown, fallback = DEFAULT_MULTI_GATE_COUNT): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return fallback;
+  return Math.min(MAX_MULTI_GATE_COUNT, Math.max(MIN_MULTI_GATE_COUNT, Math.round(value)));
+}
+
+/** 既定の相手を並べる脚質の順。 */
+const OPPONENT_STYLE_ORDER: readonly Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
+
+/** UmaStatus の項目がすべて同じか。項目はどれも数か文字列なので、浅く比べれば足りる。 */
+function sameUma(a: UmaStatus, b: UmaStatus): boolean {
+  const keys = Object.keys(a) as (keyof UmaStatus)[];
+  return keys.length === Object.keys(b).length && keys.every((key) => a[key] === b[key]);
+}
+
+/**
+ * 頭数を変えたときに、覚えている相手をその頭数に合わせる。
+ *
+ * `opponents` は覚えている相手の全部（最大 17 頭）で、実際に走らせるのは先頭の
+ * `gateCount - 1` 頭である（`visibleOpponents`）。手を入れた相手（`edited`）と
+ * 既定のままの相手とで扱いを分け、次の 4 つを守る。
+ *
+ * 1. 手を入れた相手は、出走の並びの添字を変えない。途中への差し込みも並べ替えもしない。
+ *    全頭同時の乱数は添字から導くので（`multi/race.ts` の `entrySeed`）、
+ *    並びが動くと同じ相手でも出目が変わる。
+ * 2. 走らせる範囲にある既定のままの枠は、すべて作り直す。中身は、既定の脚質構成
+ *    （`defaultFieldProfile(gateCount).counts`）から走らせる範囲の手を入れた相手の
+ *    ぶんを引いた不足を、逃げ、先行、差し、追込の順に、添字の若い枠から埋めたもの。
+ *    手を入れた相手が既定の構成を超えなければ、走らせる相手の構成は既定に一致する。
+ *    超えたときは不足の合計が枠より多くなり、追込の側から切れる。
+ *    id は枠にいた相手のものを使い回し、行の key を変えない。枠が新しければ、
+ *    覚えている相手の最大の id の続きから振る。
+ * 3. 頭数を減らして隠れた、手を入れた相手は消さない。増やすと元の添字に戻る。
+ *    そのために、隠れた範囲は最後の手を入れた相手までを残し、それより後ろの
+ *    既定のままの相手だけを捨てる。間に挟まる既定のままの相手は添字を保つための
+ *    つなぎで、走らせる範囲に戻ったときに 2 の規則で作り直す。
+ * 4. 手を入れた相手がいなければ、どんな順に頭数を変えても、覚えている相手は
+ *    `defaultOpponents(gateCount)` と id まで含めて一致する。1 から 3 の帰結である。
+ *
+ * 以前は既定のままの相手も残して末尾に足していた。既定の相手は脚質の順に並ぶので、
+ * 大きい頭数の並びの先頭を取ると逃げと先行に偏り、誰も触っていないのに 9 頭や
+ * 12 頭が既定と違う顔ぶれで走っていた。
+ *
+ * 作り直した中身が前と同じ枠は、前の相手をそのまま使う。何も変わらなければ
+ * 受け取った配列をそのまま返す（参照も変えない）。同じ頭数でもう一度呼んでも
+ * 結果は変わらない。
+ *
+ * 頭数を変えたときだけに使う。同じ頭数のまま手を入れたあとに呼ぶと、既定のままの
+ * 相手の脚質が組み替わる。走らせる直前には呼ばない（`multiEntriesOf`）。
+ */
+export function fitOpponents(opponents: readonly Opponent[], gateCount: number): readonly Opponent[] {
+  const count = normalizeMultiGateCount(gateCount);
+  const visible = count - 1;
+  const profile = defaultFieldProfile(count);
+
+  // 走らせる範囲の既定のままの枠に配る脚質。
+  const edited = new Map<Style, number>();
+  let free = 0;
+  for (let i = 0; i < visible; i++) {
+    const opponent = opponents[i];
+    if (opponent?.edited) edited.set(opponent.uma.style, (edited.get(opponent.uma.style) ?? 0) + 1);
+    else free++;
+  }
+  const styles: Style[] = [];
+  for (const style of OPPONENT_STYLE_ORDER) {
+    const lacking = (profile.counts[style] ?? 0) - (edited.get(style) ?? 0);
+    for (let i = 0; i < lacking && styles.length < free; i++) styles.push(style);
+  }
+  // 構成の合計は相手の頭数に等しいので、ふつうは上で埋まりきる。
+  // 埋まらないときに頭数が欠けないよう、同じ順に回して足す。
+  for (let i = 0; styles.length < free; i++) styles.push(OPPONENT_STYLE_ORDER[i % OPPONENT_STYLE_ORDER.length]!);
+
+  let nextId = opponents.reduce((max, opponent) => Math.max(max, opponent.id), 0) + 1;
+  const fitted: Opponent[] = [];
+  let slot = 0;
+  for (let i = 0; i < visible; i++) {
+    const current = opponents[i];
+    if (current?.edited) {
+      fitted.push(current);
+      continue;
+    }
+    const uma: UmaStatus = { ...profile.uma, charaName: NO_CHARA, style: styles[slot++]!, gateNumber: 0 };
+    if (current !== undefined && current.skillIds.length === 0 && sameUma(current.uma, uma)) {
+      fitted.push(current);
+    } else {
+      fitted.push({ id: current?.id ?? nextId++, uma, skillIds: [] });
+    }
+  }
+  // 隠れた範囲は最後の手を入れた相手までを残す。
+  let last = -1;
+  for (let i = visible; i < opponents.length; i++) if (opponents[i]!.edited) last = i;
+  for (let i = visible; i <= last; i++) fitted.push(opponents[i]!);
+
+  const unchanged = fitted.length === opponents.length && fitted.every((opponent, i) => opponent === opponents[i]);
+  return unchanged ? opponents : fitted;
+}
+
+/**
+ * 実際に走らせる相手。覚えている相手の先頭から `gateCount - 1` 頭を取る。
+ *
+ * **呼ぶ側は `useMemo` で包むこと。** 毎回新しい配列が返るので、
+ * `useStore` のセレクタの中で呼ぶと描画が止まる。
+ */
+export function visibleOpponents(opponents: readonly Opponent[], gateCount: number): readonly Opponent[] {
+  return opponents.slice(0, normalizeMultiGateCount(gateCount) - 1);
 }
 
 /** 全頭同時の 1 試行ぶんの、自分の成績。走らせ直すのに試行番号が要る。 */
@@ -272,6 +415,15 @@ export interface MultiResult {
    */
   readonly entries: readonly RaceSetting[];
   readonly seed: number;
+  /**
+   * 走らせたときの呼び名。出走の並びと同じ順で、0 番が自分（`entryLabel`）。
+   *
+   * 表示はいまの相手ではなくこちらから引く。走らせたあとに相手のキャラを
+   * 変えても、結果の行の名前がずれないようにするためである。
+   */
+  readonly names: readonly string[];
+  /** 走らせた頭数。頭数を変えたあとも前の結果は残るので、結果の側に持つ。 */
+  readonly gateCount: number;
 }
 
 /**
@@ -483,8 +635,14 @@ interface AppState {
   /** スキル ID からヒントレベル（0 から 5）。0 の項目は持たない。 */
   hintLevels: Record<string, number>;
 
-  /** 相手の設定。頭数はコースの出走頭数から自分を引いた数に合わせる。 */
-  opponents: Opponent[];
+  /**
+   * 覚えている相手の全部（最大 17 頭）。走らせるのは先頭の `multiGateCount - 1` 頭で、
+   * 取り出しは `visibleOpponents` を使う。常にその頭数以上を持つ（`fitOpponents`）。
+   * 隠れた範囲には、手を入れた相手と、その添字を保つための既定のままの相手だけが残る。
+   */
+  opponents: readonly Opponent[];
+  /** 勝率の面の出走頭数（2 から 18）。コースの欄の `track.gateCount` とは別の値である。 */
+  multiGateCount: number;
   multiTrials: number;
   multiRunning: boolean;
   multiResult: MultiResult | null;
@@ -571,10 +729,22 @@ interface AppState {
   removeSnapshot: (id: number) => void;
   restoreSnapshot: (id: number) => void;
   setOpponent: (id: number, patch: Partial<UmaStatus>) => void;
+  /** 相手のキャラを選ぶ。前のキャラの固有と進化を外し、新しいキャラの固有を入れる。 */
+  setOpponentChara: (id: number, charaName: string) => void;
   toggleOpponentSkill: (id: number, skillId: string) => void;
-  /** 保存済みの個体をそのまま割り当てる。ステータスとスキルを丸ごと差し替える。 */
+  /**
+   * 保存済みの個体をそのまま割り当てる。ステータスとスキルを丸ごと差し替える。
+   * キャラ名が空で固有か進化を持っていれば、その持ち主をキャラにする。
+   */
   setOpponentFromIndividual: (id: number, individual: Individual) => void;
+  /** いまの頭数の既定で相手を全部作り直す。隠している相手も消す。 */
   resetOpponents: () => void;
+  /**
+   * 勝率の面の出走頭数を変える。整数の 2 から 18 に丸める。手を入れた相手は添字を
+   * 保って覚えておき、既定のままの相手はその頭数の既定の構成に合わせて作り直す
+   * （`fitOpponents`）。頭数が変わらなければ何もしない。
+   */
+  setMultiGateCount: (gateCount: number) => void;
   setMultiTrials: (trials: number) => void;
   runMulti: () => Promise<void>;
   /** 勝率の 1 試行を同じ種で走らせ直して開く。null を渡すと閉じる。 */
@@ -613,6 +783,25 @@ interface AppState {
 function withChara(uma: UmaStatus, skillIds: readonly string[]): UmaStatus {
   const chara = skillIndex.charaOf(skillIds);
   return chara === NO_CHARA ? uma : { ...uma, charaName: chara };
+}
+
+/**
+ * 保存済みの個体を相手に当てるときのステータス。
+ *
+ * キャラ名が書いてあればそれを正とする。空なら `withChara` と同じく持っている
+ * スキルの持ち主から引く。キャラを選ばずに保存した個体でも、固有を持っていれば
+ * 出走表に名前が出る。
+ */
+function umaOfIndividual(individual: Individual): UmaStatus {
+  const charaName = individual.uma.charaName ?? NO_CHARA;
+  if (charaName !== NO_CHARA) return individual.uma;
+  return withChara({ ...individual.uma, charaName: NO_CHARA }, individual.skillIds);
+}
+
+/** 外から入ってきたコースの指定の頭数を丸める（`normalizeGateCount`）。 */
+function normalizeTrack(track: TrackRef): TrackRef {
+  const gateCount = normalizeGateCount(track.gateCount);
+  return gateCount === track.gateCount ? track : { ...track, gateCount };
 }
 
 /**
@@ -766,7 +955,9 @@ export const useStore = create<AppState>((set, get) => ({
   debuffCounts: {},
   hintLevels: {},
 
-  opponents: [],
+  // 面を開いた時点で出走表が埋まっているよう、既定の相手を最初から持つ。
+  opponents: defaultOpponents(DEFAULT_MULTI_GATE_COUNT),
+  multiGateCount: DEFAULT_MULTI_GATE_COUNT,
   multiTrials: 500,
   multiRunning: false,
   multiResult: null,
@@ -806,7 +997,7 @@ export const useStore = create<AppState>((set, get) => ({
   dismissError: () => set({ error: null }),
   dismissNotice: () => set({ notice: null }),
   setUma: (patch) => set((s) => ({ uma: { ...s.uma, ...patch } })),
-  setTrack: (patch) => set((s) => ({ track: { ...s.track, ...patch } })),
+  setTrack: (patch) => set((s) => ({ track: normalizeTrack({ ...s.track, ...patch }) })),
   toggleSkill: (id) => set((s) => ({ skillIds: skillIndex.toggle(s.skillIds, id) })),
   clearSkills: () => set((s) => ({ uma: { ...s.uma, charaName: NO_CHARA }, skillIds: [] })),
   setCharaName: (charaName) =>
@@ -885,19 +1076,32 @@ export const useStore = create<AppState>((set, get) => ({
     }
   },
   setSeed: (seed) => set({ seed }),
+  // 相手に手を入れる 4 つの経路は、どれも `edited` の印を立てる。印の立った相手は
+  // 頭数を変えても作り直さず、添字も変えない（`fitOpponents`）。
   setOpponent: (id, patch) =>
     set((s) => ({
-      opponents: s.opponents.map((o) => (o.id === id ? { ...o, uma: { ...o.uma, ...patch } } : o)),
+      opponents: s.opponents.map((o) =>
+        o.id === id ? { ...o, uma: { ...o.uma, ...patch }, edited: true } : o,
+      ),
     })),
   toggleOpponentSkill: (id, skillId) =>
+    set((s) => ({
+      opponents: s.opponents.map((o) =>
+        // 自分の `toggleSkill` と同じ規則で持ち替える。同じグループの上位と下位や、
+        // 2 つある固有を同時には持たない。出走表の固有のチップが自分の入力と同じに動く。
+        o.id === id ? { ...o, skillIds: skillIndex.toggle(o.skillIds, skillId), edited: true } : o,
+      ),
+    })),
+  setOpponentChara: (id, charaName) =>
     set((s) => ({
       opponents: s.opponents.map((o) =>
         o.id === id
           ? {
               ...o,
-              skillIds: o.skillIds.includes(skillId)
-                ? o.skillIds.filter((x) => x !== skillId)
-                : [...o.skillIds, skillId],
+              uma: { ...o.uma, charaName },
+              // 自分の `setCharaName` と同じ規則で固有を入れ替える。
+              skillIds: skillIndex.applyChara(o.skillIds, charaName),
+              edited: true,
             }
           : o,
       ),
@@ -905,10 +1109,22 @@ export const useStore = create<AppState>((set, get) => ({
   setOpponentFromIndividual: (id, individual) =>
     set((s) => ({
       opponents: s.opponents.map((o) =>
-        o.id === id ? { ...o, uma: individual.uma, skillIds: individual.skillIds } : o,
+        o.id === id
+          ? { ...o, uma: umaOfIndividual(individual), skillIds: individual.skillIds, edited: true }
+          : o,
       ),
     })),
-  resetOpponents: () => set({ opponents: defaultOpponents(get().track.gateCount) }),
+  // いまの頭数の既定だけを持つ。隠れた相手も、手を入れた印も消える。
+  resetOpponents: () => set({ opponents: defaultOpponents(get().multiGateCount) }),
+  setMultiGateCount: (value) =>
+    set((s) => {
+      const multiGateCount = normalizeMultiGateCount(value, s.multiGateCount);
+      // 頭数が変わらなければ何もしない。同じ頭数で合わせ直すと、手を入れたあとの
+      // 既定のままの相手の脚質が組み替わってしまう（`fitOpponents`）。
+      if (multiGateCount === s.multiGateCount) return s;
+      // 前の結果は消さない。結果は走らせた頭数と呼び名を自分で持っている。
+      return { multiGateCount, opponents: fitOpponents(s.opponents, multiGateCount) };
+    }),
   setMultiTrials: (multiTrials) => set({ multiTrials }),
 
   /**
@@ -920,21 +1136,13 @@ export const useStore = create<AppState>((set, get) => ({
   runMulti: async () => {
     const state = get();
     if (state.running || state.multiRunning || state.optimizeRunning) return;
-    const opponents = state.opponents.length > 0 ? state.opponents : defaultOpponents(state.track.gateCount);
-    if (state.opponents.length === 0) set({ opponents });
+    // 1 試行を開くときに同じレースを走らせ直せるよう、走らせた設定をそのまま取っておく。
+    const { settings, names, opponents, gateCount } = multiEntriesOf(state);
+    if (opponents !== state.opponents) set({ opponents });
     controller = newController();
     set({ multiRunning: true, multiProgress: 0, error: null, multiResult: null, multiDetail: null });
     const started = performance.now();
     try {
-      // 1 試行を開くときに同じレースを走らせ直せるよう、走らせた設定をそのまま取っておく。
-      const settings: RaceSetting[] = [
-        buildSetting(state),
-        ...opponents.map((opponent) => ({
-          ...buildSetting(state),
-          uma: opponent.uma,
-          skills: opponent.skillIds.map((id) => gameData.skillsById.get(id)!).filter(Boolean),
-        })),
-      ];
       const entries = settings.map((setting) => toSerializable(setting));
       const { packed, entries: width, cancelled, trialIndices } = await getPool().runMulti(entries, system, {
         count: state.multiTrials,
@@ -967,11 +1175,13 @@ export const useStore = create<AppState>((set, get) => ({
           selfTrials,
           entries: settings,
           seed: state.seed,
+          names,
+          gateCount,
         },
         pace:
           trials === 0
             ? state.pace
-            : recordPace(state.pace, multiPaceKey(state.track.gateCount), {
+            : recordPace(state.pace, multiPaceKey(gateCount), {
                 count: trials,
                 ms: multiElapsedMs,
               }),
@@ -993,7 +1203,8 @@ export const useStore = create<AppState>((set, get) => ({
    * フレーム列は持っていないので、そのときの設定と種で同じ試行を走らせ直す。
    * 乱数は `(baseSeed, trial, streamKey)` から決まるので、走らせ直しても
    * 着順もタイムも元の実行と同じになる（`packages/sim/test/multi.test.ts`）。
-   * 9 頭で数十 ms なので、押してから出るまでの間に合う。
+   * 9 頭で数十 ms なので、押してから出るまでの間に合う。1 試行の重さは頭数に
+   * ほぼ比例する（`FALLBACK_PACE.multi`）。
    */
   showMultiTrial: (trial) => {
     if (trial === null) {
@@ -1303,7 +1514,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (snapshot === undefined) return;
     set({
       uma: withChara(snapshot.uma, snapshot.skillIds),
-      track: snapshot.track,
+      track: normalizeTrack(snapshot.track),
       skillIds: [...snapshot.skillIds],
       options: snapshot.options,
       debuffCounts: { ...snapshot.debuffCounts },
@@ -1537,7 +1748,7 @@ export const useStore = create<AppState>((set, get) => ({
     if (!shared && settings !== null) {
       set({
         uma: withChara(settings.uma, settings.skillIds),
-        track: settings.track,
+        track: normalizeTrack(settings.track),
         skillIds: [...settings.skillIds],
         count: settings.count,
         seed: settings.seed,
@@ -1583,7 +1794,7 @@ export const useStore = create<AppState>((set, get) => ({
     }
     set({
       uma: withChara(shared.uma, shared.skillIds),
-      track: shared.track,
+      track: normalizeTrack(shared.track),
       skillIds: [...shared.skillIds],
       count: shared.count,
       seed: shared.seed,
@@ -1600,21 +1811,78 @@ export const useStore = create<AppState>((set, get) => ({
 /**
  * 相手の既定。フィールド軌跡モデルと同じ想定から作るので、
  * 二つの方式を同じ相手で比べられる。
+ *
+ * 空の相手から `fitOpponents` で埋めたものと同じである。脚質を逃げ、先行、
+ * 差し、追込の順に既定の構成の数だけ並べ、id は 1 から振る。手を入れた印
+ * （`edited`）は持たない。
  */
-export function defaultOpponents(gateCount: number): Opponent[] {
-  const profile = defaultFieldProfile(gateCount);
-  const styles: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
-  const list: Opponent[] = [];
-  for (const style of styles) {
-    for (let i = 0; i < (profile.counts[style] ?? 0); i++) {
-      list.push({
-        id: list.length + 1,
-        uma: { ...profile.uma, charaName: '', style, gateNumber: 0 },
-        skillIds: [],
-      });
-    }
-  }
-  return list;
+export function defaultOpponents(gateCount: number): readonly Opponent[] {
+  return fitOpponents([], gateCount);
+}
+
+/** 出走 1 頭ぶんの設定を組むのに要る状態。 */
+interface SettingInput {
+  readonly uma: UmaStatus;
+  readonly track: TrackRef;
+  readonly skillIds: readonly string[];
+  readonly options: RunOptions;
+  readonly debuffCounts: Readonly<Record<string, number>>;
+}
+
+/** 全頭同時に走らせる出走の並びを組むのに要る状態。 */
+export interface MultiEntryInput extends SettingInput {
+  readonly opponents: readonly Opponent[];
+  readonly multiGateCount: number;
+}
+
+/** 全頭同時に走らせる出走の並び */
+export interface MultiEntries {
+  /** 出走の並びごとの設定。0 番が自分、1 番から相手。 */
+  readonly settings: RaceSetting[];
+  /** 出走の並びごとの呼び名（`entryLabel`） */
+  readonly names: string[];
+  /** 覚えている相手の全部。足りなかったぶんを埋めたあとのもの。 */
+  readonly opponents: readonly Opponent[];
+  /** 走らせる頭数。`settings` の長さに等しい。 */
+  readonly gateCount: number;
+}
+
+/**
+ * 全頭同時に走らせる出走の並びを組む。
+ *
+ * 頭数は勝率の面の値（`multiGateCount`）を使い、全頭の `track.gateCount` を
+ * それに揃える。自分のコースの頭数（単騎と順位条件の束が使う）はここでは
+ * 上書きするだけで、状態には書き戻さない。相手は覚えている相手の先頭から
+ * 頭数ぶんを取る。
+ *
+ * 足りていれば覚えている相手をそのまま使い、`fitOpponents` で合わせ直さない。
+ * 合わせ直すと、同じ頭数のまま相手に手を入れたあとで既定のままの相手の脚質が
+ * 組み替わり、出走表に見えていた顔ぶれと違う相手で走ってしまう。頭数を変える
+ * 操作（`setMultiGateCount`）が常に頭数ぶん以上を持たせるので、足りないのは
+ * 状態を直に書いたときだけである。そのときに限って `fitOpponents` で埋める。
+ */
+export function multiEntriesOf(state: MultiEntryInput): MultiEntries {
+  const gateCount = normalizeMultiGateCount(state.multiGateCount);
+  const opponents =
+    state.opponents.length >= gateCount - 1 ? state.opponents : fitOpponents(state.opponents, gateCount);
+  const running = visibleOpponents(opponents, gateCount);
+  const self: RaceSetting = { ...buildSetting(state), track: { ...state.track, gateCount } };
+  return {
+    settings: [
+      self,
+      ...running.map((opponent) => ({
+        ...self,
+        uma: opponent.uma,
+        skills: opponent.skillIds.map((id) => gameData.skillsById.get(id)!).filter(Boolean),
+      })),
+    ],
+    names: [
+      entryLabel(0, state.uma.charaName),
+      ...running.map((opponent, index) => entryLabel(index + 1, opponent.uma.charaName)),
+    ],
+    opponents,
+    gateCount,
+  };
 }
 
 /**
@@ -1821,18 +2089,24 @@ export function estimateRun(state: {
   );
 }
 
-/** 全頭同時の実行にかかる時間。 */
+/**
+ * 全頭同時の実行にかかる時間。
+ *
+ * 頭数は勝率の面の値（`multiGateCount`）を使う。コースの欄の頭数ではない。
+ * 実測は頭数ごとに分けて覚える。
+ */
 export function estimateMulti(state: {
   pace: Record<string, readonly PaceSample[]>;
-  track: TrackRef;
+  multiGateCount: number;
   multiTrials: number;
 }): Estimate {
+  const gateCount = normalizeMultiGateCount(state.multiGateCount);
   return estimateWith(
     state.pace,
-    multiPaceKey(state.track.gateCount),
+    multiPaceKey(gateCount),
     {
       fixedMs: FALLBACK_PACE.multi.fixedMs,
-      perTrialMs: FALLBACK_PACE.multi.perTrialMsPerHorse * state.track.gateCount,
+      perTrialMs: FALLBACK_PACE.multi.perTrialMsPerHorse * gateCount,
     },
     state.multiTrials,
   );
@@ -1891,7 +2165,7 @@ export function estimateSensitivity(state: {
   return { ...estimate, totalTrials };
 }
 
-function buildSetting(state: AppState): RaceSetting {
+function buildSetting(state: SettingInput): RaceSetting {
   return {
     uma: state.uma,
     track: state.track,
@@ -1946,7 +2220,7 @@ export function skillFidelities(
   skillIds: readonly string[],
 ): Map<string, SkillFidelity> {
   const derived = new DerivedSetting(
-    { ...buildSetting(state as AppState), skills: [] },
+    { ...buildSetting(state), skills: [] },
     emptyPassiveBonus(),
     gameData.trackData,
   );
@@ -1971,7 +2245,7 @@ export function modifiedStatus(state: {
   debuffCounts: Readonly<Record<string, number>>;
 }): Record<'speed' | 'stamina' | 'power' | 'guts' | 'wisdom', number> {
   const derived = new DerivedSetting(
-    buildSetting(state as AppState),
+    buildSetting(state),
     emptyPassiveBonus(),
     gameData.trackData,
   );
@@ -2000,7 +2274,7 @@ export function startSp(state: {
   debuffCounts: Readonly<Record<string, number>>;
 }): number {
   const derived = new DerivedSetting(
-    { ...buildSetting(state as AppState), skills: [] },
+    { ...buildSetting(state), skills: [] },
     emptyPassiveBonus(),
     gameData.trackData,
   );
