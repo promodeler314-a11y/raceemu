@@ -167,8 +167,8 @@ export function MultiRaceDetail() {
         />
         <Chart
           title="速度"
-          // 凡例と印の説明は上の図と同じなので繰り返さない。頭の並びは下の表にもある
-          legend={false}
+          subtitle="自分と、相手のうち最も先に入った 1 頭だけを描きます。"
+          // 印の説明は上の図と同じなので繰り返さない。凡例は 2 頭ぶんなので出す
           skillHint={false}
           x={prepared.times}
           height={200}
@@ -226,12 +226,16 @@ function prepare(replay: MultiReplay) {
   const selfPosition = (i: number) =>
     i < self.positions.length ? self.positions[i]! : self.positions[self.positions.length - 1]!;
 
-  // 着順が同じ色にならないよう、自分と 1 着だけを立たせる。残りは数が多いので
-  // 地の色に寄せる。色そのものではなく役割を渡す（テーマの切り替えに追従させるため）。
+  // 自分と、相手のうち最先着の 1 頭だけを立たせる。以前は「1 着」を立たせていたので、
+  // 自分が 1 着のときは比べる相手の線が出なかった（#102、UI 診断 第3節 A-6）。
+  // 残りは数が多いので地の色に寄せる。色そのものではなく役割を渡す（テーマの切り替えに追従させるため）。
+  const rival = replay.horses
+    .filter((horse) => horse.index !== replay.focus)
+    .reduce<HorseTrace | undefined>((best, horse) => (best === undefined || horse.order < best.order ? horse : best), undefined);
   const slotOf = (horse: HorseTrace): ChartSlot =>
-    horse.index === replay.focus ? 'speed' : horse.order === 1 ? 'sp' : 'other';
+    horse.index === replay.focus ? 'speed' : horse.index === rival?.index ? 'sp' : 'other';
   const widthOf = (horse: HorseTrace) =>
-    horse.index === replay.focus ? 2.5 : horse.order === 1 ? 2 : 1;
+    horse.index === replay.focus ? 2.5 : horse.index === rival?.index ? 2 : 1;
   const labelOf = (horse: HorseTrace) =>
     `${horse.index === replay.focus ? '自分' : `${horse.index + 1} 番`} ${
       STYLE_LABEL[horse.style] ?? horse.style
@@ -249,7 +253,8 @@ function prepare(replay: MultiReplay) {
     for (let i = 0; i < horse.positions.length; i++) values[i] = horse.positions[i]! - selfPosition(i);
     return { label: labelOf(horse), values, slot: slotOf(horse), width: widthOf(horse) };
   });
-  const speedSeries = horses.map((horse) => {
+  // 速度は 9 頭ぶん描くとほぼ重なって見分けられない。自分と最先着の相手だけにする
+  const speedSeries = horses.filter((horse) => horse.index === replay.focus || horse.index === rival?.index).map((horse) => {
     const values: (number | null)[] = new Array(frames).fill(null);
     for (let i = 0; i < horse.speeds.length; i++) values[i] = horse.speeds[i]!;
     return { label: labelOf(horse), values, slot: slotOf(horse), width: widthOf(horse) };
