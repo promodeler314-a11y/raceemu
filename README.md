@@ -8,7 +8,7 @@
 ## 配信
 
 自前の k3s に置く。
-[ワークフロー](.github/workflows/image.yml)が `main` への取り込みごとに `ghcr.io/promodeler314-a11y/raceemu` を更新するので、`kubectl apply -f deploy/k8s.yaml` で置く。
+`kubectl apply -f deploy/k8s.yaml -f deploy/sync.yaml` で置くと、あとはクラスタの中の CronJob が `main` を見て、組んで入れ替える。
 静的ファイルと[サーバ側の口](docs/server-design.md)（探索、画面の読み取り、個体の保存）を同じオリジンから配る。
 詳しくは[配信](docs/deploy.md)を参照。
 
@@ -16,7 +16,7 @@
 ビルドした成果物は静的ファイルだけで動くので（[配信](docs/deploy.md)の 1 節）置き場は選ばないが、画面の読み取りと個体の保存はサーバのある版でしか使えない。
 
 `main` と pull request では[検査のワークフロー](.github/workflows/ci.yml)が `typecheck`、`test`、`build`、`e2e` を通す。
-配信とは切り離してあり、通ったものを配るかどうかは置く側が決める。
+本番への入れ替えはこの結果を見ない。`main` に入ったものはそのまま出るので、止めるのは取り込む前の pull request である。
 
 ## 画面
 
