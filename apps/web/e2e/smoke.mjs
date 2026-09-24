@@ -1088,14 +1088,22 @@ const touchPage = await touch.newPage();
 await touchPage.goto('http://localhost:4173/#tab=summary', { waitUntil: 'load' });
 await touchPage.getByRole('button', { name: '実行', exact: true }).tap();
 await touchPage.waitForSelector('[data-testid=average-time]', { timeout: 60000 });
-// 図を画面の中に入れてから、いちばん高い棒を押す。画面の外や高さ 0 の棒には指が届かない
-await touchPage.locator('svg[role=img]').first().scrollIntoViewIfNeeded();
+// 書体（Google Fonts）が届くと文字が組み直されて図の位置がずれる。CI では届くのが遅く、
+// 先に測った座標をタップすると棒から外れることがあった。書体を待ち、座標ではなく
+// 棒そのものをタップする（Playwright がタップの直前に位置を測り直し、上に何か
+// 重なっていないかも確かめる）。高さ 0 の棒には指が届かないので、いちばん高い棒を選ぶ。
+await touchPage.evaluate(() => document.fonts.ready);
 const touchBars = touchPage.locator('svg[role=img] rect');
-const touchBoxes = await Promise.all([...Array(await touchBars.count()).keys()].map((i) => touchBars.nth(i).boundingBox()));
-const touchBar = touchBoxes.reduce((best, box) => (box !== null && (best === null || box.height > best.height) ? box : best), null);
-await touchPage.touchscreen.tap(touchBar.x + touchBar.width / 2, touchBar.y + touchBar.height - 3);
-await touchPage.waitForTimeout(300);
-const touchDetail = await touchPage.locator('svg[role=img]').first().locator('xpath=following-sibling::div[1]').innerText();
+const touchHeights = await touchBars.evaluateAll((rects) => rects.map((rect) => rect.getBoundingClientRect().height));
+const touchIndex = touchHeights.indexOf(Math.max(...touchHeights));
+const touchBarSize = await touchBars.nth(touchIndex).evaluate((rect) => {
+  const box = rect.getBoundingClientRect();
+  return { width: box.width, height: box.height };
+});
+await touchBars.nth(touchIndex).tap({ position: { x: touchBarSize.width / 2, y: touchBarSize.height - 3 } });
+const touchDetailBox = touchPage.locator('svg[role=img]').first().locator('xpath=following-sibling::div[1]');
+await touchDetailBox.filter({ hasText: /試行 ・/ }).waitFor({ timeout: 5000 }).catch(() => undefined);
+const touchDetail = await touchDetailBox.innerText();
 console.log('--- タップした分布の棒の内訳:', touchDetail.replace(/\s+/g, ' ').slice(0, 60));
 if (!/試行 ・/.test(touchDetail)) fail('タッチ端末で分布の棒をタップしても内訳が出ない');
 await touch.close();
