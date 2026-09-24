@@ -217,48 +217,53 @@ const COMMIT_SHA = typeof __COMMIT_SHA__ === 'string' ? __COMMIT_SHA__ : '';
 
 export function Footer() {
   return (
-    <footer className="flex flex-none items-center gap-4 border-t border-rule bg-surface px-5 py-1.5 text-[11px] text-ink3">
+    // 狭い幅では折り返すが、語の途中では折らない。区切り（・）ごとに 1 かたまりにする
+    // （docs/ui-gap.md 8 節、design/Mobile.dc.html）。
+    <footer className="flex flex-none flex-wrap items-center gap-x-4 gap-y-0.5 border-t border-rule bg-surface px-5 py-1.5 text-[11px] text-ink3">
       {/*
         試行数と所要時間は結果の見出しにある。ここにも出すと同じ面に 2 度出る
         （docs/ui-audit-race-emulator.md 第1節「情報の重複」）。
       */}
-      <span>設定は自動で保存されます</span>
-      <span className="flex-1" />
-      <span>
-        計算モデルは{' '}
-        <a
-          className="text-ink2 underline"
-          href="https://github.com/mee1080/umasim"
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          mee1080/umasim
-        </a>{' '}
-        の移植 ・ AGPL v3 ・{' '}
-        <a
-          className="text-ink2 underline"
-          href={
-            COMMIT_SHA === ''
-              ? 'https://github.com/promodeler314-a11y/raceemu'
-              : `https://github.com/promodeler314-a11y/raceemu/tree/${COMMIT_SHA}`
-          }
-          target="_blank"
-          rel="noreferrer noopener"
-        >
-          ソースはこちら
-        </a>
+      <span className="whitespace-nowrap">設定は自動で保存されます</span>
+      <span className="hidden flex-1 md:block" />
+      <span className="flex flex-wrap items-center gap-x-1">
+        <span className="whitespace-nowrap">
+          計算モデルは{' '}
+          <a
+            className="text-ink2 underline"
+            href="https://github.com/mee1080/umasim"
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            mee1080/umasim
+          </a>{' '}
+          の移植 ・
+        </span>
+        <span className="whitespace-nowrap">AGPL v3 ・</span>
+        <span className="whitespace-nowrap">
+          <a
+            className="text-ink2 underline"
+            href={
+              COMMIT_SHA === ''
+                ? 'https://github.com/promodeler314-a11y/raceemu'
+                : `https://github.com/promodeler314-a11y/raceemu/tree/${COMMIT_SHA}`
+            }
+            target="_blank"
+            rel="noreferrer noopener"
+          >
+            ソースはこちら
+          </a>
+          {COMMIT_SHA !== '' && ' ・'}
+        </span>
         {/*
           動かしている版と push してある版がズレると、リンクがあっても
           「いま動いているもののソース」にはならない（docs/server-design.md 6 節）。
           組んだコミットを出し、上のリンクもその版に向ける。
         */}
         {COMMIT_SHA !== '' && (
-          <>
-            {' ・ '}
-            <span className="num" data-testid="commit-sha">
-              {COMMIT_SHA}
-            </span>
-          </>
+          <span className="num whitespace-nowrap" data-testid="commit-sha">
+            {COMMIT_SHA}
+          </span>
         )}
       </span>
     </footer>
