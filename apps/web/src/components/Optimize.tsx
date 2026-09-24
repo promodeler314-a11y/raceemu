@@ -83,19 +83,19 @@ export function OptimizePanel() {
       {plan.source === 'plan' && (
         <p className="text-xs text-ink3">
           育成ウマ娘とデッキ、それに継承から候補を組み立て、予算に収まる範囲で最もタイムを縮める
-          組み合わせを探す。固有の継承版は 6 つまでしか積めない。
+          組み合わせを探します。固有の継承版は 6 つまでしか積めません。
         </p>
       )}
       {plan.source === 'all' && (
         <p className="text-xs text-ink3">
-          買えるスキル全体を候補として、予算に収まる範囲で最もタイムを縮める組み合わせを探す。
-          入手経路は問わないので、これは「取れるとしたら何が効くか」への答えである。
+          買えるスキル全体を候補として、予算に収まる範囲で最もタイムを縮める組み合わせを探します。
+          入手経路は問わないので、これは「取れるとしたら何が効くか」への答えです。
         </p>
       )}
       {plan.source === 'selected' && (
         <p className="text-xs text-ink3">
-          いま選んでいる {skillIds.length} 個を候補として、予算に収まる範囲で最もタイムを縮める組み合わせを探す。
-          候補をすべて取ると {poolCost} pt かかる。
+          いま選んでいる {skillIds.length} 個を候補として、予算に収まる範囲で最もタイムを縮める組み合わせを探します。
+          候補をすべて取ると {poolCost} pt かかります。
         </p>
       )}
       <div className="mt-3">
@@ -124,7 +124,7 @@ export function OptimizePanel() {
             onClick={() => void run()}
             disabled={running || busy || (plan.source === 'selected' && skillIds.length < 2)}
           >
-            {running ? '探索中' : '探索する'}
+            {running ? '探索中' : '探索の実行'}
           </button>
           {running && (
             <CancelButton />
@@ -163,12 +163,12 @@ export function OptimizePanel() {
           disabled={running || busy || !useField}
         />
         相手にも同じ構成を配る（自己整合）
-        <span className="text-xs text-ink3">初期解が決まった時点で相手の 3 割に配り、測り直す</span>
+        <span className="text-xs text-ink3">初期解が決まった時点で相手の 3 割に配り、測り直します。</span>
       </label>
       {!useField && (
         <p className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink">
-          順位条件を判定していない。脚質と噛み合わない条件のスキルが過大に評価される。
-          固有の継承版は 8 割 5 分が順位条件を持つので、判定しないと継承版だけがまとめて得をする。
+          順位条件を判定していません。脚質と噛み合わない条件のスキルが過大に評価されます。
+          固有の継承版は 8 割 5 分が順位条件を持つので、判定しないと継承版だけがまとめて得をします。
         </p>
       )}
 
@@ -184,7 +184,7 @@ export function OptimizePanel() {
       {result !== null && (
         <div className="mt-4 space-y-4">
           <div>
-            <h3 className="text-xs font-semibold">
+            <h3 className="text-xs font-bold">
               最良の構成（{result.cost} pt / 予算 {budget} pt）
             </h3>
             <div className="mt-1 flex flex-wrap gap-1">
@@ -202,13 +202,13 @@ export function OptimizePanel() {
               ))}
             </div>
             <p className="mt-1 text-sm">
-              何も取らない場合より <strong>{seconds(result.bestDiff.mean)}</strong> 秒速い（誤差{' '}
+              何も取らない場合より <strong>{seconds(result.bestDiff.mean)}</strong> 秒速くなります（誤差{' '}
               {(2 * result.bestDiff.stdError).toFixed(3)} 秒）
             </p>
             {result.bestDiff.spurtFlips > 0 && (
               <p className="text-xs text-ink3">
-                最大スパートの成否が入れ替わった試行が {result.bestDiff.spurtFlips} 本ある。
-                この差は一部の試行が大きく動かしている。
+                最大スパートの成否が入れ替わった試行が {result.bestDiff.spurtFlips} 本あります。
+                この差は一部の試行が大きく動かしています。
               </p>
             )}
             {/*
@@ -218,8 +218,8 @@ export function OptimizePanel() {
             {bestFidelity !== null && (bestFidelity.approximate > 0 || bestFidelity.dropped > 0) && (
               <p className="mt-1 text-xs text-ink3">
                 この構成の {result.best.length} 個のうち、{bestFidelity.approximate} 個は発動条件に
-                近似を含み、{bestFidelity.dropped} 個は条件を落としている。
-                落としているものが多いほど、短縮量は本来より大きく出ている。
+                近似を含み、{bestFidelity.dropped} 個は条件を落としています。
+                落としているものが多いほど、短縮量は本来より大きく出ています。
               </p>
             )}
             {/*
@@ -230,13 +230,13 @@ export function OptimizePanel() {
               <p className="mt-1 text-xs text-warn-ink" data-testid="optimize-sensitivity">
                 {sensitivityAxis === 'near' ? '「近く」の距離' : '近似確率の倍率'}
                 を振った結果では、この構成の {shakyInBest.length} 個は短縮量が誤差より
-                大きく動く（
+                大きく動きます（
                 {shakyInBest
                   .slice(0, 3)
                   .map((skill) => name(skill.skillId))
                   .join('、')}
                 {shakyInBest.length > 3 && ' ほか'}
-                ）。この差は近似の中に消えるので、近い順位の構成どうしはここでは決められない。
+                ）。この差は近似の中に消えるので、近い順位の構成どうしはここでは決められません。
               </p>
             )}
           </div>
@@ -244,10 +244,10 @@ export function OptimizePanel() {
           <FidelityLegend useField={useField} />
 
           <div className="overflow-x-auto">
-            <h3 className="text-xs font-semibold">最終段まで残った構成</h3>
+            <h3 className="text-xs font-bold">最終段まで残った構成</h3>
             <p className="text-xs text-ink3">
-              短縮量の大きい順に並べてある。
-              採用は誤差の 2 倍を超えて改善したときだけ動かすので、点推定が少し上でも採用とは限らない。
+              短縮量の大きい順に並べてあります。
+              採用は誤差の 2 倍を超えて改善したときだけ動かすので、点推定が少し上でも採用とは限りません。
             </p>
             <table className="mt-1 w-full text-xs">
               <thead className="text-ink3">
@@ -294,11 +294,11 @@ export function OptimizePanel() {
           </div>
 
           <div className="overflow-x-auto">
-            <h3 className="text-xs font-semibold">単体で足したときの効き</h3>
+            <h3 className="text-xs font-bold">単体で足したときの効き</h3>
             <p className="text-xs text-ink3">
-              単体は何も持っていない構成へ 1 つ足したとき、限界は初期解へ 1 つ足したときの短縮量である。
-              既に持っているものと食い合うスキルは限界のほうが小さくなる。並べ替えと足切りは限界で行う。
-              効きが 0 のものは、この設定では発動していない。
+              単体は何も持っていない構成へ 1 つ足したとき、限界は初期解へ 1 つ足したときの短縮量です。
+              既に持っているものと食い合うスキルは限界のほうが小さくなります。並べ替えと足切りは限界で行います。
+              効きが 0 のものは、この設定では発動していません。
             </p>
             <table className="mt-1 w-full text-xs">
               <thead className="text-ink3">
@@ -369,10 +369,10 @@ export function OptimizePanel() {
 
           {result.positionCompetition !== null && (
             <p className="text-xs text-ink3">
-              位置取り調整は取捨を選べないので候補には入れていない。それでもスタミナを払って速度を
-              得る取引であり、単体スキルより大きく効くことがある。この行が正なら払えている。大きく
-              負なら、スキルを増やすより先にスタミナか回復を足したほうがよい。平均回数が 0 に近い
-              ときは持久力温存の側にいて、そもそも調整が起きていない。
+              位置取り調整は取捨を選べないので候補には入れていません。それでもスタミナを払って速度を
+              得る取引であり、単体スキルより大きく効くことがあります。この行が正なら払えています。大きく
+              負なら、スキルを増やすより先にスタミナか回復を足したほうがよいです。平均回数が 0 に近い
+              ときは持久力温存の側にいて、そもそも調整が起きていません。
             </p>
           )}
 

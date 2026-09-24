@@ -78,7 +78,7 @@ function CriticalHistogram({
   const barWidth = 100 / bins.counts.length;
   return (
     <div>
-      <h3 className="text-sm font-medium">
+      <h3 className="text-sm font-bold">
         臨界値の分布
         {current !== undefined && current >= from && current <= to && (
           <span className="ml-2 text-xs font-normal text-ink3">
@@ -124,7 +124,7 @@ function CriticalHistogram({
       </div>
       {bins.unreachable > 0 && (
         <p className="mt-1 text-xs text-ink3">
-          範囲内では達成できなかった試行が {bins.unreachable} 件ある。
+          範囲内では達成できなかった試行が {bins.unreachable} 件あります。
         </p>
       )}
     </div>
@@ -165,11 +165,11 @@ export function InversePanel() {
   return (
     <Panel title="逆算">
       <p className="mb-3 text-xs text-ink3">
-        目標を先に決めて、必要なステータスを求める。試行ごとに目標を満たす最小値を探し、その分布から達成率ごとの必要値を読む。
-        返すのは最小値なので、この水準では持久力温存の側に落ちる。つまり<strong>位置取り調整をほとんど払わない走りを前提にした答え</strong>である。
-        調整が毎回起きる前提だと、必要なスタミナは 170 から 210 ほど上がる。
-        下の「位置取り調整の回数ごとに表示」を付けると、調整が 0 回・1 回・2 回…だけ起きた場合の必要値をそれぞれ求める。
-        同じ試行でもステータスの値によって調整が起きるかどうかが変わるため、これは全走査になり通常より遅い。
+        目標を先に決めて、必要なステータスを求めます。試行ごとに目標を満たす最小値を探し、その分布から達成率ごとの必要値を読みます。
+        返すのは最小値なので、この水準では持久力温存の側に落ちます。つまり<strong>位置取り調整をほとんど払わない走りを前提にした答え</strong>です。
+        調整が毎回起きる前提だと、必要なスタミナは 170 から 210 ほど上がります。
+        下の「位置取り調整の回数ごとに表示」を付けると、調整が 0 回・1 回・2 回…だけ起きた場合の必要値をそれぞれ求めます。
+        同じ試行でもステータスの値によって調整が起きるかどうかが変わるため、これは全走査になり通常より遅くなります。
       </p>
       <label className="mb-3 flex items-center gap-2 text-xs text-ink3">
         <input
@@ -231,7 +231,7 @@ export function InversePanel() {
           onClick={() => void solveInverse()}
           disabled={running}
         >
-          {running ? '計算中' : '逆算する'}
+          {running ? '計算中' : '逆算の実行'}
         </button>
         {running && (
           <>
@@ -284,8 +284,8 @@ export function InversePanel() {
               </div>
               <p className="mt-2 text-xs text-ink3">
                 列は「調整がちょうどこの回数だけ起きた場合」に必要な最小{STATUS_LABEL[inverseResult.status]}
-                。実際に何回起きるかは運なので、安全を見るなら右の列を見る。いまの
-                {STATUS_LABEL[inverseResult.status]}は <span className="num">{uma[inverseResult.status]}</span>。
+                です。実際に何回起きるかは運なので、安全を見るなら右の列を見てください。いまの
+                {STATUS_LABEL[inverseResult.status]}は <span className="num">{uma[inverseResult.status]}</span> です。
               </p>
             </div>
           ) : (
@@ -315,7 +315,7 @@ export function InversePanel() {
                     >
                       <th
                         scope="row"
-                        className={`py-1 text-left font-normal ${reached ? 'font-semibold text-acc-ink' : 'text-ink3'}`}
+                        className={`py-1 text-left font-normal ${reached ? 'font-bold text-acc-ink' : 'text-ink3'}`}
                       >
                         {(rate * 100).toFixed(0)} %
                         {reached && <span className="ml-2 text-[11px] font-normal">いまここ</span>}
@@ -340,9 +340,9 @@ export function InversePanel() {
           <p className="text-xs text-ink3">
             {GOAL_LABEL[inverseResult.goal.kind]}を目標に、{inverseResult.values.length} 試行。
             {inverseResult.byCount !== undefined
-              ? '回数ごとの内訳は二分探索では拾えないため、全走査になっている。'
+              ? '回数ごとの内訳は二分探索では拾えないため、全走査になっています。'
               : inverseResult.method === 'scan' &&
-                '完走は 1 試行の中で単調に変わらないため、二分探索は使えず全走査になる。'}
+                '完走は 1 試行の中で単調に変わらないため、二分探索は使えず全走査になります。'}
           </p>
         </div>
       )}

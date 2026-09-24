@@ -46,8 +46,8 @@ export function fail(message: string): never {
 }
 
 export function finite(value: unknown, name: string, min: number, max: number): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) fail(`${name} は数値で指定する`);
-  if (value < min || value > max) fail(`${name} は ${min} から ${max} の範囲で指定する`);
+  if (typeof value !== 'number' || !Number.isFinite(value)) fail(`${name} は数値で指定してください。`);
+  if (value < min || value > max) fail(`${name} は ${min} から ${max} の範囲で指定してください。`);
   return value;
 }
 
@@ -60,7 +60,7 @@ const DEFAULT_STAGES_MAX = 20000;
 function checkSystem(raw: unknown): SystemSetting {
   const base = defaultSystemSetting();
   if (raw === undefined) return base;
-  if (!isRecord(raw)) fail('system はオブジェクトで指定する');
+  if (!isRecord(raw)) fail('system はオブジェクトで指定してください。');
 
   const rates = [
     'skillLaneChangeRate', 'positionCompetitionRate', 'competeFightRate',
@@ -77,7 +77,7 @@ function checkSystem(raw: unknown): SystemSetting {
     const value = raw[key];
     if (value === undefined) continue;
     if (!Array.isArray(value) || value.length !== 10 || value.some((v) => typeof v !== 'boolean')) {
-      fail(`system.${key} は真偽値 10 個の配列で指定する`);
+      fail(`system.${key} は真偽値 10 個の配列で指定してください。`);
     }
     merged[key] = value;
   }
@@ -85,10 +85,10 @@ function checkSystem(raw: unknown): SystemSetting {
 }
 
 function checkBase(raw: unknown, data: GameData): SerializableRaceSetting {
-  if (!isRecord(raw)) fail('base はオブジェクトで指定する');
+  if (!isRecord(raw)) fail('base はオブジェクトで指定してください。');
 
   const uma = raw['uma'];
-  if (!isRecord(uma)) fail('base.uma はオブジェクトで指定する');
+  if (!isRecord(uma)) fail('base.uma はオブジェクトで指定してください。');
   for (const key of ['speed', 'stamina', 'power', 'guts', 'wisdom'] as const) {
     finite(uma[key], `base.uma.${key}`, 1, 3000);
   }
@@ -97,43 +97,43 @@ function checkBase(raw: unknown, data: GameData): SerializableRaceSetting {
   finite(uma['uniqueLevel'], 'base.uma.uniqueLevel', 0, 10);
 
   const track = raw['track'];
-  if (!isRecord(track)) fail('base.track はオブジェクトで指定する');
+  if (!isRecord(track)) fail('base.track はオブジェクトで指定してください。');
   // trackData はレース場（location）で引き、その中の courses にコースが入る。
   const location = finite(track['location'], 'base.track.location', 0, 1e9);
   const course = finite(track['course'], 'base.track.course', 0, 1e9);
   const place = data.trackData[location];
-  if (place === undefined) fail(`知らないレース場: ${location}`);
-  if (place.courses[course] === undefined) fail(`知らないコース: ${course}`);
+  if (place === undefined) fail(`知らないレース場です: ${location}`);
+  if (place.courses[course] === undefined) fail(`知らないコースです: ${course}`);
   finite(track['gateCount'], 'base.track.gateCount', 1, 18);
 
   // 土台に付いているスキル（候補ではなく、常に持っているもの）
   const skillIds = raw['skillIds'];
-  if (!Array.isArray(skillIds)) fail('base.skillIds は配列で指定する');
-  if (skillIds.length > 100) fail('base.skillIds が多すぎる');
+  if (!Array.isArray(skillIds)) fail('base.skillIds は配列で指定してください。');
+  if (skillIds.length > 100) fail('base.skillIds が多すぎます。');
   for (const id of skillIds) {
-    if (typeof id !== 'string' || !data.skillsById.has(id)) fail(`知らないスキル: ${String(id)}`);
+    if (typeof id !== 'string' || !data.skillsById.has(id)) fail(`知らないスキルです: ${String(id)}`);
   }
 
   return raw as unknown as SerializableRaceSetting;
 }
 
 export function checkRequest(raw: unknown, data: GameData): ResolvedRequest {
-  if (!isRecord(raw)) fail('本文は JSON のオブジェクトで送る');
+  if (!isRecord(raw)) fail('本文は JSON のオブジェクトで送ってください。');
 
   const base = checkBase(raw['base'], data);
   const system = checkSystem(raw['system']);
 
   const candidates = raw['candidates'];
-  if (!Array.isArray(candidates)) fail('candidates は配列で指定する');
-  if (candidates.length === 0) fail('candidates が空である');
+  if (!Array.isArray(candidates)) fail('candidates は配列で指定してください。');
+  if (candidates.length === 0) fail('candidates が空です。');
   // 買えるスキル全体はコースによって 600 個近くになる（東京 芝2400m で 579）。
   // 400 で切ると、画面の「全スキル」がそのまま弾かれて口の目的を果たさない
   // （docs/server-design.md 8 節の 7）。**枠を守るのは実際に走ったレース数の
   // 見張り**（RACEEMU_MAX_RACES）であって、この数ではない。ここは桁違いの
   // 要求を落とすためだけに残す。
-  if (candidates.length > 1200) fail(`candidates が多すぎる: ${candidates.length}`);
+  if (candidates.length > 1200) fail(`candidates が多すぎます: ${candidates.length}`);
   for (const id of candidates) {
-    if (typeof id !== 'string' || !data.skillsById.has(id)) fail(`知らないスキル: ${String(id)}`);
+    if (typeof id !== 'string' || !data.skillsById.has(id)) fail(`知らないスキルです: ${String(id)}`);
   }
 
   const budget = finite(raw['budget'], 'budget', 0, 1e6);
@@ -142,9 +142,9 @@ export function checkRequest(raw: unknown, data: GameData): ResolvedRequest {
   const hintLevelsRaw = raw['hintLevels'];
   const hintLevels: Record<string, number> = {};
   if (hintLevelsRaw !== undefined) {
-    if (!isRecord(hintLevelsRaw)) fail('hintLevels はオブジェクトで指定する');
+    if (!isRecord(hintLevelsRaw)) fail('hintLevels はオブジェクトで指定してください。');
     for (const [id, level] of Object.entries(hintLevelsRaw)) {
-      if (!data.skillsById.has(id)) fail(`知らないスキル: ${id}`);
+      if (!data.skillsById.has(id)) fail(`知らないスキルです: ${id}`);
       hintLevels[id] = finite(level, `hintLevels.${id}`, 0, 5);
     }
   }
@@ -153,11 +153,11 @@ export function checkRequest(raw: unknown, data: GameData): ResolvedRequest {
   const stagesRaw = raw['stages'];
   if (stagesRaw !== undefined) {
     if (!Array.isArray(stagesRaw) || stagesRaw.length === 0 || stagesRaw.length > 5) {
-      fail('stages は 1 個から 5 個の配列で指定する');
+      fail('stages は 1 個から 5 個の配列で指定してください。');
     }
     const checked = stagesRaw.map((v, i) => finite(v, `stages[${i}]`, 1, DEFAULT_STAGES_MAX));
     for (let i = 1; i < checked.length; i++) {
-      if (checked[i]! <= checked[i - 1]!) fail('stages は増加する順に並べる');
+      if (checked[i]! <= checked[i - 1]!) fail('stages は増加する順に並べてください。');
     }
     stages = checked;
   }
@@ -165,7 +165,7 @@ export function checkRequest(raw: unknown, data: GameData): ResolvedRequest {
   let field: FieldSpec | null = null;
   const fieldRaw = raw['field'];
   if (fieldRaw !== undefined && fieldRaw !== null) {
-    if (!isRecord(fieldRaw)) fail('field はオブジェクトか null で指定する');
+    if (!isRecord(fieldRaw)) fail('field はオブジェクトか null で指定してください。');
     const gateCount = finite(fieldRaw['gateCount'], 'field.gateCount', 2, 18);
     const fieldSeed = fieldRaw['seed'] === undefined ? 9001 : finite(fieldRaw['seed'], 'field.seed', 0, 2 ** 32 - 1);
     const samples = fieldRaw['samples'] === undefined ? 64 : finite(fieldRaw['samples'], 'field.samples', 1, 256);

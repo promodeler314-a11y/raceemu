@@ -111,7 +111,7 @@ describe('読み取りの失敗', () => {
     });
     try {
       await expect(broken.recognize(Buffer.from([0x89, 0x50, 0x4e, 0x47]))).rejects.toThrow(
-        /読み取りに失敗した/,
+        /読み取りに失敗しました/,
       );
     } finally {
       await broken.dispose();
@@ -234,7 +234,7 @@ describe('読み取りの口', () => {
         expect(res.status).toBe(500);
         expect(res.headers.get('content-type')).toContain('application/json');
         const body = (await res.json()) as { error: string };
-        expect(body.error).toMatch(/読み取りに失敗した/);
+        expect(body.error).toMatch(/読み取りに失敗し/);
       },
     );
   }, 60000);

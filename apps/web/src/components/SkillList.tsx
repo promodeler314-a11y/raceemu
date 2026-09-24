@@ -110,8 +110,8 @@ function Unavailable({ message }: { message: string }) {
         {message}
       </p>
       <p className="mt-2 text-xs text-ink3">
-        他の面はこの表に依っていないので、そのまま使える。いまの設定でのスキルの効きは、
-        探索の面の「単体で足したときの効き」が実際に走らせて出す。
+        他の面はこの表に依っていないので、そのまま使えます。いまの設定でのスキルの効きは、
+        探索の面の「単体で足したときの効き」が実際に走らせて出します。
       </p>
     </Panel>
   );
@@ -141,14 +141,14 @@ export function SkillListPanel() {
     return (
       <Panel title="スキル一覧">
         <p className="text-xs text-ink3" data-testid="skill-list-loading">
-          事前に計算した表の一覧を読み込んでいる。
+          事前に計算した表の一覧を読み込んでいます。
         </p>
       </Panel>
     );
   }
   if (index.courses.length === 0) {
     return (
-      <Unavailable message="この配布物には、測ってあるコースが 1 つも無い。" />
+      <Unavailable message="この配布物には、測ってあるコースが 1 つもありません。" />
     );
   }
   return <SkillListCoursePicker index={index} />;
@@ -188,14 +188,14 @@ function SkillListCoursePicker({ index }: { index: SkillListIndex }) {
   return (
     <Panel title="スキル一覧">
       <p className="text-xs text-ink3">
-        全スキルを、決めておいた基準の個体で、<strong>コースごとに</strong> 1 つずつ足して測った表である。
-        ここでは走らせない。事前に計算したものを読んでいるだけなので、いまの設定は効かない。
+        全スキルを、決めておいた基準の個体で、<strong>コースごとに</strong> 1 つずつ足して測った表です。
+        ここでは走らせません。事前に計算したものを読んでいるだけなので、いまの設定は効きません。
       </p>
       <p className="mt-1 rounded-sm border border-rule bg-sunken px-3 py-2 text-xs text-ink2">
-        <strong>「単体」であって「限界」ではない。</strong>
+        <strong>「単体」であって「限界」ではありません。</strong>
         何も持っていない構成へ 1 つだけ足したときの差なので、食い合うスキル
-        （最終直線の加速どうしなど）は過大に出る。既に何か持っている状態での効きは、
-        探索の面の「限界」の列が出す。
+        （最終直線の加速どうしなど）は過大に出ます。既に何か持っている状態での効きは、
+        探索の面の「限界」の列が出します。
       </p>
 
       <div className="mt-3 flex flex-wrap items-end gap-3">
@@ -220,8 +220,8 @@ function SkillListCoursePicker({ index }: { index: SkillListIndex }) {
           </select>
         </label>
         <p className="pb-1 text-xs text-ink3" data-testid="skill-list-coverage">
-          測ってあるのは <span className="num">{index.courses.length}</span> コースである。
-          {' '}表はコースごとに 1 枚ずつ作るので、まだ回していないコースはここに出ない。
+          測ってあるのは <span className="num">{index.courses.length}</span> コースです。
+          {' '}表はコースごとに 1 枚ずつ作るので、まだ回していないコースはここに出ません。
         </p>
       </div>
 
@@ -236,7 +236,7 @@ function SkillListCoursePicker({ index }: { index: SkillListIndex }) {
       )}
       {error === null && file === null && (
         <p className="mt-3 text-xs text-ink3" data-testid="skill-list-loading">
-          {courseLabel(entry.course)} の表を読み込んでいる。
+          {courseLabel(entry.course)} の表を読み込んでいます。
         </p>
       )}
       {file !== null && <SkillListTable file={file} index={index} />}
@@ -368,8 +368,8 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
       </div>
 
       <p className="mt-2 text-xs text-ink3">
-        <strong>基準の個体はスタミナが足りている。</strong>
-        育成の上限まで持たせてあり、段の違いは速度・パワー・根性・賢さだけである
+        <strong>基準の個体はスタミナが足りています。</strong>
+        育成の上限まで持たせてあり、段の違いは速度・パワー・根性・賢さだけです
         {baseline !== undefined && (
           <>
             （いまは {baseline.label}：スピード {baseline.speed} ・ スタミナ {baseline.stamina} ・
@@ -377,11 +377,11 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
           </>
         )}
         。ぎりぎり最大スパートに届く個体にすると、スタミナ 1 点の値打ちが他のどの効果より
-        大きくなり、上位が回復スキルで埋まってしまう。
-        {FIXED_AXES.join('、')}の選択欄は出していない。この版が 1 通りしか測っておらず、
-        選べても何も変わらないからである（バ場状態は
+        大きくなり、上位が回復スキルで埋まってしまいます。
+        {FIXED_AXES.join('、')}の選択欄は出していません。この版が 1 通りしか測っておらず、
+        選べても何も変わらないからです（バ場状態は
         {TRACK_CONDITION_LABEL[file.settings.trackCondition] ?? `不明（${file.settings.trackCondition}）`}
-        で固定）。測る軸が増えれば選択欄も増える。
+        で固定）。測る軸が増えれば選択欄も増えます。
       </p>
 
       {file.staminaDemand != null && isStaminaBinding(file) && (
@@ -389,14 +389,14 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
           className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink"
           data-testid="skill-list-stamina-demand"
         >
-          <strong>このコースは上限のスタミナでも余裕が無い。</strong>
+          <strong>このコースは上限のスタミナでも余裕がありません。</strong>
           最大スパートを出すのに要るスタミナは実測で{' '}
           <span className="num">{file.staminaDemand.p50}</span>（五分五分）／
-          <span className="num">{file.staminaDemand.p90}</span>（ほぼ確実）。
+          <span className="num">{file.staminaDemand.p90}</span>（ほぼ確実）です。
           基準の個体は上限の <span className="num">{file.baselines[0]?.stamina}</span> まで
-          持たせてあるが、余裕は <span className="num">{staminaHeadroom(file)}</span> しかない。
-          <strong>回復スキルが上位を占めるのは、基準の個体の置き方ではなくこのコースの性質である。</strong>
-          スタミナはスパートを保てる距離にも効くので、余裕が無いうちは回復が効き続ける。
+          持たせてありますが、余裕は <span className="num">{staminaHeadroom(file)}</span> しかありません。
+          <strong>回復スキルが上位を占めるのは、基準の個体の置き方ではなくこのコースの性質です。</strong>
+          スタミナはスパートを保てる距離にも効くので、余裕が無いうちは回復が効き続けます。
         </p>
       )}
 
@@ -446,7 +446,7 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
                     </button>
                     <PlainFidelityMark fidelity={row.fidelity} />
                     {held.has(row.skillId) && (
-                      <span className="ml-1 text-acc-ink" title="設定の面で選んでいる">
+                      <span className="ml-1 text-acc-ink" title="設定の面で選んでいます">
                         ✓
                       </span>
                     )}
@@ -484,20 +484,20 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
             className="rounded-sm border border-rule2 px-2 py-1"
             onClick={() => setLimit((current) => current + PAGE * 2)}
           >
-            もっと出す
+            続きの表示
           </button>
         )}
       </div>
 
       <p className="mt-2 text-xs text-ink3">
         <span className="text-ink3">{FIDELITY_MARK.approximate}</span>{' '}
-        発動条件の一部を確率で近似している、または作り物の相手に対して判定している。{' '}
+        発動条件の一部を確率で近似している、または作り物の相手に対して判定しています。{' '}
         <span className="text-warn-ink">{FIDELITY_MARK.dropped}</span>{' '}
-        発動条件の一部を落としている。落とした条件は満たしている扱いになるので、発動率も短縮量も
-        本来より高く出る。印は絞り込みに当たる行のうち、いちばん悪いものである。
+        発動条件の一部を落としています。落とした条件は満たしている扱いになるので、発動率も短縮量も
+        本来より高く出ます。印は絞り込みに当たる行のうち、いちばん悪いものです。
       </p>
       <p className="mt-1 text-xs text-ink3">
-        <strong>バ身は目安である。</strong>1 バ身 = 2.5 m はゲームからの裏取り前であり
+        <strong>バ身は目安です。</strong>1 バ身 = 2.5 m はゲームからの裏取り前であり
         （<a
           className="underline"
           href="https://github.com/promodeler314-a11y/raceemu/issues/52"
@@ -506,16 +506,16 @@ function SkillListTable({ file, index }: { file: SkillListCourseFile; index: Ski
         >
           #52
         </a>
-        ）、1 秒が何メートルかも走っている速度に依る。ここではこのコースの基準速度
+        ）、1 秒が何メートルかも走っている速度に依ります。ここではこのコースの基準速度
         （{file.course.distance} m なので{' '}
         {(20.0 - (file.course.distance - 2000) / 1000).toFixed(1)} m/s）で置いているので、
-        終盤の速い区間で稼いだぶんは小さめに出る。
-        <strong>秒のほうを見ること。</strong>
+        終盤の速い区間で稼いだぶんは小さめに出ます。
+        <strong>秒のほうを見てください。</strong>
       </p>
       <p className="mt-1 text-xs text-ink3">
-        <strong>行が無いことには 2 通りある。</strong>走らせる前に落とした組（このコースの
+        <strong>行が無いことには 2 通りあります。</strong>走らせる前に落とした組（このコースの
         この条件では確かに発動しない）が {file.screenedOut.toLocaleString('ja-JP')} 件あり、
-        それとは別に、この版がそもそも測っていない組がある。表に出ているのは測った組だけである。
+        それとは別に、この版がそもそも測っていない組があります。表に出ているのは測った組だけです。
       </p>
 
       {groups.length > 0 && <UpgradeGroups groups={groups} />}
@@ -536,7 +536,7 @@ function Provenance({ file }: { file: SkillListCourseFile }) {
       className="mt-2 flex flex-wrap items-baseline gap-x-4 gap-y-1 text-[11px] text-ink3"
       data-testid="skill-list-version"
     >
-      <span className="font-semibold text-ink2">{courseLabel(file.course)}</span>
+      <span className="font-bold text-ink2">{courseLabel(file.course)}</span>
       <span>
         1 行あたり <span className="num">{file.settings.trials.toLocaleString('ja-JP')}</span> 試行
       </span>
@@ -577,10 +577,10 @@ function Recommend({
 }) {
   return (
     <div className="mt-3 rounded-sm border border-rule bg-surface p-3" data-testid="skill-list-recommend">
-      <h3 className="text-xs font-semibold">持っていないもののうち、効率の高い順</h3>
+      <h3 className="text-xs font-bold">持っていないもののうち、効率の高い順</h3>
       <p className="mt-1 text-xs text-ink3">
-        このコースでの 1 ポイントあたりの短縮量が大きい順である。単体の評価なので、
-        <strong>まとめて取ると足し算にはならない</strong>。組み合わせは探索の面で決める。
+        このコースでの 1 ポイントあたりの短縮量が大きい順です。単体の評価なので、
+        <strong>まとめて取ると足し算にはなりません</strong>。組み合わせは探索の面で決めます。
       </p>
       <div className="mt-2 flex flex-wrap gap-1">
         {rows.map((row) => (
@@ -622,7 +622,7 @@ function Breakdown({
   return (
     <div data-testid="skill-list-breakdown">
       <div className="mb-1 flex flex-wrap items-center gap-2">
-        <span className="text-xs font-semibold">
+        <span className="text-xs font-bold">
           {nameOf(row.skillId)} ・ {courseLabel(file.course)} の脚質ごとの内訳
         </span>
         <button
@@ -677,7 +677,7 @@ function Breakdown({
                   // 0 を並べると「測ったら 0 だった」と読まれる。走らせる前に落とした
                   // ものは**確かに発動しない**ので、そう書く。
                   <td className="py-1 text-ink3" colSpan={4}>
-                    この脚質では発動しないので、走らせずに落とした
+                    この脚質では発動しないので、走らせずに落としました
                   </td>
                 )}
               </tr>
@@ -686,14 +686,14 @@ function Breakdown({
         </table>
       </div>
       <p className="mt-1 text-xs text-ink3">
-        脚質の条件を持つスキルは、当たらない脚質では走らせる前に落としてある
-        （<code>screen.ts</code>）。落としたものは<strong>確かに発動しない</strong>ので、
-        値の 0 とは別のこととして書き分けている。
+        脚質の条件を持つスキルは、当たらない脚質では走らせる前に落としてあります。
+        落としたものは<strong>確かに発動しない</strong>ので、
+        値の 0 とは別のこととして書き分けています。
       </p>
       <p className="mt-1 text-xs text-ink3">
-        <strong>発動位置の分布はここには出せない。</strong>
-        配っている JSON が持っているのは 1 行ぶんの平均までで、位置は入っていない。
-        いまの設定での発動位置は、結果の面と詳細の面が実際に走らせて出す。
+        <strong>発動位置の分布はここには出せません。</strong>
+        配っている JSON が持っているのは 1 行ぶんの平均までで、位置は入っていません。
+        いまの設定での発動位置は、結果の面と詳細の面が実際に走らせて出します。
       </p>
     </div>
   );
@@ -703,12 +703,12 @@ function Breakdown({
 function UpgradeGroups({ groups }: { groups: readonly SkillListGroup[] }) {
   return (
     <div className="mt-4">
-      <h3 className="text-xs font-semibold">上位互換のグループ</h3>
+      <h3 className="text-xs font-bold">上位互換のグループ</h3>
       <p className="mt-1 text-xs text-ink3">
         表示されているポイントは<strong>そのスキルを持つまでの総額</strong>なので、
-        上位への乗り換えは差額で見る。効果も同じで、
-        乗り換えて何秒増えるのかは差で見ないと分からない。差額のわりに効果差が小さいものは、
-        下位で止めるほうがよい。
+        上位への乗り換えは差額で見ます。効果も同じで、
+        乗り換えて何秒増えるのかは差で見ないと分かりません。差額のわりに効果差が小さいものは、
+        下位で止めるほうがよいです。
       </p>
       <div className="mt-2 overflow-x-auto">
         <table className="w-full min-w-[26rem] text-xs" data-testid="skill-list-groups">

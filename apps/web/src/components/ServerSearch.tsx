@@ -48,7 +48,7 @@ export function ServerSearchInput() {
     try {
       const info = await checkHealth(endpoint);
       setHealth(
-        `繋がった。Worker ${info.concurrency} 本（${info.concurrencySource}）・` +
+        `繋がりました。Worker ${info.concurrency} 本（${info.concurrencySource}）・` +
           `実行中 ${info.running} 本・待ち ${info.queued} 本・` +
           `1 ジョブ ${info.maxRacesPerJob.toLocaleString()} レースまで`,
       );
@@ -67,7 +67,7 @@ export function ServerSearchInput() {
           <input
             className={fieldCls}
             data-testid="search-endpoint"
-            placeholder="空ならブラウザで回す。同一オリジンなら / を書く"
+            placeholder="空ならブラウザで回します。同一オリジンなら / を書いてください。"
             value={endpoint}
             onChange={(e) => setEndpoint(e.target.value)}
             disabled={running}
@@ -99,14 +99,14 @@ export function ServerSearchInput() {
             onClick={() => void check()}
             disabled={!configured || checking}
           >
-            {checking ? '確かめ中' : '疎通を確かめる'}
+            {checking ? '確認中' : '疎通の確認'}
           </button>
         </div>
       </div>
 
       {!configured && (
         <p className="mt-2 text-xs text-ink3">
-          宛先を入れるとサーバに投げられる。入れなければ今までどおりブラウザの中で回す。
+          宛先を入れるとサーバに投げられます。入れなければ今までどおりブラウザの中で回します。
         </p>
       )}
       {health !== null && (
@@ -116,8 +116,8 @@ export function ServerSearchInput() {
       )}
       {toServer && (
         <p className="mt-2 text-xs text-ink3">
-          届かなければブラウザで回す。断られたとき（候補が多すぎる、混んでいる、レース数の上限）は
-          止めて理由を出す。重い探索を黙ってブラウザに回すと数十分固まるためである。
+          届かなければブラウザで回します。断られたとき（候補が多すぎる、混んでいる、レース数の上限）は
+          止めて理由を出します。重い探索を黙ってブラウザに回すと数十分固まるためです。
         </p>
       )}
       {/*
@@ -127,10 +127,10 @@ export function ServerSearchInput() {
       */}
       {toServer && useField && (selfConsistent || !isDefaultField(field)) && (
         <p className="mt-2 rounded-sm border border-warn-rule bg-warn-tint px-3 py-2 text-xs text-warn-ink">
-          サーバは相手の束を既定の作り方でしか組まない。
-          {selfConsistent && '自己整合は反映されない。'}
-          {!isDefaultField(field) && '相手の想定（強さ・ばらつき・脚質構成）も既定に戻る。'}
-          同じ条件で比べたいなら、投げ先をブラウザにする。
+          サーバは相手の束を既定の作り方でしか組みません。
+          {selfConsistent && '自己整合は反映されません。'}
+          {!isDefaultField(field) && '相手の想定（強さ・ばらつき・脚質構成）も既定に戻ります。'}
+          同じ条件で比べたいなら、投げ先をブラウザにしてください。
         </p>
       )}
     </div>

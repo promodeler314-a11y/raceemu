@@ -150,7 +150,7 @@ function EmptyOrSummary() {
         <path d="M10 33c6 0 8-14 14-14s8 8 14-6" strokeDasharray="3 3" />
       </svg>
       <div className="flex max-w-xl flex-col gap-2">
-        <h2 className="text-lg font-semibold">まだ実行していません</h2>
+        <h2 className="text-lg font-bold">まだ実行していません</h2>
         <p className="text-[13px] text-ink2">
           左で設定を決めて実行すると、{count.toLocaleString('ja-JP')} 回の試行からタイムの分布と
           スキルごとの発動状況が出ます。まず試すなら、下のプリセットから始めるのが早いです。
@@ -168,7 +168,7 @@ function EmptyOrSummary() {
               onClick={() => applyPreset(preset)}
               className="flex w-full flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5 px-2 py-2.5 text-left hover:bg-sunken"
             >
-              <span className="text-[13px] font-semibold">{preset.name}</span>
+              <span className="text-[13px] font-bold">{preset.name}</span>
               <span className="text-[11px] text-ink3">{preset.note}</span>
             </button>
           </li>

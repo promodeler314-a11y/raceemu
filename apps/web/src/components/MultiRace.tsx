@@ -74,13 +74,13 @@ export function MultiTrialPicker() {
               detail?.trial === pick.trial ? 'border-ink bg-sunken' : 'border-rule2'
             }`}
             onClick={() => showMultiTrial(pick.trial)}
-            title={`${pick.count} 試行のうち、タイムが中央の 1 本（試行 ${pick.trial}）を開く`}
+            title={`${pick.count} 試行のうち、タイムが中央の 1 本（試行 ${pick.trial}）を開きます。`}
           >
             {pick.order} 着（{(100 * pick.share).toFixed(1)} %）
           </button>
         ))}
       </div>
-      <p className="mt-1 text-xs text-ink3">押すと、その試行だけを同じ条件で走らせ直して中身を出す。</p>
+      <p className="mt-1 text-xs text-ink3">押すと、その試行だけを同じ条件で走らせ直して中身を出します。</p>
     </div>
   );
 }
@@ -137,7 +137,7 @@ export function MultiRaceDetail() {
         </span>
         {self !== undefined && (
           <span className="text-ink2">
-            自分は <span className="font-semibold tabular-nums">{self.order}</span> 着 ・{' '}
+            自分は <span className="font-bold tabular-nums">{self.order}</span> 着 ・{' '}
             <span className="tabular-nums">{self.raceTime.toFixed(3)}</span> 秒
           </span>
         )}
@@ -157,7 +157,7 @@ export function MultiRaceDetail() {
       <div className="mt-4 space-y-4">
         <Chart
           title="位置（自分との差）"
-          subtitle="0 の線が自分。上にいるほど前を走っている。灰色の帯はコーナー、破線はフェーズの境界（どちらも自分が通った時刻）。自分がゴールしたあとは、自分のゴール地点との差になる。"
+          subtitle="0 の線が自分です。上にいるほど前を走っています。灰色の帯はコーナー、破線はフェーズの境界です（どちらも自分が通った時刻）。自分がゴールしたあとは、自分のゴール地点との差になります。"
           x={prepared.times}
           height={220}
           xLabel="時刻 (秒)"
@@ -197,7 +197,7 @@ export function MultiRaceDetail() {
               const mine = horse.index === detail.replay.focus;
               const gap = self === undefined ? Number.NaN : horse.raceTime - self.raceTime;
               return (
-                <tr key={horse.index} className={`border-t border-rule2 ${mine ? 'font-semibold' : ''}`}>
+                <tr key={horse.index} className={`border-t border-rule2 ${mine ? 'font-bold' : ''}`}>
                   <td className="py-1 pr-3 tabular-nums">{horse.order}</td>
                   <td className="py-1 pr-3">{mine ? '自分' : `${horse.index + 1} 番`}</td>
                   <td className="py-1 pr-3">{STYLE_LABEL[horse.style] ?? horse.style}</td>

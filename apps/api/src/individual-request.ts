@@ -9,15 +9,15 @@ const CONDITIONS = Object.keys(conditionValue);
 
 function checkEnum<T extends string>(raw: unknown, name: string, allowed: readonly string[]): T {
   if (typeof raw !== 'string' || !allowed.includes(raw)) {
-    fail(`${name} は ${allowed.join(' / ')} のいずれかで指定する`);
+    fail(`${name} は ${allowed.join(' / ')} のいずれかで指定してください。`);
   }
   return raw as T;
 }
 
 function checkUma(raw: unknown): UmaStatus {
-  if (!isRecord(raw)) fail('uma はオブジェクトで指定する');
+  if (!isRecord(raw)) fail('uma はオブジェクトで指定してください。');
   const charaName = raw['charaName'];
-  if (typeof charaName !== 'string') fail('uma.charaName は文字列で指定する');
+  if (typeof charaName !== 'string') fail('uma.charaName は文字列で指定してください。');
   return {
     charaName,
     speed: finite(raw['speed'], 'uma.speed', 1, 3000),
@@ -43,19 +43,19 @@ function checkUma(raw: unknown): UmaStatus {
  * ステータスの範囲とスキル ID の存在だけ見る。
  */
 export function checkNewIndividual(raw: unknown, data: GameData): NewIndividual {
-  if (!isRecord(raw)) fail('本文は JSON のオブジェクトで送る');
+  if (!isRecord(raw)) fail('本文は JSON のオブジェクトで送ってください。');
 
   const label = raw['label'];
-  if (label !== undefined && typeof label !== 'string') fail('label は文字列で指定する');
-  if (typeof label === 'string' && label.length > 200) fail('label が長すぎる');
+  if (label !== undefined && typeof label !== 'string') fail('label は文字列で指定してください。');
+  if (typeof label === 'string' && label.length > 200) fail('label が長すぎます。');
 
   const uma = checkUma(raw['uma']);
 
   const skillIds = raw['skillIds'];
-  if (!Array.isArray(skillIds)) fail('skillIds は配列で指定する');
-  if (skillIds.length > 100) fail('skillIds が多すぎる');
+  if (!Array.isArray(skillIds)) fail('skillIds は配列で指定してください。');
+  if (skillIds.length > 100) fail('skillIds が多すぎます。');
   for (const id of skillIds) {
-    if (typeof id !== 'string' || !data.skillsById.has(id)) fail(`知らないスキル: ${String(id)}`);
+    if (typeof id !== 'string' || !data.skillsById.has(id)) fail(`知らないスキルです: ${String(id)}`);
   }
 
   return { label: label ?? '', uma, skillIds };

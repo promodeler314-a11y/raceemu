@@ -100,7 +100,7 @@ function OpponentRow({ id, index, savedIndividuals, savedMessage, onRequestSaved
               if (!pickerOpen) onRequestSaved();
             }}
           >
-            個体から選ぶ
+            個体から選択
           </button>
         </td>
       </tr>
@@ -170,7 +170,7 @@ function OpponentRow({ id, index, savedIndividuals, savedMessage, onRequestSaved
                     type="button"
                     className="rounded-sm border border-rule2 px-2 py-0.5 text-xs"
                     onClick={() => toggleSkill(id, skillId)}
-                    title="クリックで外す"
+                    title="クリックで外します。"
                   >
                     {gameData.skillsById.get(skillId)?.name ?? skillId} ×
                   </button>
@@ -216,7 +216,7 @@ export function FieldPanel() {
     listIndividuals()
       .then((items) => {
         setSavedIndividuals(items);
-        setSavedMessage(items.length === 0 ? '保存された個体がまだ無い。' : null);
+        setSavedMessage(items.length === 0 ? '保存された個体がまだありません。' : null);
       })
       .catch((error: unknown) => {
         setSavedMessage(error instanceof Error ? error.message : String(error));
@@ -232,13 +232,13 @@ export function FieldPanel() {
     <>
       <Panel title="相手">
         <p className="text-xs text-ink3">
-          出走する {gateCount} 頭を同時に走らせ、着順の分布と勝率を出す。
-          相手は自分の走りに反応し、位置取りも相手を見て決まる。
+          出走する {gateCount} 頭を同時に走らせ、着順の分布と勝率を出します。
+          相手は自分の走りに反応し、位置取りも相手を見て決まります。
         </p>
         <p className="mt-1 text-xs text-ink3">
-          この面は上の実行バーとは別に動く。
-          試行回数はここで指定し、シードは実行バーの値を使う。「順位条件を判定する」の指定は使わない（順位は実際の位置から決まる）。
-          枠番は空いているところから配る。
+          この面は上の実行バーとは別に動きます。
+          試行回数はここで指定し、シードは実行バーの値を使います。「順位条件を判定する」の指定は使いません（順位は実際の位置から決まります）。
+          枠番は空いているところから配ります。
         </p>
         <div className="mt-3 overflow-x-auto">
           <table className="w-full text-xs">
@@ -283,11 +283,11 @@ export function FieldPanel() {
           </label>
           <button
             type="button"
-            className="rounded-sm bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-50"
+            className="rounded-sm bg-primary-bg px-4 py-1.5 text-sm text-primary-fg disabled:opacity-50"
             onClick={() => void run()}
             disabled={running || busy}
           >
-            {running ? '計算中' : '勝率を出す'}
+            {running ? '計算中' : '勝率の計算'}
           </button>
           {running ? (
             <>
@@ -302,15 +302,15 @@ export function FieldPanel() {
               data-testid="multi-estimate"
               title={
                 estimate.measured
-                  ? '直前の実測から出している'
-                  : '作り付けの目安。1 回走らせると実測に置き換わる'
+                  ? '直前の実測から出しています。'
+                  : '作り付けの目安です。1 回走らせると実測に置き換わります。'
               }
             >
               {estimate.measured ? '見込み' : '目安'} 約 {formatDuration(estimate.ms)}
             </span>
           )}
           <button type="button" className="text-xs text-ink3 underline" onClick={reset}>
-            相手を既定に戻す
+            相手の初期化
           </button>
         </div>
       </Panel>
@@ -319,7 +319,7 @@ export function FieldPanel() {
         <Panel title="着順">
           {result.cancelled && (
             <p className="mb-2 text-xs text-ink3">
-              中断したので、終わった {result.trials} 試行だけを集計している。
+              中断したので、終わった {result.trials} 試行だけを集計しています。
             </p>
           )}
           <div className="overflow-x-auto">
@@ -341,7 +341,7 @@ export function FieldPanel() {
                   return (
                     <tr
                       key={s.index}
-                      className={`border-t border-rule2 ${self ? 'font-semibold' : ''}`}
+                      className={`border-t border-rule2 ${self ? 'font-bold' : ''}`}
                     >
                       <td className="py-1">{self ? '自分' : `${s.index + 1} 番`}</td>
                       <td className="text-right tabular-nums">{pct(s.winRate)}</td>

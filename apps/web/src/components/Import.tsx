@@ -12,7 +12,7 @@ import type { FitRank } from '../../../../packages/sim/src/data/constants.ts';
 
 /** 口そのものが無いときに出す文言 */
 const NO_ENDPOINT =
-  '読み取りの口が無い。静的ファイルだけを置いた版はサーバを持たないので、この機能はサーバを立てた版でだけ使える。';
+  '読み取りの口がありません。静的ファイルだけを置いた版はサーバを持たないので、この機能はサーバを立てた版でだけ使えます。';
 
 /**
  * JSON でない応答が返ったときに、何が起きたのかを言い分ける。
@@ -24,12 +24,12 @@ const NO_ENDPOINT =
  */
 function explainNonJson(res: Response): string {
   if (res.redirected) {
-    return `読み取りの口ではなく別の画面に飛ばされた（最終 ${res.status}）。認証が切れていないか確かめる。`;
+    return `読み取りの口ではなく別の画面に飛ばされました（最終 ${res.status}）。認証が切れていないか確かめてください。`;
   }
   if (res.status === 404 || res.status === 405) return NO_ENDPOINT;
   return (
-    `サーバが JSON ではない応答を返した（${res.status}）。` +
-    'サーバの版が古いか、途中に認証や proxy の画面が挟まっている。/api/health を開くと切り分けられる。'
+    `サーバが JSON ではない応答を返しました（${res.status}）。` +
+    'サーバの版が古いか、途中に認証や proxy の画面が挟まっています。/api/health を開くと切り分けられます。'
   );
 }
 
@@ -99,7 +99,7 @@ export function ImportPanel() {
         return;
       }
       if (!res.ok) {
-        setMessage(body.error ?? `読み取りに失敗した（${res.status}）`);
+        setMessage(body.error ?? `読み取りに失敗しました（${res.status}）`);
         return;
       }
       const found = body.matches ?? [];
@@ -107,7 +107,7 @@ export function ImportPanel() {
       setElapsed(body.elapsedMs ?? 0);
       // 紛らわしくないものは最初から選んでおく
       setPicked(new Set(found.filter((m) => !uncertain(m)).map((m) => m.id)));
-      if (found.length === 0) setMessage('スキルらしい文字が見つからなかった。');
+      if (found.length === 0) setMessage('スキルらしい文字が見つかりませんでした。');
     } catch (error) {
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -117,7 +117,7 @@ export function ImportPanel() {
 
   const apply = () => {
     for (const id of picked) if (!skillIds.includes(id)) toggleSkill(id);
-    setMessage(`${picked.size} 個を所持スキルに入れた。`);
+    setMessage(`${picked.size} 個を所持スキルに入れました。`);
   };
 
   return (
@@ -125,11 +125,11 @@ export function ImportPanel() {
     // 主役より目立つ（docs/ui-audit-race-emulator.md 第1節「同じカード枠」）。
     <Panel title="画面から取り込む" variant="plain">
       <p className="text-xs text-ink3">
-        スキル一覧の写真を送ると、写っているスキル名を読み取って所持スキルの候補にする。
+        スキル一覧の写真を送ると、写っているスキル名を読み取って所持スキルの候補にします。
       </p>
       <p className="mt-1 text-xs text-ink3">
-        ステータスやキャラの写真を含む画面全体ではなく、スキル名が並んだ部分だけを切り抜いて送る。
-        アイコンや背景の模様が文字に被ると、読み取りの精度が大きく落ちる（
+        ステータスやキャラの写真を含む画面全体ではなく、スキル名が並んだ部分だけを切り抜いて送ってください。
+        アイコンや背景の模様が文字に被ると、読み取りの精度が大きく落ちます（
         <a
           href="https://github.com/promodeler314-a11y/raceemu/blob/main/docs/ocr-design.md"
           target="_blank"
@@ -154,11 +154,11 @@ export function ImportPanel() {
         />
         <button
           type="button"
-          className="rounded-sm bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-50"
+          className="rounded-sm border border-rule2 bg-surface px-4 py-1.5 text-sm text-ink disabled:opacity-50"
           onClick={() => inputRef.current?.click()}
           disabled={state === 'running'}
         >
-          {state === 'running' ? '読み取り中' : '画像を選ぶ'}
+          {state === 'running' ? '読み取り中' : '画像の選択'}
         </button>
         {matches !== null && matches.length > 0 && (
           <>
@@ -179,7 +179,7 @@ export function ImportPanel() {
       {matches !== null && matches.length > 0 && (
         <div className="mt-3">
           <p className="mb-1 text-xs text-ink3">
-            確からしくない一致には読み取った文字を添えてある。見比べてから入れる。
+            確からしくない一致には読み取った文字を添えてあります。見比べてから入れてください。
           </p>
           <table className="w-full text-xs">
             <thead className="text-ink3">
@@ -214,7 +214,7 @@ export function ImportPanel() {
                     {uncertain(match) && (
                       <span className="block text-ink3">
                         読み取り「{match.text}」
-                        {match.runnerUp !== null && `／${match.runnerUp.name} かもしれない`}
+                        {match.runnerUp !== null && `／${match.runnerUp.name} かもしれません`}
                       </span>
                     )}
                   </td>
@@ -318,7 +318,7 @@ export function StatusImportPanel() {
         return;
       }
       if (!res.ok) {
-        setMessage(body.error ?? `読み取りに失敗した（${res.status}）`);
+        setMessage(body.error ?? `読み取りに失敗しました（${res.status}）`);
         return;
       }
       setReading(body);
@@ -345,14 +345,14 @@ export function StatusImportPanel() {
     if (distance != null) patch['distanceFit'] = distance;
     if (style != null) patch['styleFit'] = style;
     setUma(patch as never);
-    setMessage(`${Object.keys(patch).length} 項目を設定に入れた。`);
+    setMessage(`${Object.keys(patch).length} 項目を設定に入れました。`);
   };
 
   return (
     <Panel title="画面からステータスを取り込む" variant="plain">
       <p className="text-xs text-ink3">
-        「ウマ娘詳細」画面の<strong>上半分</strong>（ステータスの数字と適性が写っている部分）を送る。
-        スキル一覧と違い、切り抜かずに画面全体のまま送ってよい。位置は画面の横幅に対する割合で決まる。
+        「ウマ娘詳細」画面の<strong>上半分</strong>（ステータスの数字と適性が写っている部分）を送ってください。
+        スキル一覧と違い、切り抜かずに画面全体のまま送って構いません。位置は画面の横幅に対する割合で決まります。
       </p>
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <input
@@ -368,11 +368,11 @@ export function StatusImportPanel() {
         />
         <button
           type="button"
-          className="rounded-sm bg-ink px-4 py-1.5 text-sm text-paper disabled:opacity-50"
+          className="rounded-sm border border-rule2 bg-surface px-4 py-1.5 text-sm text-ink disabled:opacity-50"
           onClick={() => inputRef.current?.click()}
           disabled={state === 'running'}
         >
-          {state === 'running' ? '読み取り中' : 'ステータスの画像を選ぶ'}
+          {state === 'running' ? '読み取り中' : 'ステータス画像の選択'}
         </button>
         {reading !== null && (
           <button
@@ -409,7 +409,7 @@ export function StatusImportPanel() {
                   <th scope="row" className="py-1 text-left font-normal text-ink3">
                     {label}
                     {used.has(key) && (
-                      <span className="ml-1 rounded-sm border border-rule2 px-1" title="いまのコースと脚質で使う">
+                      <span className="ml-1 rounded-sm border border-rule2 px-1" title="いまのコースと脚質で使います">
                         使う
                       </span>
                     )}

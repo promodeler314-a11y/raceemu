@@ -1334,10 +1334,10 @@ export const useStore = create<AppState>((set, get) => ({
       set({
         error:
           plan === null
-            ? '候補にするスキルを 2 つ以上選ぶ'
+            ? '候補にするスキルを 2 つ以上選んでください。'
             : state.plan.source === 'all'
-              ? '候補が集まらない。白・金・固有の継承版のどれかを開く'
-              : '候補が集まらない。育成ウマ娘かサポートカードを選ぶか、白と固有の継承版を開く',
+              ? '候補が集まりません。白・金・固有の継承版のどれかを開いてください。'
+              : '候補が集まりません。育成ウマ娘かサポートカードを選ぶか、白と固有の継承版を開いてください。',
       });
       return;
     }
@@ -1361,7 +1361,7 @@ export const useStore = create<AppState>((set, get) => ({
       // （docs/server-design.md 2 節）ので、ここで倒れてはならない。
       if (hasEndpoint(state.searchEndpoint) && state.searchTarget === 'server') {
         try {
-          set({ optimizeLog: ['サーバに投げた。順番待ちがあれば待つ。'], ranOnServer: true });
+          set({ optimizeLog: ['サーバに投げました。順番待ちがあれば待ちます。'], ranOnServer: true });
           result = await runServerSearch(
             state.searchEndpoint,
             {
@@ -1391,7 +1391,7 @@ export const useStore = create<AppState>((set, get) => ({
           if (!(error instanceof ServerSearchUnavailable)) throw error;
           set({
             ranOnServer: false,
-            optimizeLog: [`サーバが居なかった: ${error.message}`, 'ブラウザで回す。'],
+            optimizeLog: [`サーバに届きませんでした: ${error.message}`, 'ブラウザで回します。'],
           });
         }
       }
@@ -1456,7 +1456,7 @@ export const useStore = create<AppState>((set, get) => ({
             .filter((skill): skill is NonNullable<typeof skill> => skill !== undefined);
     const candidates = sensitivityCandidates(state);
     if (candidates.length === 0) {
-      set({ error: '幅を測るスキルを選ぶか、先に探索を走らせる' });
+      set({ error: '幅を測るスキルを選ぶか、先に探索を走らせてください。' });
       return;
     }
 

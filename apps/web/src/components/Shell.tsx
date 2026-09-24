@@ -58,7 +58,7 @@ function ThemeToggle() {
           aria-pressed={theme === value}
           onClick={() => setTheme(value)}
           className={`flex w-12 items-center justify-center border-r border-rule text-xs last:border-r-0 ${
-            theme === value ? 'bg-acc-tint font-semibold text-acc-ink' : 'bg-surface text-ink2'
+            theme === value ? 'bg-acc-tint font-bold text-acc-ink' : 'bg-surface text-ink2'
           }`}
         >
           {value === 'light' ? 'ライト' : 'ダーク'}
@@ -81,7 +81,8 @@ function SaveSnapshotButton() {
   return (
     <button
       type="button"
-      className="h-[30px] rounded-sm bg-primary-bg px-3 text-xs font-semibold text-primary-fg disabled:opacity-40"
+      // 朱は計算を走らせるボタンだけに使う（DESIGN.md 3 節）。ヘッダの保存は脇の操作なので線の枠にする
+      className="h-[30px] rounded-sm border border-rule2 px-3 text-xs font-bold text-ink2 disabled:opacity-40"
       onClick={saveSnapshot}
       disabled={summary === null}
     >
@@ -119,7 +120,7 @@ function SaveIndividualButton() {
     try {
       const label = `${STYLE_LABELS[uma.style] ?? uma.style} ${uma.speed}/${uma.stamina}/${uma.power}/${uma.guts}/${uma.wisdom}`;
       await saveIndividual({ label, uma, skillIds });
-      setMessage('個体として保存した。');
+      setMessage('個体として保存しました。');
     } catch (error) {
       setFailed(true);
       setMessage(error instanceof Error ? error.message : String(error));
@@ -132,7 +133,7 @@ function SaveIndividualButton() {
     <div className="flex items-center gap-2">
       <button
         type="button"
-        className="h-[30px] rounded-sm border border-rule2 px-3 text-xs font-semibold text-ink2 disabled:opacity-40"
+        className="h-[30px] rounded-sm border border-rule2 px-3 text-xs font-bold text-ink2 disabled:opacity-40"
         onClick={() => void save()}
         disabled={saving}
       >
@@ -156,7 +157,7 @@ export function Header() {
         題字は画面の言葉（日本語）で、本文と同じ書体にする。以前は英大文字を等幅と
         字間で組んでいた（docs/ui-audit-race-emulator.md 第1節「等幅」「欧文スタイル」）。
       */}
-      <h1 className="whitespace-nowrap text-[13px] font-semibold text-ink">レースエミュレータ</h1>
+      <h1 className="whitespace-nowrap text-[13px] font-bold text-ink">レースエミュレータ</h1>
       {/* タブが増えると狭い幅では収まらないので、はみ出すぶんは横に送る */}
       <nav className="flex min-w-0 max-w-full gap-0.5 self-stretch overflow-x-auto" aria-label="画面">
         {TABS.map(({ id, label }) => (
@@ -166,7 +167,7 @@ export function Header() {
             aria-current={tab === id ? 'page' : undefined}
             onClick={() => setTab(id)}
             className={`flex flex-none items-center px-3 text-[13px] ${
-              tab === id ? 'font-semibold text-ink shadow-[inset_0_-2px_0_var(--color-s1)]' : 'text-ink3'
+              tab === id ? 'font-bold text-ink shadow-[inset_0_-2px_0_var(--color-s1)]' : 'text-ink3'
             }`}
           >
             {label}
@@ -271,7 +272,7 @@ export function SettingsRail() {
     // 置き場所（広い幅での格子の位置）は App.tsx の設定の列と揃える。
     <aside className="flex w-full flex-none flex-col gap-4 border-b border-rule2 bg-surface p-4 md:col-start-1 md:row-span-2 md:row-start-1 md:min-h-0 md:overflow-y-auto md:border-r md:border-b-0">
       <div className="flex items-center gap-2">
-        <span className="text-[13px] font-semibold">設定</span>
+        <span className="text-[13px] font-bold">設定</span>
         <span className="flex-1" />
         <button type="button" className="text-xs text-s1 underline" onClick={() => setTab('settings')}>
           編集
@@ -287,19 +288,19 @@ export function SettingsRail() {
       </div>
       {snapshots.length > 0 && (
         <div className="flex flex-col gap-2 border-t border-rule pt-3">
-          <span className="text-[13px] font-semibold">
+          <span className="text-[13px] font-bold">
             スナップショット <span className="text-[11px] font-normal text-ink3">{snapshots.length}</span>
           </span>
           {snapshots.map((snapshot) => (
             <div key={snapshot.id} className="rounded-sm border border-rule px-2.5 py-2">
-              <div className="text-xs font-semibold">{snapshot.label}</div>
+              <div className="text-xs font-bold">{snapshot.label}</div>
               <div className="num text-xs text-ink2">
                 {formatTime(snapshot.summary.all.averageTime)}
               </div>
             </div>
           ))}
           <button type="button" className="text-left text-xs text-s1 underline" onClick={() => setTab('compare')}>
-            {snapshots.length} 件を比較する
+            {snapshots.length} 件の比較
           </button>
         </div>
       )}

@@ -79,14 +79,14 @@ export function hasEndpoint(raw: string): boolean {
 
 function explainNonJson(res: Response): string {
   if (res.redirected) {
-    return `探索の口ではなく別の画面に飛ばされた（最終 ${res.status}）。認証が切れていないか確かめる。`;
+    return `探索の口ではなく別の画面に飛ばされました（最終 ${res.status}）。認証が切れていないか確かめてください。`;
   }
   if (res.status === 404 || res.status === 405) {
-    return '宛先に探索の口が無い。静的ファイルだけを置いた版はサーバを持たない。';
+    return '宛先に探索の口がありません。静的ファイルだけを置いた版はサーバを持ちません。';
   }
   return (
-    `サーバが JSON ではない応答を返した（${res.status}）。` +
-    'サーバの版が古いか、途中に認証や proxy の画面が挟まっている。/api/health を開くと切り分けられる。'
+    `サーバが JSON ではない応答を返しました（${res.status}）。` +
+    'サーバの版が古いか、途中に認証や proxy の画面が挟まっています。/api/health を開くと切り分けられます。'
   );
 }
 
@@ -102,7 +102,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     res = await fetch(url, init);
   } catch (error) {
     throw new ServerSearchUnavailable(
-      `サーバに届かなかった（${error instanceof Error ? error.message : String(error)}）`,
+      `サーバに届きませんでした（${error instanceof Error ? error.message : String(error)}）。`,
     );
   }
   const contentType = res.headers.get('content-type') ?? '';
@@ -117,7 +117,7 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
     const message =
       typeof body === 'object' && body !== null && typeof (body as { error?: unknown }).error === 'string'
         ? (body as { error: string }).error
-        : `失敗した（${res.status}）`;
+        : `失敗しました（${res.status}）。`;
     // JSON で理由を返してきた以上、サーバは居る。断られたのであって、
     // 使えないのではない。
     throw new ServerSearchRejected(message);
@@ -196,12 +196,12 @@ export async function runServerSearch(
     const job = await fetchJson<SearchJobView>(url);
     hooks.onProgress?.(job.progress, job.races);
     if (job.status === 'done') {
-      if (job.result === null) throw new ServerSearchRejected('終わったのに結果が入っていない');
+      if (job.result === null) throw new ServerSearchRejected('終わったのに結果が入っていません。');
       return job.result;
     }
     if (job.status === 'cancelled') throw new SimulationCancelled();
     if (job.status === 'failed') {
-      throw new ServerSearchRejected(job.error ?? 'サーバ側で失敗した');
+      throw new ServerSearchRejected(job.error ?? 'サーバ側で失敗しました。');
     }
   }
 }

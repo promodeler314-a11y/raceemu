@@ -236,7 +236,7 @@ await page.click('button[aria-label="真骨頂 を外す"]');
 await page.selectOption('select:below(:text("目標"))', { index: 0 }).catch(() => {});
 await goTab('探索');
 await page.fill('input[type=number][max="20000"]', '300');
-await page.click('button:has-text("逆算する")');
+await page.click('button:has-text("逆算の実行")');
 await page.waitForFunction(
   () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('計算中')),
   null,
@@ -254,7 +254,7 @@ for (let i = 1; i < values.length; i++) {
 
 // 組み合わせ探索: 候補を選び、予算に収まる構成が返ることを確かめる
 await goTab('設定');
-await page.click('button:has-text("すべて外す")');
+await page.click('button:has-text("すべて解除")');
 for (const skillName of ['中距離コーナー○', '中距離直線○', '一匹狼']) {
   await page.fill('input[placeholder="スキル名で検索"]', skillName);
   await page.click(`button:has-text("${skillName}")`);
@@ -262,7 +262,7 @@ for (const skillName of ['中距離コーナー○', '中距離直線○', '一�
 }
 await goTab('探索');
 await page.fill('input[type=number][max="20000"][step="50"]', '250');
-await page.click('button:has-text("探索する")');
+await page.click('button:has-text("探索の実行")');
 await page.waitForFunction(
   () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('探索中')),
   null,
@@ -305,7 +305,7 @@ const targetServer = page.locator('[data-testid=search-target-server]');
 if (await targetServer.isEnabled()) fail('宛先が空なのにサーバを選べる');
 await page.fill('[data-testid=search-endpoint]', '/');
 await targetServer.check();
-await page.click('button:has-text("探索する")');
+await page.click('button:has-text("探索の実行")');
 await page.waitForFunction(
   () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('探索中')),
   null,
@@ -318,11 +318,11 @@ if (!fellBack.startsWith('ブラウザ')) fail(`口が無いのにブラウザ�
 const fallbackBest = await page.textContent(`${optimizeSection} h3`);
 if (!/（\d+ pt/.test(fallbackBest)) fail(`落ちたあとに結果が出ていない: ${fallbackBest}`);
 // 疎通の確認も、口が無いことを日本語で言って倒れないこと。
-await page.click('button:has-text("疎通を確かめる")');
+await page.click('button:has-text("疎通の確認")');
 await page.waitForSelector('[data-testid=search-health]', { timeout: 20000 });
 const healthText = (await page.textContent('[data-testid=search-health]')).trim();
 console.log('--- 疎通の確認（サーバ無し）:', healthText);
-if (!healthText.includes('口が無い')) fail(`口が無いことを伝えていない: ${healthText}`);
+if (!healthText.includes('口がありません')) fail(`口が無いことを伝えていない: ${healthText}`);
 if (/JSON|Unexpected token/i.test(healthText)) fail(`生の例外が画面に出ている: ${healthText}`);
 
 // 近似の感度分析: 近似の置き方を半分と倍に振って、短縮量の幅が出ることを確かめる。
@@ -337,7 +337,7 @@ if (!(await page.isChecked('[data-testid=sensitivity-axis-near]'))) {
 }
 const soloNote = (await page.textContent('[data-testid=sensitivity-axis-note]')).trim();
 console.log('  距離の軸の注意（順位条件を判定していないとき）:', soloNote);
-if (!soloNote.includes('何も動かない')) fail(`距離が効かない旨が出ていない: ${soloNote}`);
+if (!soloNote.includes('何も動きません')) fail(`距離が効かない旨が出ていない: ${soloNote}`);
 await page.check('[data-testid=use-field]');
 const nearNote = (await page.textContent('[data-testid=sensitivity-axis-note]')).trim();
 console.log('  距離の軸の注意（判定しているとき）:', nearNote);
@@ -345,16 +345,16 @@ if (nearNote === soloNote) fail('順位条件を入れても注意が変わら�
 await page.click('[data-testid=sensitivity-axis-rate]');
 const rateNote = (await page.textContent('[data-testid=sensitivity-axis-note]')).trim();
 console.log('  倍率の軸の注意（判定しているとき）:', rateNote);
-if (!rateNote.includes('位置から決まる')) fail(`倍率が効かない旨が出ていない: ${rateNote}`);
+if (!rateNote.includes('位置から決まります')) fail(`倍率が効かない旨が出ていない: ${rateNote}`);
 await page.click('[data-testid=sensitivity-axis-near]');
 const beforeEstimate = (await page.textContent('[data-testid=sensitivity-estimate]')).trim();
 console.log('  実行前の見積もり:', beforeEstimate);
 if (!/約/.test(beforeEstimate)) fail(`感度分析の見積もりが出ていない: ${beforeEstimate}`);
 await page.fill('[data-testid=sensitivity-trials]', '50');
 await page.fill('[data-testid=sensitivity-limit]', '2');
-await page.click('button:has-text("近似の幅を測る")');
+await page.click('button:has-text("近似の幅の測定")');
 await page.waitForFunction(
-  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === '測っている'),
+  () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.trim() === '測定中'),
   null,
   { timeout: 300000 },
 );
@@ -435,7 +435,7 @@ await page.check('[data-testid=exclude-dropped]');
 await page.click('label:has-text("いま選んでいるスキル") input[type=radio]');
 
 await goTab('設定');
-await page.click('button:has-text("すべて外す")');
+await page.click('button:has-text("すべて解除")');
 
 // 勝率: 全頭を同時に走らせ、着順が出ることを確かめる
 // 脚質は前の段で変えてあるので、ここで決め直してから測る
@@ -449,7 +449,7 @@ await goTab('勝率');
 await page.waitForTimeout(300);
 await page.fill('input[type=number][max="50000"]', '200');
 const multiStarted = Date.now();
-await page.click('button:has-text("勝率を出す")');
+await page.click('button:has-text("勝率の計算")');
 await page.waitForFunction(
   () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('計算中')),
   null,
@@ -554,7 +554,7 @@ if (!/\d+ コース/.test(shortEstimate)) fail('コース横断で当たる本�
 if (longEstimate === shortEstimate) fail('距離を変えてもコース横断の見積もりが変わらない');
 
 await page.fill('input[aria-label="コース 1 本あたりの試行回数"]', '100');
-await page.click('button:has-text("コースを走らせる")');
+await page.click('button:has-text("コース横断の実行")');
 await page.waitForFunction(
   () => ![...document.querySelectorAll('button')].some((b) => b.textContent?.includes('計算中')),
   null,
@@ -607,7 +607,7 @@ if (!skillListVersion.includes('指紋')) fail('何から作ったかの指紋�
 // 表の読み方。単体であって限界ではないこと、バ身が裏取り前であること、
 // 行が無いことに 2 通りあることを、画面が言っていること。
 const skillListNotes = (await page.textContent(skillListSection)).replace(/\s+/g, '');
-for (const phrase of ['「単体」であって「限界」ではない', 'バ身は目安である', '行が無いことには2通りある', 'コースごとに']) {
+for (const phrase of ['「単体」であって「限界」ではありません', 'バ身は目安です', '行が無いことには2通りあります', 'コースごとに']) {
   if (!skillListNotes.includes(phrase)) fail(`スキル一覧に「${phrase}」が書かれていない`);
 }
 // 測ってあるコースの数を画面が言っていること。全 137 コースは 20 時間を超えるので、
@@ -691,7 +691,7 @@ if (!tierOptions.every((o) => /スタミナ\s*\d+/.test(o.label))) {
 const tierStamina = [...new Set(tierOptions.map((o) => /スタミナ\s*(\d+)/.exec(o.label)[1]))];
 console.log('--- 段ごとのスタミナ:', tierStamina.join(' / '));
 if (tierStamina.length !== 1) fail(`段でスタミナが変わっている: ${tierStamina.join(' / ')}`);
-if (!skillListNotes.includes('基準の個体はスタミナが足りている')) {
+if (!skillListNotes.includes('基準の個体はスタミナが足りています')) {
   fail('スタミナが足りている前提であることが書かれていない');
 }
 const normalTop = (await readTestTable('skill-list-table'))[0];
@@ -754,13 +754,13 @@ for (const row of breakdownRows) console.log('  ', row.join(' | '));
 if (breakdownRows.length !== styleOptions.length - 1) {
   fail(`脚質ごとの内訳の行数が想定と違う: ${breakdownRows.length}`);
 }
-const dropped = breakdownRows.filter((row) => (row[1] ?? '').includes('走らせずに落とした'));
+const dropped = breakdownRows.filter((row) => (row[1] ?? '').includes('走らせずに落とし'));
 console.log('--- 内訳のうち走らせずに落とした脚質:', dropped.length, '件');
-if (!breakdownRows.some((row) => !(row[1] ?? '').includes('走らせずに落とした'))) {
+if (!breakdownRows.some((row) => !(row[1] ?? '').includes('走らせずに落とし'))) {
   fail('内訳がすべて「落とした」になっている');
 }
 const breakdownNote = await page.textContent('[data-testid=skill-list-breakdown]');
-if (!breakdownNote.includes('発動位置の分布はここには出せない')) {
+if (!breakdownNote.includes('発動位置の分布はここには出せません')) {
   fail('発動位置を出せないことが書かれていない');
 }
 // 内訳の見出しに、どのコースの話かが出ていること
@@ -852,13 +852,13 @@ await page.waitForTimeout(1200);
 const importNotes = await page.$$eval(`${importSection} p`, (ps) => ps.map((p) => p.textContent?.trim() ?? ''));
 const importNote = importNotes[importNotes.length - 1];
 console.log('--- 読み取り（サーバ無し）:', importNote);
-if (!importNote.includes('読み取りの口が無い')) {
+if (!importNote.includes('読み取りの口がありません')) {
   fail(`口が無いことを伝えていない: ${importNote}`);
 }
 if (/JSON|Unexpected token/i.test(importNote)) fail(`生の例外が画面に出ている: ${importNote}`);
 
 // 共有: URL に載せて開き直し、設定が戻ることを確かめる
-await page.click('button:has-text("設定を URL に")');
+await page.click('button:has-text("共有 URL のコピー")');
 const shared = page.url();
 if (!shared.includes('s=')) fail('共有 URL が作られていない');
 if (!shared.includes('tab=')) fail(`共有 URL に面が載っていない: ${shared}`);
@@ -961,7 +961,7 @@ await countInput.fill('2000');
 // 本家形式の受け渡し: 読み込みと書き出し
 const transfer = page.locator('textarea[aria-label="本家の設定文字列"]');
 await transfer.fill('スペシャルウィーク,1111,1222,1333,444,555,B,C,S,円弧のマエストロ,そんなスキルは無い');
-await page.click('button:has-text("読み込む")');
+await page.click('button:has-text("読み込み")');
 await page.waitForTimeout(250);
 const readBack = await page.getByLabel('スピード', { exact: true }).inputValue();
 console.log('--- 本家形式を読み込んだあとのスピード:', readBack);
@@ -978,7 +978,7 @@ const warnText = (await page.locator('[data-testid=transfer-unknown]').textConte
 if (!warnText.includes('そんなスキルは無い')) fail('引き当てられなかった語が知らされていない');
 console.log('--- 取りこぼしの知らせ:', warnText.trim().slice(0, 40));
 
-await page.click('button:has-text("いまの設定を書き出す")');
+await page.click('button:has-text("いまの設定の書き出し")');
 await page.waitForTimeout(250);
 const written = await transfer.inputValue();
 console.log('--- 書き出した 1 行:', written);
@@ -986,7 +986,7 @@ if (!written.includes('1111,1222,1333,444,555,B,C,S')) fail(`書き出した値�
 if (written.includes('シューティングスター')) fail('固有を書き出している');
 // 書き出したものを読み直しても取りこぼしが出ないこと
 await transfer.fill(written);
-await page.click('button:has-text("読み込む")');
+await page.click('button:has-text("読み込み")');
 await page.waitForTimeout(250);
 if ((await page.locator('[data-testid=transfer-unknown]').count()) > 0) {
   const left = await page.locator('[data-testid=transfer-unknown]').textContent();

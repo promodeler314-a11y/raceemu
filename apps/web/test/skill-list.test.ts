@@ -201,7 +201,7 @@ describe('一覧と 1 枚を取る', () => {
 
   it('置いていない（404）ときも「無い」に倒し、生の例外を出さない', async () => {
     stubFetch({});
-    await expect(fetchSkillListIndex()).rejects.toThrow(/入っていない/);
+    await expect(fetchSkillListIndex()).rejects.toThrow(/入っていません/);
   });
 
   it('形が合わない一覧は「壊れている」に分ける', async () => {

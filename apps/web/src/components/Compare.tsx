@@ -118,7 +118,7 @@ function DistributionOverlay({ columns }: { columns: readonly Snapshot[] }) {
   return (
     <div className="mb-4">
       <div className="flex flex-wrap items-baseline gap-x-3">
-        <h3 className="text-sm font-medium">タイムの分布</h3>
+        <h3 className="text-sm font-bold">タイムの分布</h3>
         {series.map((s, i) => (
           <span key={s.id} className="flex items-center gap-1 text-[11px] text-ink2">
             <span
@@ -164,7 +164,7 @@ export function CompareOutput() {
     return (
       <Panel title="比較">
         <p className="text-sm text-ink3">
-          実行したあとにヘッダの「スナップショットを保存」を押すと、設定同士を並べて比べられる。
+          実行したあとにヘッダの「スナップショットを保存」を押すと、設定同士を並べて比べられます。
         </p>
       </Panel>
     );
@@ -219,7 +219,7 @@ export function CompareOutput() {
                 項目
               </th>
               {columns.map((snapshot, i) => (
-                <th key={snapshot.id} scope="col" className="py-1 text-right font-medium">
+                <th key={snapshot.id} scope="col" className="py-1 text-right font-bold">
                   {i < 3 && (
                     <span
                       className="mr-1 inline-block h-2 w-2 rounded-full align-middle"
@@ -260,7 +260,7 @@ export function CompareOutput() {
               return (
                 <Fragment key={group.name}>
                   <tr className="bg-sunken">
-                    <td colSpan={columns.length + 1} className="py-1 text-xs font-semibold text-ink2">
+                    <td colSpan={columns.length + 1} className="py-1 text-xs font-bold text-ink2">
                       {group.name}
                     </td>
                   </tr>
@@ -287,7 +287,7 @@ export function CompareOutput() {
                           return (
                             <td
                               key={snapshot.id}
-                              className={`${row.numeric === true ? 'num ' : ''}py-1 text-right ${differs ? 'font-semibold' : 'text-ink3'}`}
+                              className={`${row.numeric === true ? 'num ' : ''}py-1 text-right ${differs ? 'font-bold' : 'text-ink3'}`}
                             >
                               {value}
                               {Number.isFinite(delta) && (
@@ -347,7 +347,7 @@ export function CompareOutput() {
                             colSpan={columns.length + 1}
                             className="py-1 text-[11px] text-ink3"
                           >
-                            残り {commonCount} 件のスキルは {columns.length} 件とも同じ
+                            残り {commonCount} 件のスキルは {columns.length} 件とも同じです
                           </td>
                         </tr>
                       )}
@@ -360,10 +360,10 @@ export function CompareOutput() {
         </table>
       </div>
       <p className="mt-2 text-xs text-ink3">
-        太字は基準と違う値。括弧内は基準との差で、平均タイムには 95% の区間を添えてある。
+        太字は基準と違う値です。括弧内は基準との差で、平均タイムには 95% の区間を添えてあります。
         区間は列どうしを別々に平均して求めたもので、探索の画面で使っている
-        <strong>試行ごとに引き算した区間より広い</strong>。
-        スナップショットは別々に走らせたものなので、試行を対応付けられない。
+        <strong>試行ごとに引き算した区間より広い</strong>です。
+        スナップショットは別々に走らせたものなので、試行を対応付けられません。
       </p>
     </Panel>
   );
@@ -402,7 +402,7 @@ export function ShareButton() {
         );
       }}
     >
-      {copied ? 'コピーした' : '設定を URL に'}
+      {copied ? 'コピー済み' : '共有 URL のコピー'}
     </button>
   );
 }

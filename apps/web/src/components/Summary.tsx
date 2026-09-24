@@ -75,7 +75,7 @@ export function SummaryOutput() {
   if (summary === null) {
     return (
       <Panel title="結果">
-        <p className="text-sm text-ink3">まだ実行していない。</p>
+        <p className="text-sm text-ink3">まだ実行していません。</p>
       </Panel>
     );
   }
@@ -121,13 +121,13 @@ export function SummaryOutput() {
           <span className="text-xs text-ink3">平均タイム</span>
           <span
             data-testid="average-time"
-            className="font-mono text-4xl font-semibold tabular-nums leading-none"
+            className="font-mono text-4xl font-bold tabular-nums leading-none"
           >
             {formatTime(summary.all.averageTime)}
           </span>
           <span className="text-xs text-ink3">
             {baseline === undefined ? (
-              'スナップショットを保存すると基準比を表示'
+              'スナップショットを保存すると基準比を表示します'
             ) : (
               <>
                 基準スナップショット比{' '}
@@ -152,7 +152,7 @@ export function SummaryOutput() {
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
           <div className="flex flex-col gap-0.5">
             <span className="text-xs text-ink3">タイムの幅</span>
-            <span className="font-mono text-base font-semibold tabular-nums">
+            <span className="font-mono text-base font-bold tabular-nums">
               {formatTime(summary.all.bestTime)}
             </span>
             <span className="text-xs text-ink3">
@@ -161,11 +161,11 @@ export function SummaryOutput() {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-xs text-ink3">完走率</span>
-            <span className="font-mono text-base font-semibold tabular-nums">{percent(summary.finishRate)}</span>
+            <span className="font-mono text-base font-bold tabular-nums">{percent(summary.finishRate)}</span>
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-xs text-ink3">最大スパート率</span>
-            <span className="font-mono text-base font-semibold tabular-nums">{percent(summary.spurtRate)}</span>
+            <span className="font-mono text-base font-bold tabular-nums">{percent(summary.spurtRate)}</span>
             {Number.isFinite(spurtRateDelta) && (
               <span className="text-xs text-ink3">
                 基準比 <span className="font-mono tabular-nums">{signed(spurtRateDelta, 1)}</span> pt
@@ -174,7 +174,7 @@ export function SummaryOutput() {
           </div>
           <div className="flex flex-col gap-0.5">
             <span className="text-xs text-ink3">ゴール時の残り体力</span>
-            <span className="font-mono text-base font-semibold tabular-nums">
+            <span className="font-mono text-base font-bold tabular-nums">
               {summary.all.averageGoalSp.toFixed(1)}
             </span>
             {Number.isFinite(goalSpP5) && (
@@ -210,7 +210,7 @@ export function SummaryOutput() {
       {skillSummaries.length > 0 && (
         <div className="mt-5">
           <div className="flex items-baseline gap-2">
-            <h3 className="text-sm font-medium">スキル別の発動状況</h3>
+            <h3 className="text-sm font-bold">スキル別の発動状況</h3>
             <span className="text-xs text-ink3">
               数値は全試行の平均
             </span>
@@ -226,11 +226,11 @@ export function SummaryOutput() {
               disabled={bandRunning || running || !useField}
               title={
                 useField
-                  ? '相手の強さを −100、0、+100 で走らせ、発動率がどこまで動くかを出す'
-                  : '順位条件を判定していないので、相手の強さを振っても発動率は動かない'
+                  ? '相手の強さを −100、0、+100 で走らせ、発動率がどこまで動くかを出します'
+                  : '順位条件を判定していないので、相手の強さを振っても発動率は動きません'
               }
             >
-              {bandRunning ? '幅を測っている' : '相手の強さで幅を見る'}
+              {bandRunning ? '測定中' : '相手の強さによる幅の測定'}
             </button>
           </div>
           <div className="mt-2 overflow-x-auto">
