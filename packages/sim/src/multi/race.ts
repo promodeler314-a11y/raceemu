@@ -1,4 +1,4 @@
-import { goal, updateFrame, type RaceCalculator } from '../calculator.ts';
+import { gateNumberRange, goal, updateFrame, type RaceCalculator } from '../calculator.ts';
 import { RngSet } from '../rng.ts';
 import type { RaceSetting } from '../setting.ts';
 import type { RaceSimulationResult, RaceState } from '../state.ts';
@@ -69,6 +69,14 @@ const MAX_FRAMES = 6000;
  *
  * 枠番を 0（おまかせ）にした頭が複数いると、それぞれが勝手に引いて同じ枠に
  * 重なりうる。実際のレースでは重ならないので、空いている枠から配る。
+ *
+ * 配る順は、枠番の指定、内枠（-1）と外枠（-2）、おまかせの順である。
+ * 内枠と外枠の頭は、空いている枠のうち `gateNumberRange` の範囲に入るものから取る。
+ * 範囲の枠が埋まっていたら、範囲の外の空き枠に回す（重ならないことを優先する）。
+ * 空き枠そのものが無いとき（枠数より頭数が多い）は 1 番に置く。
+ *
+ * 空き枠を 1 回だけ混ぜ、その並びの前から取るので、範囲の中では一様に配られ、
+ * 乱数の消費は内枠・外枠の有無で変わらない。
  */
 function assignGates(
   entries: readonly MultiEntry[],
@@ -76,8 +84,9 @@ function assignGates(
   seed: number,
   trial: number,
 ): number[] {
-  const gates = entries.map((entry) => entry.setting.uma.gateNumber);
-  const used = new Set(gates.filter((gate) => gate >= 1 && gate <= gateCount));
+  const requested = entries.map((entry) => entry.setting.uma.gateNumber);
+  const isFixed = (gate: number) => gate >= 1 && gate <= gateCount;
+  const used = new Set(requested.filter(isFixed));
   const free: number[] = [];
   for (let gate = 1; gate <= gateCount; gate++) if (!used.has(gate)) free.push(gate);
   // 試行ごとに配り方を変える。同じ試行番号なら同じ配り方になる。
@@ -86,8 +95,22 @@ function assignGates(
     const j = rng.nextInt(i + 1);
     [free[i], free[j]] = [free[j]!, free[i]!];
   }
-  let next = 0;
-  return gates.map((gate) => (gate >= 1 && gate <= gateCount ? gate : (free[next++] ?? 1)));
+  const take = (accept: (gate: number) => boolean): number => {
+    const k = free.findIndex(accept);
+    if (k < 0) return free.shift() ?? 1;
+    return free.splice(k, 1)[0]!;
+  };
+
+  const gates = requested.map((gate) => (isFixed(gate) ? gate : 0));
+  requested.forEach((gate, i) => {
+    if (gate !== -1 && gate !== -2) return;
+    const [min, max] = gateNumberRange(gate, gateCount)!;
+    gates[i] = take((g) => g >= min && g <= max);
+  });
+  requested.forEach((gate, i) => {
+    if (gates[i] === 0) gates[i] = take(() => true);
+  });
+  return gates;
 }
 
 export function runMultiRace(
