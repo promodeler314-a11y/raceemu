@@ -29,6 +29,17 @@ const DIR = '.github/workflows';
 const PRUNE = 'scripts/prune-skill-list.mjs';
 
 /**
+ * 文面を LF に揃えて読む。
+ *
+ * 以下の検査は正規表現や `split` で `\n` を区切りに使う。Windows で
+ * `core.autocrlf=true` のまま取り出すと CRLF になり、一致が空になって
+ * 「材料が見つからない」形で落ちる。見たいのは中身なので、改行は読む側で揃える。
+ */
+function readText(path: string): string {
+  return readFileSync(path, 'utf8').replace(/\r\n/g, '\n');
+}
+
+/**
  * `jobs:` の下のジョブを、名前 → その塊の文面に割る。
  *
  * YAML のパーサは入れていない（テストのためだけに依存を増やさない）。
@@ -62,7 +73,7 @@ describe('ワークフローのシェル', () => {
   });
 
   for (const file of files) {
-    const body = readFileSync(`${DIR}/${file}`, 'utf8');
+    const body = readText(`${DIR}/${file}`);
     for (const [index, step] of steps(body).entries()) {
       // ヒアドキュメントや文字列の中の `|` ではなく、コマンドをつないでいる
       // ものだけを見たい。`| tee` と `| grep` のような素の連結を対象にする。
@@ -86,8 +97,8 @@ describe('ワークフローのシェル', () => {
  * pipefail の事故と同じ形（取れていないのに緑）なので、ここで結んでおく。
  */
 describe('本家の計算式の見張り', () => {
-  const workflow = readFileSync(`${DIR}/check-race-model.yml`, 'utf8');
-  const script = readFileSync('scripts/check-race-model.py', 'utf8');
+  const workflow = readText(`${DIR}/check-race-model.yml`);
+  const script = readText('scripts/check-race-model.py');
 
   /** スクリプトの `MANIFEST = ROOT / 'a' / 'b'` から、パスを組み立てる。 */
   const declaration = /MANIFEST = ROOT \/ (.+)/.exec(script);
@@ -109,7 +120,7 @@ describe('本家の計算式の見張り', () => {
   });
 
   it('マニフェストが本家の race モジュールの指紋を持っている', () => {
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+    const manifest = JSON.parse(readText(manifestPath)) as {
       repository: string;
       files: Record<string, string>;
     };
@@ -126,7 +137,7 @@ describe('本家の計算式の見張り', () => {
   });
 
   it('計算の中心になるファイルを取りこぼしていない', () => {
-    const manifest = JSON.parse(readFileSync(manifestPath, 'utf8')) as {
+    const manifest = JSON.parse(readText(manifestPath)) as {
       files: Record<string, string>;
     };
     const kotlin = 'race/src/commonMain/kotlin/io/github/mee1080/umasim/race/';
@@ -160,8 +171,8 @@ describe('本家の計算式の見張り', () => {
  * 決めているので、それが実際に使い回されていることを見る。
  */
 describe('スキル一覧の表の作り直し', () => {
-  const workflow = readFileSync(`${DIR}/build-skill-list.yml`, 'utf8');
-  const contract = readFileSync('packages/solver/src/skill-list.ts', 'utf8');
+  const workflow = readText(`${DIR}/build-skill-list.yml`);
+  const contract = readText('packages/solver/src/skill-list.ts');
 
   /** 生成先。ワークフローの `env:` に 1 か所だけ書いてある。 */
   const outDir = /^\s*OUT_DIR:\s*(\S+)\s*$/m.exec(workflow)?.[1] ?? '';
@@ -271,7 +282,7 @@ describe('スキル一覧の表の作り直し', () => {
   it('関所は生成と同じ版の計算を使う', () => {
     // **ここが食い違うと、関所が「変わっていない」と言ったのに実は違う版、が起きる。**
     // 表は古いまま、作り直しは二度と走らない（しかも緑）。
-    const check = readFileSync('packages/solver/src/skill-list-check-cli.ts', 'utf8');
+    const check = readText('packages/solver/src/skill-list-check-cli.ts');
     expect(check).toContain('readSkillListDataset');
     expect(check).toContain('skillListVersion');
     expect(workflow).toContain('pnpm skill-list-check');
@@ -282,7 +293,7 @@ describe('スキル一覧の表の作り直し', () => {
     const trials = Number(/^\s*TRIALS:\s*'(\d+)'\s*$/m.exec(workflow)?.[1]);
     const cliDefault = Number(
       /const trials = Number\(arg\('trials', '(\d+)'\)\)/.exec(
-        readFileSync('packages/solver/src/skill-list-cli.ts', 'utf8'),
+        readText('packages/solver/src/skill-list-cli.ts'),
       )?.[1],
     );
     expect(trials).toBeGreaterThan(0);
@@ -310,7 +321,7 @@ describe('スキル一覧の表の作り直し', () => {
   });
 
   it('残す世代数の理由が docs にある', () => {
-    expect(readFileSync('docs/deploy.md', 'utf8')).toContain(`${keep} 世代`);
+    expect(readText('docs/deploy.md')).toContain(`${keep} 世代`);
   });
 
   it('版とコースの一覧が無ければ赤で落ちる', () => {
@@ -335,7 +346,7 @@ describe('スキル一覧の表の作り直し', () => {
  * なので、**実際に走らせて**確かめる。
  */
 describe('スキル一覧の掃除', () => {
-  const script = readFileSync(PRUNE, 'utf8');
+  const script = readText(PRUNE);
 
   /**
    * 見本を作って掃除を走らせ、あとに残ったものと `index.json` を返す。
@@ -365,7 +376,7 @@ describe('スキル一覧の掃除', () => {
       const left = readdirSync(dir).sort();
       const after =
         run.status === 0
-          ? (JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8')) as {
+          ? (JSON.parse(readText(join(dir, 'index.json'))) as {
               version: string;
               generations: string[];
               courses: unknown[];
@@ -477,11 +488,11 @@ describe('スキル一覧の掃除', () => {
  */
 const SKILL_LIST_CLI = 'packages/solver/src/skill-list-cli.ts';
 describe.skipIf(!existsSync(SKILL_LIST_CLI))('スキル一覧の CLI とワークフローの配線', () => {
-  const workflow = readFileSync(`${DIR}/build-skill-list.yml`, 'utf8');
+  const workflow = readText(`${DIR}/build-skill-list.yml`);
   const outDir = /^\s*OUT_DIR:\s*(\S+)\s*$/m.exec(workflow)?.[1] ?? '';
 
   it('ワークフローが呼ぶ pnpm のスクリプトが package.json にある', () => {
-    const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as {
+    const pkg = JSON.parse(readText('package.json')) as {
       scripts: Record<string, string>;
     };
     expect(workflow).toContain('pnpm skill-list \\');
@@ -492,14 +503,14 @@ describe.skipIf(!existsSync(SKILL_LIST_CLI))('スキル一覧の CLI とワー�
   });
 
   it('CLI が書く場所とワークフローが見る場所が同じ', () => {
-    expect(readFileSync(SKILL_LIST_CLI, 'utf8')).toContain(outDir);
+    expect(readText(SKILL_LIST_CLI)).toContain(outDir);
   });
 
   it('分片の取りまとめと生成が同じ版を計算する', () => {
     // **ここが食い違うと、置いてあるコースを 1 本も見つけられない。**
     // 画面からは「表が無い」と区別が付かないまま緑で終わる。
-    const collect = readFileSync('packages/solver/src/skill-list-collect-cli.ts', 'utf8');
-    for (const source of [readFileSync(SKILL_LIST_CLI, 'utf8'), collect]) {
+    const collect = readText('packages/solver/src/skill-list-collect-cli.ts');
+    for (const source of [readText(SKILL_LIST_CLI), collect]) {
       expect(source).toContain('readSkillListDataset');
       expect(source).toContain('skillListVersion');
     }
