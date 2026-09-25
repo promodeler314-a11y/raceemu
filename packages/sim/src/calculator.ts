@@ -9,7 +9,8 @@ import {
   type PositionKeepState,
   type Style,
 } from './data/constants.ts';
-import { ORDER_RATE_CONTINUE_TYPES, resolveOrderRateContinue } from './data/orderRate.ts';
+import { ORDER_RATE_CONTINUE_TYPES } from './data/orderRate.ts';
+import { orderRateContinueBoundaries } from './data/orderRateResolve.ts';
 import type { RaceTrack } from './data/track.ts';
 import { FIELD_COMPUTED_STATES, updateFieldConditions } from './field/conditions.ts';
 import { RecordedField, type FieldBundle, type FieldView } from './field/field.ts';
@@ -356,6 +357,10 @@ function progressRace(state: RaceState): RaceSimulationResult {
  *
  * フィールドを持たない実行では順位が分からないので、本家と同じく
  * 満たしている前提のまま（1 のまま）にする。
+ *
+ * 境界は頭数ごとに作り置いたものを引く（`orderRateContinueBoundaries`）。
+ * 毎フレーム呼ばれるので、ここで正規表現や文字列の鍵を作らない。
+ * 9 頭と 12 頭以外は式で延ばした境界である（docs/order-condition.md 2.2 節）。
  */
 function updateOrderRateContinue(state: RaceState): void {
   const order = state.order;
@@ -363,10 +368,11 @@ function updateOrderRateContinue(state: RaceState): void {
   // 出走前は全頭が同着なので、帯を外れたことにしない（docs/order-field.md 4.4 節）。
   if (state.beforeStart) return;
   const specialState = state.simulation.specialState;
-  const gateCount = state.setting.base.track.gateCount;
-  for (const type of ORDER_RATE_CONTINUE_TYPES) {
+  const boundaries = orderRateContinueBoundaries(state.setting.base.track.gateCount);
+  for (let i = 0; i < ORDER_RATE_CONTINUE_TYPES.length; i++) {
+    const type = ORDER_RATE_CONTINUE_TYPES[i]!;
     if ((specialState[type] ?? 1) === 0) continue;
-    const boundary = resolveOrderRateContinue(type, gateCount);
+    const boundary = boundaries[i];
     if (boundary === undefined) continue;
     const inside =
       boundary.atMost !== undefined ? order <= boundary.atMost : order >= boundary.atLeast!;

@@ -73,10 +73,19 @@ const MAX_FRAMES = 6000;
  * 配る順は、枠番の指定、内枠（-1）と外枠（-2）、おまかせの順である。
  * 内枠と外枠の頭は、空いている枠のうち `gateNumberRange` の範囲に入るものから取る。
  * 範囲の枠が埋まっていたら、範囲の外の空き枠に回す（重ならないことを優先する）。
- * 空き枠そのものが無いとき（枠数より頭数が多い）は 1 番に置く。
  *
  * 空き枠を 1 回だけ混ぜ、その並びの前から取るので、範囲の中では一様に配られ、
  * 乱数の消費は内枠・外枠の有無で変わらない。
+ *
+ * 明示した枠番が別の頭と重なったときは、先の頭がその枠を取り、後の頭は
+ * おまかせと同じく空き枠から配る。個体から選んだ相手が自分と同じ固定枠を
+ * 持っている場合などに起きる。重なりが無ければ、配り方は以前と 1 ビットも変わらない
+ * （空き枠の並べ替えは空き枠の数だけで決まる）。
+ *
+ * 空き枠が足りなくなるのは、出走頭数が枠の数を超えるときだけである
+ * （内枠と外枠も範囲が埋まれば範囲外の空き枠に回るので、足りなくする原因にならない）
+ * （重なりを空き枠に回しても、配る先の数は「頭数 − 使った枠の数」、空き枠の数は
+ * 「枠の数 − 使った枠の数」になる）。その場合は呼び出し側で止める（`runMultiRace`）。
  */
 function assignGates(
   entries: readonly MultiEntry[],
@@ -97,11 +106,20 @@ function assignGates(
   }
   const take = (accept: (gate: number) => boolean): number => {
     const k = free.findIndex(accept);
-    if (k < 0) return free.shift() ?? 1;
-    return free.splice(k, 1)[0]!;
+    const assigned = k < 0 ? free.shift() : free.splice(k, 1)[0];
+    if (assigned === undefined) {
+      throw new Error(`出走頭数（${requested.length} 頭）が枠の数（${gateCount}）を超えている`);
+    }
+    return assigned;
   };
 
-  const gates = requested.map((gate) => (isFixed(gate) ? gate : 0));
+  // 明示した枠番は先の頭が取る。重なった後の頭はおまかせに回す。
+  const taken = new Set<number>();
+  const gates = requested.map((gate) => {
+    if (!isFixed(gate) || taken.has(gate)) return 0;
+    taken.add(gate);
+    return gate;
+  });
   requested.forEach((gate, i) => {
     if (gate !== -1 && gate !== -2) return;
     const [min, max] = gateNumberRange(gate, gateCount)!;
@@ -121,6 +139,10 @@ export function runMultiRace(
   const count = entries.length;
   if (count === 0) throw new Error('出走頭数が 0 である');
   const gateCount = entries[0]!.setting.track.gateCount;
+  // 枠が足りないと、同じ枠に 2 頭が入る。黙って走らせずに止める。
+  if (count > gateCount) {
+    throw new Error(`出走頭数（${count} 頭）が枠の数（${gateCount}）を超えている`);
+  }
   const gates = assignGates(entries, gateCount, options.seed, options.trial);
 
   // LiveField は配列の参照を持つ。作りながら埋めていくので、

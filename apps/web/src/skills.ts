@@ -85,7 +85,7 @@ export function buildSkillIndex(data: GameData): SkillIndex {
   }
 
   const charas = [...new Set([...uniques.keys(), ...evos.keys()])].sort((a, b) =>
-    nameOf(a).localeCompare(nameOf(b), 'ja'),
+    shortCharaName(a).localeCompare(shortCharaName(b), 'ja'),
   );
 
   const uniquesOf = (chara: string): readonly SkillData[] => uniques.get(chara) ?? [];
@@ -133,10 +133,30 @@ export function buildSkillIndex(data: GameData): SkillIndex {
   };
 }
 
-/** `[勝負服]ウマ娘名` からウマ娘名を取る。並べ替えに使う。 */
-function nameOf(holder: string): string {
+/**
+ * `[勝負服]ウマ娘名` からウマ娘名を取る。
+ *
+ * 並べ替えと、画面に出す短い呼び名に使う。キャラの値そのものは勝負服ごとに
+ * 違うので、選択欄や照合には元の値を使うこと。勝負服の付かない名前はそのまま返す。
+ */
+export function shortCharaName(holder: string): string {
   const end = holder.indexOf(']');
   return end < 0 ? holder : holder.slice(end + 1);
+}
+
+/**
+ * 出走表と着順の表で使う呼び名。
+ *
+ * `index` は出走の並び（0 が自分、1 から相手）である。自分は名前があれば
+ * 「自分（ウマ娘名）」、無ければ「自分」。相手は名前があればウマ娘名、
+ * 無ければ出走の番号で「N 番」と呼ぶ（N は `index + 1`）。
+ * 勝負服は表の幅に収まらないので落とす。同じ名前が並んでも、表は出走の番号も
+ * 一緒に出すので見分けは付く。
+ */
+export function entryLabel(index: number, charaName: string): string {
+  const name = shortCharaName(charaName);
+  if (index === 0) return name === '' ? '自分' : `自分（${name}）`;
+  return name === '' ? `${index + 1} 番` : name;
 }
 
 export const gameData = loadGameData();
