@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../data/src/node.ts';
-import { RaceCalculator } from '../src/calculator.ts';
+import { gateNumberRange, RaceCalculator } from '../src/calculator.ts';
 import type { Style } from '../src/data/constants.ts';
 import { runMultiRace, type MultiEntry } from '../src/multi/race.ts';
 import { replayMultiRace } from '../src/multi/replay.ts';
@@ -50,6 +50,62 @@ describe('全頭同時', () => {
     const out = runMultiRace(calculator, entries, { seed: 7, trial: 3 });
     const gates = out.states.map((s) => s.setting.base.uma.gateNumber);
     expect(new Set(gates).size).toBe(gates.length);
+  });
+
+  describe('内枠と外枠の指定', () => {
+    const gatesOf = (list: readonly MultiEntry[], trial: number, gateCount = 9) => {
+      const withCount = list.map((entry) => ({
+        ...entry,
+        setting: { ...entry.setting, track: { ...track, gateCount } },
+      }));
+      return runMultiRace(calculator, withCount, { seed: 7, trial }).states
+        .map((s) => s.setting.base.uma.gateNumber);
+    };
+
+    it('抽選の範囲が本家（maxBy は条件を満たす最初の枠を返す）と同じになる', () => {
+      expect(gateNumberRange(-1, 9)).toEqual([1, 3]);
+      expect(gateNumberRange(-2, 9)).toEqual([6, 9]);
+      expect(gateNumberRange(-1, 12)).toEqual([1, 3]);
+      expect(gateNumberRange(-2, 12)).toEqual([7, 12]);
+      expect(gateNumberRange(-2, 18)).toEqual([11, 18]);
+      expect(gateNumberRange(0, 9)).toEqual([1, 9]);
+      expect(gateNumberRange(4, 9)).toBeNull();
+    });
+
+    it('9 頭では内枠が 1〜3、外枠が 6〜9 に入り、重ならない', () => {
+      // 固定の 2 番と 7 番が範囲の枠を 1 つずつ塞いでいても、残りの範囲から配る
+      const wishes = [-1, -1, -2, -2, 0, 0, 2, 7, 0];
+      const list = lineup.map((style, i) => ({ setting: make(style, { gateNumber: wishes[i]! }) }));
+      for (let trial = 0; trial < 8; trial++) {
+        const gates = gatesOf(list, trial);
+        expect(new Set(gates).size).toBe(gates.length);
+        expect(gates[6]).toBe(2);
+        expect(gates[7]).toBe(7);
+        for (const i of [0, 1]) expect(gates[i]).toBeLessThanOrEqual(3);
+        for (const i of [2, 3]) expect(gates[i]).toBeGreaterThanOrEqual(6);
+      }
+    });
+
+    it('12 頭では外枠が 7〜12 に入る', () => {
+      const list: MultiEntry[] = Array.from({ length: 12 }, (_, i) => ({
+        setting: make(lineup[i % lineup.length]!, { gateNumber: i < 4 ? -2 : 0 }),
+      }));
+      for (let trial = 0; trial < 4; trial++) {
+        const gates = gatesOf(list, trial, 12);
+        expect(new Set(gates).size).toBe(12);
+        for (let i = 0; i < 4; i++) {
+          expect(gates[i]).toBeGreaterThanOrEqual(7);
+          expect(gates[i]).toBeLessThanOrEqual(12);
+        }
+      }
+    });
+
+    it('範囲の枠が足りなければ、あふれた頭は範囲外の空き枠に回り重ならない', () => {
+      const list = lineup.map((style, i) => ({ setting: make(style, { gateNumber: i < 4 ? -1 : 0 }) }));
+      const gates = gatesOf(list, 1);
+      expect(new Set(gates).size).toBe(gates.length);
+      expect(gates.slice(0, 4).filter((g) => g <= 3)).toHaveLength(3);
+    });
   });
 
   it('同じ入力なら同じ結果になる', () => {

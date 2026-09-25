@@ -1,4 +1,4 @@
-import { goal, updateFrame, type RaceCalculator } from '../calculator.ts';
+import { gateNumberRange, goal, updateFrame, type RaceCalculator } from '../calculator.ts';
 import { RngSet } from '../rng.ts';
 import type { RaceSetting } from '../setting.ts';
 import type { RaceSimulationResult, RaceState } from '../state.ts';
@@ -70,12 +70,20 @@ const MAX_FRAMES = 6000;
  * 枠番を 0（おまかせ）にした頭が複数いると、それぞれが勝手に引いて同じ枠に
  * 重なりうる。実際のレースでは重ならないので、空いている枠から配る。
  *
+ * 配る順は、枠番の指定、内枠（-1）と外枠（-2）、おまかせの順である。
+ * 内枠と外枠の頭は、空いている枠のうち `gateNumberRange` の範囲に入るものから取る。
+ * 範囲の枠が埋まっていたら、範囲の外の空き枠に回す（重ならないことを優先する）。
+ *
+ * 空き枠を 1 回だけ混ぜ、その並びの前から取るので、範囲の中では一様に配られ、
+ * 乱数の消費は内枠・外枠の有無で変わらない。
+ *
  * 明示した枠番が別の頭と重なったときは、先の頭がその枠を取り、後の頭は
  * おまかせと同じく空き枠から配る。個体から選んだ相手が自分と同じ固定枠を
  * 持っている場合などに起きる。重なりが無ければ、配り方は以前と 1 ビットも変わらない
- * （空き枠の並べ替えは空き枠の数だけで決まり、配る順も出走順のままである）。
+ * （空き枠の並べ替えは空き枠の数だけで決まる）。
  *
  * 空き枠が足りなくなるのは、出走頭数が枠の数を超えるときだけである
+ * （内枠と外枠も範囲が埋まれば範囲外の空き枠に回るので、足りなくする原因にならない）
  * （重なりを空き枠に回しても、配る先の数は「頭数 − 使った枠の数」、空き枠の数は
  * 「枠の数 − 使った枠の数」になる）。その場合は呼び出し側で止める（`runMultiRace`）。
  */
@@ -85,9 +93,9 @@ function assignGates(
   seed: number,
   trial: number,
 ): number[] {
-  const gates = entries.map((entry) => entry.setting.uma.gateNumber);
-  const inRange = (gate: number): boolean => gate >= 1 && gate <= gateCount;
-  const used = new Set(gates.filter(inRange));
+  const requested = entries.map((entry) => entry.setting.uma.gateNumber);
+  const isFixed = (gate: number) => gate >= 1 && gate <= gateCount;
+  const used = new Set(requested.filter(isFixed));
   const free: number[] = [];
   for (let gate = 1; gate <= gateCount; gate++) if (!used.has(gate)) free.push(gate);
   // 試行ごとに配り方を変える。同じ試行番号なら同じ配り方になる。
@@ -96,19 +104,31 @@ function assignGates(
     const j = rng.nextInt(i + 1);
     [free[i], free[j]] = [free[j]!, free[i]!];
   }
-  const taken = new Set<number>();
-  let next = 0;
-  return gates.map((gate) => {
-    if (inRange(gate) && !taken.has(gate)) {
-      taken.add(gate);
-      return gate;
-    }
-    const assigned = free[next++];
+  const take = (accept: (gate: number) => boolean): number => {
+    const k = free.findIndex(accept);
+    const assigned = k < 0 ? free.shift() : free.splice(k, 1)[0];
     if (assigned === undefined) {
-      throw new Error(`出走頭数（${gates.length} 頭）が枠の数（${gateCount}）を超えている`);
+      throw new Error(`出走頭数（${requested.length} 頭）が枠の数（${gateCount}）を超えている`);
     }
     return assigned;
+  };
+
+  // 明示した枠番は先の頭が取る。重なった後の頭はおまかせに回す。
+  const taken = new Set<number>();
+  const gates = requested.map((gate) => {
+    if (!isFixed(gate) || taken.has(gate)) return 0;
+    taken.add(gate);
+    return gate;
   });
+  requested.forEach((gate, i) => {
+    if (gate !== -1 && gate !== -2) return;
+    const [min, max] = gateNumberRange(gate, gateCount)!;
+    gates[i] = take((g) => g >= min && g <= max);
+  });
+  requested.forEach((gate, i) => {
+    if (gates[i] === 0) gates[i] = take(() => true);
+  });
+  return gates;
 }
 
 export function runMultiRace(
