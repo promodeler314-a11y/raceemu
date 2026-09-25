@@ -101,20 +101,8 @@ export class RaceCalculator {
 
     const gateCount = setting.track.gateCount;
     const gateRng = rng.stream('gate');
-    let gateNumber: number;
-    if (setting.uma.gateNumber === 0) {
-      gateNumber = gateRng.nextIntRange(1, gateCount);
-    } else if (setting.uma.gateNumber === -1) {
-      let best = 3;
-      for (let g = 3; g <= 6; g++) if (gateNumberToPostNumber[g]![gateCount]! <= 3) best = g;
-      gateNumber = gateRng.nextIntRange(1, best);
-    } else if (setting.uma.gateNumber === -2) {
-      let best = 6;
-      for (let g = 6; g <= 12; g++) if (gateNumberToPostNumber[g]![gateCount]! >= 6) best = g;
-      gateNumber = gateRng.nextIntRange(best, gateCount);
-    } else {
-      gateNumber = setting.uma.gateNumber;
-    }
+    const range = gateNumberRange(setting.uma.gateNumber, gateCount);
+    const gateNumber = range === null ? setting.uma.gateNumber : gateRng.nextIntRange(range[0], range[1]);
 
     const initialLane = gateNumber * horseLane + initialLaneAdjuster(setting, gateCount);
     const simulation = new RaceSimulationState();
@@ -198,6 +186,26 @@ export class RaceCalculator {
     }
 
     return state;
+  }
+}
+
+/**
+ * 枠番の指定から、抽選する枠の範囲（両端を含む）を返す。
+ * 0 はおまかせ、-1 は内枠（枠順 3 まで）、-2 は外枠（枠順 6 から）。
+ * それ以外は枠番をそのまま使うので null を返す。
+ * 本家の抽選範囲をそのまま移植したもので、全頭同時（multi/race.ts）も同じ範囲を使う。
+ */
+export function gateNumberRange(gateNumber: number, gateCount: number): [number, number] | null {
+  if (gateNumber === 0) return [1, gateCount];
+  if (gateNumber === -1) return [1, firstGate(3, 6, (post) => post <= 3)];
+  if (gateNumber === -2) return [firstGate(6, 12, (post) => post >= 6), gateCount];
+  return null;
+
+  // 本家は `(from..to).maxBy { 条件 }` と書いている。Kotlin の maxBy は最大値を取る
+  // 最初の要素を返すので、条件を満たす最初の枠、無ければ from になる。
+  function firstGate(from: number, to: number, accept: (post: number) => boolean): number {
+    for (let g = from; g <= to; g++) if (accept(gateNumberToPostNumber[g]![gateCount]!)) return g;
+    return from;
   }
 }
 
