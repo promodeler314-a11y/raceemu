@@ -57,6 +57,16 @@ export function editDistance(a: string, b: string): number {
   return previous[b.length]!;
 }
 
+/**
+ * 正規化した 2 つの名前の近さ。0 から 1 で、1 なら完全一致。
+ * 編集距離を長い方の文字数で割って 1 から引く（docs/ocr-design.md 3.2 節）。
+ */
+export function nameSimilarity(a: string, b: string): number {
+  const length = Math.max(a.length, b.length);
+  if (length === 0) return 0;
+  return 1 - editDistance(a, b) / length;
+}
+
 export interface SkillMatch {
   readonly skill: SkillData;
   /** 読み取った行のうち、この一致に使った部分 */
@@ -113,8 +123,7 @@ export class SkillMatcher {
     for (const entry of this.entries) {
       // 長さが大きく違うものは比べるまでもない
       if (Math.abs(entry.key.length - key.length) > Math.max(2, key.length * 0.5)) continue;
-      const distance = editDistance(key, entry.key);
-      const score = 1 - distance / Math.max(key.length, entry.key.length);
+      const score = nameSimilarity(key, entry.key);
       if (best === null || score > best.score) {
         second = best;
         best = { skill: entry.skill, score };

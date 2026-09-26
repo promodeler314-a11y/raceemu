@@ -12,7 +12,7 @@ import { JobRunner, QueueFullError, type Job } from './jobs.ts';
 import { OcrEngine } from './ocr.ts';
 import { checkRequest, RequestError } from './request.ts';
 import { classifierCoverage, classifierSkillIds, SkillClassifier } from './skill-classifier.ts';
-import { skillsUnknownToClassifier, SkillVerifier } from './skill-verify.ts';
+import { ReadingJudge, SkillVerifier } from './skill-verify.ts';
 import { readStatusHeader, StatusOutOfFrameError } from './status-reader.ts';
 
 /**
@@ -179,11 +179,11 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       : new OcrEngine({ tessdataPath: config.tessdataPath, threshold: config.ocrThreshold });
   const matcher = new SkillMatcher(data.skills);
   const skillClassifier = new SkillClassifier();
-  // 分類モデルが名前を知らないスキルだけを、文字認識で拾い直す（skill-verify.ts）。
+  // 分類モデルが名前を知らないスキルを、文字認識で拾い直す（skill-verify.ts）。
   // モデルは知らないスキルを「いちばん近い既知のスキル」として高い確信度で返すため、
   // 確信度では見分けられない。読み取りに使う口が無ければ裏取りもできない。
-  const unknownToClassifier = skillsUnknownToClassifier(data.skills, classifierSkillIds());
-  const verifier = ocr === null ? null : new SkillVerifier(ocr, unknownToClassifier);
+  const verifier =
+    ocr === null ? null : new SkillVerifier(ocr, new ReadingJudge(data.skills, classifierSkillIds()));
 
   return createServer((req, res) => {
     void handle(req, res).catch((error: unknown) => {
@@ -292,33 +292,59 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
       if (classified.length > 0) {
         text = '';
         // モデルの語彙に無いスキルは、いちばん近い既知のスキルとして高い確信度で
-        // 返ってくる。同じ帯を文字認識にかけ、語彙に無い名前を強く指していれば
-        // そちらを採る（skill-verify.ts）。語彙に有るスキルには手を出さない。
-        const readings =
-          verifier === null ? null : await verifier.read(image, classified.map((p) => p.crop));
+        // 返ってくる。同じ帯を文字認識にかけ、読めた文字を分類器の答えと比べる
+        // （skill-verify.ts）。はっきり語彙に無い名前を指していれば置き換え、
+        // 紛らわしければ要確認にする。
+        const rows = classified.map((prediction) => ({
+          crop: prediction.crop,
+          predicted:
+            prediction.skillId === null || prediction.confidence < CLASSIFIER_MIN_CONFIDENCE
+              ? null
+              : (data.skillsById.get(prediction.skillId) ?? null),
+        }));
+        const readings = verifier === null ? null : await verifier.read(image, rows);
         const bySkillId = new Map<string, SkillMatch>();
         for (const [index, prediction] of classified.entries()) {
+          const predicted = rows[index]!.predicted;
           const reading = readings?.[index] ?? null;
-          const corrected = reading?.skill ?? null;
-          const skill =
-            corrected ??
-            (prediction.skillId === null || prediction.confidence < CLASSIFIER_MIN_CONFIDENCE
-              ? undefined
-              : data.skillsById.get(prediction.skillId));
-          if (skill === undefined || skill === null) continue;
-          const score = corrected === null ? prediction.confidence : reading!.score;
-          const kept = bySkillId.get(skill.id);
-          if (kept === undefined || score > kept.score) {
-            bySkillId.set(skill.id, {
-              skill,
-              // 文字認識で拾い直した行は、読めた文字をそのまま返す。
-              // 画面で「なぜその答えになったか」を確かめられるようにしておく。
-              text: corrected === null ? skill.name : reading!.text,
-              score,
+          const verdict = reading?.verdict ?? { kind: 'keep' };
+          let match: SkillMatch | null;
+          // 文字認識の結果を使った行は、読めた文字をそのまま返す。
+          // 画面で「なぜその答えになったか」を確かめられるようにしておく。
+          if (verdict.kind === 'replace') {
+            match = {
+              skill: verdict.skill,
+              text: reading!.text,
+              score: verdict.score,
+              margin: verdict.margin,
+              runnerUp: null,
+            };
+          } else if (verdict.kind === 'doubt') {
+            // 語彙に無いスキルらしいが、紛らわしい。そのスキルとして出し、分類器の
+            // 答えを「かもしれません」に回す。差を 0 にして要確認にし、既定では
+            // 選ばれないようにする（Import.tsx の `uncertain`）。`uncertain` は
+            // 完全一致を紛れなしとみなすので、一致の度合いは 1 未満に抑える。
+            match = {
+              skill: verdict.skill,
+              text: reading!.text,
+              score: Math.min(verdict.score, 0.99),
+              margin: 0,
+              runnerUp: predicted,
+            };
+          } else if (predicted !== null) {
+            match = {
+              skill: predicted,
+              text: predicted.name,
+              score: prediction.confidence,
               margin: 1,
               runnerUp: null,
-            });
+            };
+          } else {
+            match = null;
           }
+          if (match === null) continue;
+          const kept = bySkillId.get(match.skill.id);
+          if (kept === undefined || match.score > kept.score) bySkillId.set(match.skill.id, match);
         }
         found = [...bySkillId.values()].sort((a, b) => b.score - a.score);
       } else if (ocr !== null) {
