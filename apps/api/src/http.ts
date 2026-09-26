@@ -294,7 +294,7 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
         // モデルの語彙に無いスキルは、いちばん近い既知のスキルとして高い確信度で
         // 返ってくる。同じ帯を文字認識にかけ、読めた文字を分類器の答えと比べる
         // （skill-verify.ts）。はっきり語彙に無い名前を指していれば置き換え、
-        // 答えから離れているだけなら要確認にする。
+        // 紛らわしければ要確認にする。
         const rows = classified.map((prediction) => ({
           crop: prediction.crop,
           predicted:
@@ -319,16 +319,17 @@ export function createApiServer(config: Config, data: GameData, runner: JobRunne
               margin: verdict.margin,
               runnerUp: null,
             };
-          } else if (verdict.kind === 'doubt' && predicted !== null) {
-            // 答えは分類器のまま、差を 0 にして画面で要確認にする。既定では選ばれない
-            // （Import.tsx の `uncertain`）。一致の度合いには、読めた文字と答えの近さを
-            // 出す。分類器の確信度を出すと、1.0 のとき要確認が外れてしまう。
+          } else if (verdict.kind === 'doubt') {
+            // 語彙に無いスキルらしいが、紛らわしい。そのスキルとして出し、分類器の
+            // 答えを「かもしれません」に回す。差を 0 にして要確認にし、既定では
+            // 選ばれないようにする（Import.tsx の `uncertain`）。`uncertain` は
+            // 完全一致を紛れなしとみなすので、一致の度合いは 1 未満に抑える。
             match = {
-              skill: predicted,
+              skill: verdict.skill,
               text: reading!.text,
-              score: verdict.predictedScore,
+              score: Math.min(verdict.score, 0.99),
               margin: 0,
-              runnerUp: verdict.candidate,
+              runnerUp: predicted,
             };
           } else if (predicted !== null) {
             match = {

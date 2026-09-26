@@ -28,9 +28,11 @@ import type { RowCrop } from './skill-classifier.ts';
  *
  * - 読めた文字が、分類器の答えを含むどの名前よりも、はっきり語彙に無いスキルに
  *   近ければ、そちらに置き換える。
- * - 置き換えるほどではないが、読めた文字が分類器の答えからはっきり離れて別の名前を
- *   指していれば、答えはそのままに「要確認」を付けて候補を添える。
- * - それ以外は分類器の答えに手を出さない。
+ * - 置き換えるほどではないが、読めた文字にいちばん近いのが語彙に無いスキルで、
+ *   分類器の答えからははっきり離れていれば、そのスキルを「要確認」として出す。
+ * - それ以外は分類器の答えに手を出さない。読めた文字が別の**既知の**スキルを
+ *   指していても同じである。語彙に有るスキルどうしなら分類器のほうが確かで、
+ *   `右回り◎` を `右回り○` と読み違えた程度で正しい答えを疑わせたくない。
  *
  * 以前は「語彙に無いスキルと 0.85 以上で一致すること」「4 文字以下は完全一致」
  * という絶対的な下限で判定していた。文字認識は丸いアイコンや装飾つきの背景に弱く
@@ -101,22 +103,17 @@ function knownNames(skills: readonly SkillData[], classifierSkillIds: Iterable<s
   return known;
 }
 
-/** 読めた文字と分類器の答えを比べた結果。 */
+/**
+ * 読めた文字と分類器の答えを比べた結果。
+ * `score` は読めた文字と `skill` の名前の近さ、`margin` は対抗との差。
+ */
 export type Verdict =
   /** 分類器の答えのままにする。 */
   | { readonly kind: 'keep' }
-  /** 語彙に無いスキルに置き換える。`margin` は対抗との差。 */
+  /** 語彙に無いスキルに置き換える。 */
   | { readonly kind: 'replace'; readonly skill: SkillData; readonly score: number; readonly margin: number }
-  /**
-   * 答えはそのままに、要確認にする。`candidate` は読めた文字がいちばん近い名前、
-   * `predictedScore` は読めた文字と分類器の答えの近さ。
-   */
-  | {
-      readonly kind: 'doubt';
-      readonly candidate: SkillData;
-      readonly candidateScore: number;
-      readonly predictedScore: number;
-    };
+  /** 語彙に無いスキルらしいが、対抗との差が小さい。人に確かめてもらう。 */
+  | { readonly kind: 'doubt'; readonly skill: SkillData; readonly score: number; readonly margin: number };
 
 const KEEP: Verdict = { kind: 'keep' };
 
@@ -160,11 +157,15 @@ export class ReadingJudge {
 
     let best: { entry: JudgeEntry; score: number } | null = null;
     let secondScore = 0;
+    let bestUnknown: { entry: JudgeEntry; score: number } | null = null;
     for (const entry of this.entries) {
       // 編集距離は長さの差を下回らない。長さの差だけで 2 番目にも届かないと
-      // 分かる名前は、距離を求めずに飛ばす。結果は変わらない。
-      const length = Math.max(key.length, entry.key.length);
-      if (best !== null && 1 - Math.abs(key.length - entry.key.length) / length <= secondScore) continue;
+      // 分かる既知の名前は、距離を求めずに飛ばす。結果は変わらない。
+      // 語彙に無い名前は 85 件ほどしかないので、いちばん近いものを必ず求める。
+      if (entry.known && best !== null) {
+        const length = Math.max(key.length, entry.key.length);
+        if (1 - Math.abs(key.length - entry.key.length) / length <= secondScore) continue;
+      }
       const score = nameSimilarity(key, entry.key);
       if (best === null || score > best.score) {
         secondScore = best?.score ?? 0;
@@ -172,27 +173,24 @@ export class ReadingJudge {
       } else if (score > secondScore) {
         secondScore = score;
       }
+      if (!entry.known && (bestUnknown === null || score > bestUnknown.score)) bestUnknown = { entry, score };
     }
-    if (best === null || best.entry.key === predictedKey) return KEEP;
-    const floor = best.entry.key.length <= SHORT_NAME_LENGTH ? SHORT_NAME_MIN_SCORE : MIN_SCORE;
-    if (best.score < floor) return KEEP;
+    if (best === null || bestUnknown === null) return KEEP;
 
-    // 置き換えは、分類器の答えにも他のどの名前にもはっきり勝っているときだけ。
-    // 分類器の答えは語彙に有る名前なので、`secondScore` か `predictedScore` の
-    // どちらかに必ず入っている。
-    const rival = Math.max(secondScore, predictedScore);
-    if (!best.entry.known && best.score - rival >= CONTRAST) {
-      return { kind: 'replace', skill: best.entry.skill, score: best.score, margin: best.score - rival };
-    }
-    if (predicted !== null && best.score - predictedScore >= CONTRAST) {
-      return {
-        kind: 'doubt',
-        candidate: best.entry.skill,
-        candidateScore: best.score,
-        predictedScore,
-      };
-    }
-    return KEEP;
+    // 語彙に無い名前が、読めた文字にいちばん近いこと（同点を含む）。既知の名前の
+    // ほうが近ければ、語彙に有るスキルどうしの話なので分類器を信じる。
+    if (bestUnknown.score < best.score) return KEEP;
+    const floor = bestUnknown.entry.key.length <= SHORT_NAME_LENGTH ? SHORT_NAME_MIN_SCORE : MIN_SCORE;
+    if (bestUnknown.score < floor) return KEEP;
+    // 分類器の答えからはっきり離れていること。答えどおりに読めている行には手を出さない。
+    if (bestUnknown.score - predictedScore < CONTRAST) return KEEP;
+
+    // 置き換えは、他のどの名前にもはっきり勝っているときだけ。同点で並ぶ名前が
+    // あれば `secondScore` がそれを拾う。
+    const rival = best.entry === bestUnknown.entry ? Math.max(secondScore, predictedScore) : best.score;
+    const margin = bestUnknown.score - rival;
+    const kind = margin >= CONTRAST ? 'replace' : 'doubt';
+    return { kind, skill: bestUnknown.entry.skill, score: bestUnknown.score, margin };
   }
 }
 

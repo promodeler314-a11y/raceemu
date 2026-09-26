@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../../packages/data/src/node.ts';
-import { normalizeSkillName } from '../../../packages/data/src/skill-match.ts';
+import { editDistance, normalizeSkillName } from '../../../packages/data/src/skill-match.ts';
 import { OcrEngine } from '../src/ocr.ts';
 import { classifierSkillIds } from '../src/skill-classifier.ts';
 import { ReadingJudge, skillsUnknownToClassifier, SkillVerifier } from '../src/skill-verify.ts';
@@ -115,32 +115,40 @@ describe('読めた文字と分類器の答えの突き合わせ', () => {
     expect(judge.judge(misread('超然', 1), STAND_IN).kind).not.toBe('replace');
   });
 
-  it('語彙に有る名前は、どこを 1 文字読み違えても置き換えも要確認もしない', () => {
-    // 分類器は語彙に有るスキルをほぼ確実に当てる。文字認識の読み違えで
-    // 正しい答えを壊すのが、いちばん避けたい誤りである。
-    const touched: string[] = [];
-    for (const skill of known) {
-      const length = [...skill.name].length;
-      for (let i = 0; i < length; i++) {
-        const text = misread(skill.name, i);
-        if (judge.judge(text, skill).kind !== 'keep') touched.push(`${skill.name} ← ${text}`);
+  it('語彙に有る名前が、1 文字の読み違えで語彙に無い名前になりうる組を固定する', () => {
+    // 語彙に有るスキルの行を壊しうるのは、読み違えた結果が**実在する語彙に無い名前**に
+    // 近づく場合だけである。どの名前にも無い文字に崩れるなら、いちばん近いのは
+    // 元の名前のままで判定は動かない。1 文字違いの組は置き換えにまで届くので、
+    // 数えて固定しておく。データの取り直しで増えたらここが落ちるので、組を見て
+    // 足してよいか決める（docs/ocr-design.md 6.7 節）。
+    const knownKeys = [...new Set(known.map((skill) => normalizeSkillName(skill.name)))];
+    const pairs: string[] = [];
+    for (const u of new Set(unknownKeys)) {
+      for (const k of knownKeys) {
+        if (Math.abs(u.length - k.length) > 1) continue;
+        if (editDistance(u, k) === 1) pairs.push(`${k}/${u}`);
       }
     }
-    expect(touched).toEqual([]);
+    expect(pairs.sort()).toEqual(['勝負師/勝負勘']);
+    // 実際に、読み違えがその名前にぴったり重なれば置き換わる。これが残る危険である。
+    expect(judge.judge('勝負勘', skillNamed('勝負師')).kind).toBe('replace');
   });
 
-  it('語彙に有る名前は、2 文字読み違えても置き換えない', () => {
-    // 総当たりすると 1 万通りを超えて重いので、名前ごとに 1 か所だけ崩す。
-    // 位置を変えて総当たりしても置き換えが 0 件なのは、手元で確かめてある。
-    const replaced: string[] = [];
+  it('語彙に有るスキルどうしの読み違えでは、答えを疑わない', () => {
+    // 分類器は語彙に有るスキルをほぼ確実に当てる。◎ を ○ と読み違えた程度で
+    // 正しい答えを要確認にすると、既定で選ばれなくなる。
+    expect(judge.judge('右回り○', skillNamed('右回り◎'))).toEqual({ kind: 'keep' });
+    expect(judge.judge('正攻法', skillNamed('末脚'))).toEqual({ kind: 'keep' });
+  });
+
+  it('語彙に有る名前を、どの名前にも無い文字に読み違えても動かない', () => {
+    // 読み取りの雑音の検査。いちばん近いのが元の名前のままなので、判定は動かないはずである。
+    const touched: string[] = [];
     for (const skill of known) {
-      const length = [...skill.name].length;
-      if (length < 4) continue;
-      const i = Math.floor((length - 3) / 2);
-      const text = misread(skill.name, i, i + 2);
-      if (judge.judge(text, skill).kind === 'replace') replaced.push(`${skill.name} ← ${text}`);
+      const text = misread(skill.name, 0);
+      if (judge.judge(text, skill).kind !== 'keep') touched.push(`${skill.name} ← ${text}`);
     }
-    expect(replaced).toEqual([]);
+    expect(touched).toEqual([]);
   });
 
   it('語彙に無い名前を 1 文字読み違えたとき、別の名前には置き換えない', () => {
@@ -161,10 +169,16 @@ describe('読めた文字と分類器の答えの突き合わせ', () => {
     expect(picked / tried).toBeGreaterThan(0.9);
   });
 
-  it('読めた文字が別の既知のスキルをはっきり指していれば、答えはそのままに要確認にする', () => {
-    const verdict = judge.judge('正攻法', skillNamed('末脚'));
+  it('語彙に無い名前らしいが紛らわしければ、要確認にする', () => {
+    // 「勝負□」は 勝負師（語彙に有る）と 勝負勘（語彙に無い）のちょうど中間にある
+    const verdict = judge.judge(misread('勝負勘', 2), STAND_IN);
     expect(verdict.kind).toBe('doubt');
-    if (verdict.kind === 'doubt') expect(verdict.candidate.name).toBe('正攻法');
+    if (verdict.kind === 'doubt') {
+      expect(verdict.skill.name).toBe('勝負勘');
+      expect(verdict.margin).toBe(0);
+    }
+    // 分類器が 勝負師 と答えていれば、読めた文字はそれと矛盾しないので疑わない
+    expect(judge.judge(misread('勝負勘', 2), skillNamed('勝負師'))).toEqual({ kind: 'keep' });
   });
 
   it('読めなかった行、崩れて何も指さない行には手を出さない', () => {
