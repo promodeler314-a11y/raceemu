@@ -15,10 +15,23 @@ JSON 文字列である。
 （同じ節）。`pnpm test` の「スキル条件の網羅」がその漏れを検出する。
 
   python3 packages/data/scripts/sync-game-data.py
+
+取り直した日は `assets/meta.json` に残す（MCP サーバーの `data_info` が読む。
+docs/mcp-design.md 5 節）。中身は日付と、4 つのデータの指紋である。
+**指紋が変わったときだけ書き直す。** 毎回日付を書くと、データが変わっていない週も
+`git diff` に差が出て、ワークフローが毎週 PR を出してしまう。
+
+  python3 packages/data/scripts/sync-game-data.py --meta-only --date 2026-09-21
+
+`--meta-only` は取得せずに、いまの 4 つのデータから `meta.json` だけを書く。
+`meta.json` が無い状態から始めるときに、取り直した日を指定して一度だけ使う。
 """
+import hashlib
 import json
 import re
+import sys
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 SKILL_URL = 'https://raw.githubusercontent.com/mee1080/umasim/refs/heads/main/data/skill_data.txt'
@@ -29,6 +42,10 @@ COURSE_URL = (
     'race/src/commonMain/kotlin/io/github/mee1080/umasim/race/data/rawData.kt'
 )
 ASSETS = Path(__file__).resolve().parent.parent / 'assets'
+META_PATH = ASSETS / 'meta.json'
+# 指紋に入れるデータと、その順序。順序を変えると指紋が変わる。
+ASSET_NAMES = ('skills', 'courses', 'supports', 'charas')
+SOURCE = 'https://github.com/mee1080/umasim'
 
 
 def fetch(url):
@@ -147,6 +164,46 @@ def fetch_charas():
     if len(out) < 100:
         raise SystemExit(f'取れた育成ウマ娘が少なすぎる: {len(out)}')
     return sorted(out, key=lambda c: c['id'])
+
+
+def digest_assets():
+    """
+    4 つのデータの指紋。
+
+    Windows の autocrlf で改行が CRLF になっても同じ値になるよう、LF にそろえてから
+    ハッシュする。名前と内容を区切るのは、境目がずれたときに別の値になるようにするため。
+    `packages/data/test/meta.test.ts` が同じ手順で求めて突き合わせている。
+    """
+    h = hashlib.sha256()
+    for name in ASSET_NAMES:
+        body = (ASSETS / f'{name}.json').read_bytes().replace(b'\r\n', b'\n')
+        h.update(name.encode('utf-8') + b'\0' + body + b'\0')
+    return 'sha256:' + h.hexdigest()
+
+
+def write_meta(date):
+    meta = {'syncedAt': date, 'digest': digest_assets(), 'source': SOURCE}
+    # newline='\n' で、Windows でも LF のまま書く。ワークフローが動く Linux と同じ形にする。
+    with META_PATH.open('w', encoding='utf-8', newline='\n') as f:
+        f.write(json.dumps(meta, ensure_ascii=False, indent=2) + '\n')
+
+
+def read_meta():
+    if not META_PATH.exists():
+        return None
+    return json.loads(META_PATH.read_text(encoding='utf-8'))
+
+
+def sync_meta(today):
+    """
+    指紋が変わったときだけ日付を書き直す。変わっていなければ触らない。
+    書き直したかどうかを返す。
+    """
+    meta = read_meta()
+    if meta is not None and meta.get('digest') == digest_assets():
+        return False
+    write_meta(today)
+    return True
 
 
 def describe(items, limit=20):
@@ -268,8 +325,23 @@ def main():
     dump(new_supports, supports_path)
     dump(new_charas, charas_path)
 
+    sync_meta(datetime.now(timezone.utc).date().isoformat())
+
     print('\n'.join(lines) if lines else '変わっていない')
 
 
+def main_meta_only(argv):
+    if '--date' not in argv or argv.index('--date') + 1 >= len(argv):
+        raise SystemExit('--meta-only には --date YYYY-MM-DD が要る')
+    date = argv[argv.index('--date') + 1]
+    if not re.fullmatch(r'\d{4}-\d{2}-\d{2}', date):
+        raise SystemExit(f'日付は YYYY-MM-DD で指定する: {date}')
+    write_meta(date)
+    print(f'meta.json を書いた: {date}')
+
+
 if __name__ == '__main__':
-    main()
+    if '--meta-only' in sys.argv:
+        main_meta_only(sys.argv)
+    else:
+        main()

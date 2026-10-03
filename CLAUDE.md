@@ -14,13 +14,14 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 git submodule update --init    # design-system（見た目のトークン）。無いとビルドが止まる
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
-pnpm test                      # vitest run。34 ファイル 429 件
+pnpm test                      # vitest run。41 ファイル 543 件
 pnpm test packages/sim/test/plan.test.ts    # ファイルを絞る
 pnpm exec vitest run packages/sim/test/optimize.test.ts -t '予算を超える構成は返さない'  # テスト名で絞る
 pnpm dev                       # UI の開発サーバ
 pnpm build                     # UI のビルド（apps/web/dist）
 pnpm e2e                       # build した成果物を実ブラウザで叩く。バンドル上限も見る
 pnpm api                       # サーバ側の口（apps/api）
+pnpm -s mcp                    # MCP サーバー（stdio、apps/mcp）。-s は省けない（下記）
 pnpm fetch-tessdata            # 読み取り用の学習データ 35 MB を .tessdata に置く
 ```
 
@@ -67,6 +68,7 @@ CI（`.github/workflows/ci.yml`）は Node 22 で `typecheck` → `fetch-tessdat
 | `packages/solver` | 逆算と組み合わせ探索 |
 | `apps/web` | React + Zustand + Tailwind + uPlot の UI |
 | `apps/api` | 探索、画面の読み取り、個体の保存。静的ファイルも同一オリジンで配る |
+| `apps/mcp` | MCP サーバー（stdio）。勝率、獲得バ身、出走表の点検、個体の保存。設計は `docs/mcp-design.md` |
 | `docs` | 設計書と各回の報告。コード中のコメントが節番号で参照している |
 | `design` | 画面モック（`.dc.html`）。ズレは `docs/ui-gap.md` |
 
@@ -136,7 +138,25 @@ zustand が変化と見て描画が止まらなくなる（React error #185、�
 設定はすべて環境変数である。`RACEEMU_CONCURRENCY`、`RACEEMU_MAX_RUNNING`、`RACEEMU_MAX_QUEUED`、`RACEEMU_MAX_RACES`、`RACEEMU_JOB_TTL_MS`、`RACEEMU_STATIC_ROOT`、`RACEEMU_TESSDATA`、`RACEEMU_MAX_IMAGE_BYTES`、`RACEEMU_OCR_THRESHOLD`、`RACEEMU_DATA_DIR`、`PORT`。
 口の無い静的配信だけの版もあるので、UI 側は「JSON が返る前提」で書けない。`pnpm e2e` の偽サーバが HTML を返してそれを突く。
 
+### apps/mcp
+
+Claude Code や Claude Desktop から使う MCP サーバー（stdio）。設計は `docs/mcp-design.md`。
+計算は新しく書かず、`WorkerPool` と `runMultiRace` を呼ぶ薄い包みである。
+道具は `win_rate`、`skill_gain`、`check_lineup`、`find_skills`、`list_courses`、`data_info`、`save_individual`、`list_individuals`、`delete_individual`。
+
+**標準出力は JSON-RPC 専用である。** ログは `log`（標準エラー出力）で書く。`console.log` が 1 行でも混ざると、クライアントが黙って接続を切る。
+起動は `pnpm -s mcp` で、**`-s` は省けない**（`pnpm mcp` は標準出力にヘッダを出す）。リポジトリの外からは pnpm を介さず、`node node_modules/tsx/dist/cli.mjs apps/mcp/src/main.ts` を絶対パスで呼ぶ（corepack が別の pnpm を取りに行って落ちる）。
+
+読み取りは Claude が画像から行い、サーバーは画像を受け取らない。サーバーが持つのは、スキル名の解決（`packages/data/src/skill-resolve.ts`、完全一致だけを採り、近い名前は候補で返すだけ）と、出走表の点検（`packages/sim/src/multi/lineup.ts`）である。
+個体は `mcp-individuals.db` に保存する（`RACEEMU_MCP_DATA_DIR`、既定は `~/.raceemu`）。`apps/api` の個体は絞った適性しか持たず、形が違うので別のファイルにしてある。
+`RACEEMU_ASSETS_DIR` で、リポジトリの `assets` を書き換えずに、別の場所の新しいデータを試せる。
+
+`packages/data/assets/meta.json` は `sync-game-data.py` が書く（取り直した日と、4 つのデータの指紋）。**指紋が変わったときだけ書き直す**ので、データが変わらない週に PR が出ることはない。`--meta-only --date` 以外では、このスクリプトを手元で走らせない（本家から取得して `assets` を上書きする）。
+
 ## 番人になっているテスト
+
+- `apps/mcp/test/stdio.test.ts`：実際の起動コマンドで、標準出力の全行が JSON であることを見る（`win_rate` まで通して Worker を立てる）。ここが崩れると、計算のテストは緑のままクライアントだけが繋がらなくなる。
+- `packages/data/test/meta.test.ts`：`meta.json` の指紋が、いまのデータと一致することを見る。データだけを直して `meta.json` を直し忘れると落ちる。
 
 - `packages/sim/test/reference.test.ts`：本家との突き合わせ。導出値は小数第 9 位まで一致、タイムは平均の差が標準誤差の 4 倍以内。参照値の作り直し手順は `packages/sim/test/golden/README.md`。
 - `packages/sim/test/skill-coverage.test.ts`：未対応・近似扱いの条件型の集合を固定する。データに新しい型が増えるとここが落ちて気付ける。

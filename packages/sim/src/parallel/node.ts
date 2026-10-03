@@ -5,13 +5,30 @@ import type { WorkerFactory, WorkerHandle } from './pool.ts';
 
 const workerUrl = new URL('./node-worker-bootstrap.mjs', import.meta.url);
 
+/**
+ * Worker の標準出力と標準エラー出力の行き先。
+ *
+ * 既定（`undefined`）では、Worker の出力は親の標準出力と標準エラー出力へそのまま流れる。
+ * stdio で JSON-RPC をやり取りする MCP サーバーでは、標準出力に 1 行でも混ざると
+ * クライアントが接続を切るので、両方を標準エラー出力へ向けるために使う。
+ */
+export interface WorkerOutput {
+  readonly stdout: NodeJS.WritableStream;
+  readonly stderr: NodeJS.WritableStream;
+}
+
 class NodeWorkerHandle implements WorkerHandle {
   private readonly worker: Worker;
   /** terminate() を通した停止では 'exit' を落ちたとみなさない。 */
   private terminated = false;
 
-  constructor() {
-    this.worker = new Worker(workerUrl);
+  constructor(output?: WorkerOutput) {
+    // stdout: true にすると親へ自動では流れず、worker.stdout から読む形になる。
+    this.worker = output === undefined ? new Worker(workerUrl) : new Worker(workerUrl, { stdout: true, stderr: true });
+    if (output !== undefined) {
+      this.worker.stdout.pipe(output.stdout);
+      this.worker.stderr.pipe(output.stderr);
+    }
   }
 
   post(request: ChunkRequest): void {
@@ -37,7 +54,12 @@ class NodeWorkerHandle implements WorkerHandle {
 }
 
 /** Node 上の Worker プール。実測と検証に使う。 */
-export const nodeWorkerFactory: WorkerFactory = {
-  create: () => new NodeWorkerHandle(),
-  defaultConcurrency: Math.max(1, availableParallelism() - 1),
-};
+export const nodeWorkerFactory: WorkerFactory = createNodeWorkerFactory();
+
+/** Worker の出力先を指定できる版。省くと `nodeWorkerFactory` と同じ。 */
+export function createNodeWorkerFactory(output?: WorkerOutput): WorkerFactory {
+  return {
+    create: () => new NodeWorkerHandle(output),
+    defaultConcurrency: Math.max(1, availableParallelism() - 1),
+  };
+}
