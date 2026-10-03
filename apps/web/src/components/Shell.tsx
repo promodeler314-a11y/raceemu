@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { saveIndividual } from '../individualsApi.ts';
 import { currentTrackDetail, gameData, useStore, type Tab } from '../store.ts';
 import { formatTime } from '../format.ts';
+import { shortCharaName } from '../skills.ts';
 import { ShareButton } from './Compare.tsx';
 
 /**
@@ -120,7 +121,11 @@ function SaveIndividualButton() {
     setMessage(null);
     setFailed(false);
     try {
-      const label = `${STYLE_LABELS[uma.style] ?? uma.style} ${uma.speed}/${uma.stamina}/${uma.power}/${uma.guts}/${uma.wisdom}`;
+      // キャラを選んでいれば名前を先に置く。勝率の面の一覧で、脚質とステータスだけでは
+      // どの個体か見分けにくい。
+      const build = `${STYLE_LABELS[uma.style] ?? uma.style} ${uma.speed}/${uma.stamina}/${uma.power}/${uma.guts}/${uma.wisdom}`;
+      const name = shortCharaName(uma.charaName);
+      const label = name === '' ? build : `${name} ${build}`;
       await saveIndividual({ label, uma, skillIds });
       setMessage('個体として保存しました。');
     } catch (error) {
@@ -279,16 +284,28 @@ export function SettingsRail() {
   const track = useStore((s) => s.track);
   const skillIds = useStore((s) => s.skillIds);
   const snapshots = useStore((s) => s.snapshots);
+  const tab = useStore((s) => s.tab);
   const setTab = useStore((s) => s.setTab);
   const detail = currentTrackDetail(track);
+  const corners = `コーナー ${detail?.corners.length ?? 0}`;
 
-  const rows: readonly [string, string][] = [
-    ['ウマ娘', `${STYLE_LABELS[uma.style] ?? uma.style} ・ 適性 ${uma.distanceFit}/${uma.surfaceFit}/${uma.styleFit}`],
-    ['', `${uma.speed} / ${uma.stamina} / ${uma.power} / ${uma.guts} / ${uma.wisdom}`],
-    // コース名と距離はヘッダの「いまの条件」に常に出ているので、ここでは繰り返さない。
-    ['コース', `${track.gateCount} 頭 ・ コーナー ${detail?.corners.length ?? 0}`],
-    ['所持スキル', `${skillIds.length} 件`],
-  ];
+  const rows: readonly [string, string][] =
+    tab === 'field'
+      ? [
+          // 勝率の面では、出走表の 1 行目が自分の脚質・ステータス・スキルの数を出している。
+          // ここにも出すと同じ面に 2 度出るので、出走表に無い適性だけを残す。
+          // 頭数も出さない。ここの頭数はコースの欄の値（単騎の実行が使う）で、
+          // 勝率の面は自分の出走頭数で走らせるため、同じ面に食い違う頭数が並ぶ。
+          ['ウマ娘', `適性 ${uma.distanceFit}/${uma.surfaceFit}/${uma.styleFit}`],
+          ['コース', corners],
+        ]
+      : [
+          ['ウマ娘', `${STYLE_LABELS[uma.style] ?? uma.style} ・ 適性 ${uma.distanceFit}/${uma.surfaceFit}/${uma.styleFit}`],
+          ['', `${uma.speed} / ${uma.stamina} / ${uma.power} / ${uma.guts} / ${uma.wisdom}`],
+          // コース名と距離はヘッダの「いまの条件」に常に出ているので、ここでは繰り返さない。
+          ['コース', `${track.gateCount} 頭 ・ ${corners}`],
+          ['所持スキル', `${skillIds.length} 件`],
+        ];
 
   return (
     // 置き場所（広い幅での格子の位置）は App.tsx の設定の列と揃える。
@@ -296,7 +313,8 @@ export function SettingsRail() {
       <div className="flex items-center gap-2">
         <span className="text-[13px] font-bold">設定</span>
         <span className="flex-1" />
-        <button type="button" className="text-xs text-s1 underline" onClick={() => setTab('settings')}>
+        {/* 文字のリンクは acc-ink にする。s1 は図の系列の色で、12px の文字では AA に届かない（下の「比較」も同じ） */}
+        <button type="button" className="text-xs text-acc-ink underline" onClick={() => setTab('settings')}>
           編集
         </button>
       </div>
@@ -321,7 +339,7 @@ export function SettingsRail() {
               </div>
             </div>
           ))}
-          <button type="button" className="text-left text-xs text-s1 underline" onClick={() => setTab('compare')}>
+          <button type="button" className="text-left text-xs text-acc-ink underline" onClick={() => setTab('compare')}>
             {snapshots.length} 件の比較
           </button>
         </div>

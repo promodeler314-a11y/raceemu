@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../data/src/node.ts';
-import { RaceCalculator } from '../src/calculator.ts';
+import { gateNumberRange, RaceCalculator } from '../src/calculator.ts';
 import type { Style } from '../src/data/constants.ts';
 import { runMultiRace, type MultiEntry } from '../src/multi/race.ts';
 import { replayMultiRace } from '../src/multi/replay.ts';
@@ -8,7 +8,10 @@ import { OrderTally } from '../src/multi/summary.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { WorkerPool } from '../src/parallel/pool.ts';
 import { MULTI_FIELDS, toSerializable, unpackMultiEntry } from '../src/parallel/protocol.ts';
+import { RngSet } from '../src/rng.ts';
 import { defaultSystemSetting, type RaceSetting } from '../src/setting.ts';
+import { compileConditions, newSkillScratch } from '../src/skill/condition.ts';
+import { SkillCondition } from '../src/skill/types.ts';
 
 const data = loadGameData();
 const system = defaultSystemSetting();
@@ -47,6 +50,62 @@ describe('全頭同時', () => {
     const out = runMultiRace(calculator, entries, { seed: 7, trial: 3 });
     const gates = out.states.map((s) => s.setting.base.uma.gateNumber);
     expect(new Set(gates).size).toBe(gates.length);
+  });
+
+  describe('内枠と外枠の指定', () => {
+    const gatesOf = (list: readonly MultiEntry[], trial: number, gateCount = 9) => {
+      const withCount = list.map((entry) => ({
+        ...entry,
+        setting: { ...entry.setting, track: { ...track, gateCount } },
+      }));
+      return runMultiRace(calculator, withCount, { seed: 7, trial }).states
+        .map((s) => s.setting.base.uma.gateNumber);
+    };
+
+    it('抽選の範囲が本家（maxBy は条件を満たす最初の枠を返す）と同じになる', () => {
+      expect(gateNumberRange(-1, 9)).toEqual([1, 3]);
+      expect(gateNumberRange(-2, 9)).toEqual([6, 9]);
+      expect(gateNumberRange(-1, 12)).toEqual([1, 3]);
+      expect(gateNumberRange(-2, 12)).toEqual([7, 12]);
+      expect(gateNumberRange(-2, 18)).toEqual([11, 18]);
+      expect(gateNumberRange(0, 9)).toEqual([1, 9]);
+      expect(gateNumberRange(4, 9)).toBeNull();
+    });
+
+    it('9 頭では内枠が 1〜3、外枠が 6〜9 に入り、重ならない', () => {
+      // 固定の 2 番と 7 番が範囲の枠を 1 つずつ塞いでいても、残りの範囲から配る
+      const wishes = [-1, -1, -2, -2, 0, 0, 2, 7, 0];
+      const list = lineup.map((style, i) => ({ setting: make(style, { gateNumber: wishes[i]! }) }));
+      for (let trial = 0; trial < 8; trial++) {
+        const gates = gatesOf(list, trial);
+        expect(new Set(gates).size).toBe(gates.length);
+        expect(gates[6]).toBe(2);
+        expect(gates[7]).toBe(7);
+        for (const i of [0, 1]) expect(gates[i]).toBeLessThanOrEqual(3);
+        for (const i of [2, 3]) expect(gates[i]).toBeGreaterThanOrEqual(6);
+      }
+    });
+
+    it('12 頭では外枠が 7〜12 に入る', () => {
+      const list: MultiEntry[] = Array.from({ length: 12 }, (_, i) => ({
+        setting: make(lineup[i % lineup.length]!, { gateNumber: i < 4 ? -2 : 0 }),
+      }));
+      for (let trial = 0; trial < 4; trial++) {
+        const gates = gatesOf(list, trial, 12);
+        expect(new Set(gates).size).toBe(12);
+        for (let i = 0; i < 4; i++) {
+          expect(gates[i]).toBeGreaterThanOrEqual(7);
+          expect(gates[i]).toBeLessThanOrEqual(12);
+        }
+      }
+    });
+
+    it('範囲の枠が足りなければ、あふれた頭は範囲外の空き枠に回り重ならない', () => {
+      const list = lineup.map((style, i) => ({ setting: make(style, { gateNumber: i < 4 ? -1 : 0 }) }));
+      const gates = gatesOf(list, 1);
+      expect(new Set(gates).size).toBe(gates.length);
+      expect(gates.slice(0, 4).filter((g) => g <= 3)).toHaveLength(3);
+    });
   });
 
   it('同じ入力なら同じ結果になる', () => {
@@ -218,5 +277,105 @@ describe('全頭同時', () => {
       seed: 41, trial: 0,
     });
     expect(together.entries[0]!.result.raceTime).not.toBeCloseTo(alone.result.raceTime, 3);
+  });
+});
+
+/**
+ * 勝率の面で出走頭数を 2〜18 から選べるようにしたときの芯。
+ * 9 頭と 12 頭以外では、順位率の境界は式で延ばした近似になる（docs/order-condition.md 2.2 節）。
+ */
+describe('全頭同時の頭数と枠番', () => {
+  const styles: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
+  const lineupOf = (heads: number, patch: (i: number) => Partial<RaceSetting['uma']> = () => ({})) => {
+    const trackN = { ...track, gateCount: heads };
+    return Array.from({ length: heads }, (_, i) => ({
+      setting: { ...make(styles[i % 4]!, patch(i)), track: trackN },
+    }));
+  };
+  const gatesOf = (out: ReturnType<typeof runMultiRace>) =>
+    out.states.map((s) => s.setting.base.uma.gateNumber);
+
+  for (const heads of [2, 18]) {
+    it(`${heads} 頭でも、枠番が重ならず、着順が 1 から頭数まで揃う`, () => {
+      const field = lineupOf(heads);
+      for (const trial of [0, 1, 2]) {
+        const out = runMultiRace(calculator, field, { seed: 7, trial });
+        expect([...gatesOf(out)].sort((a, b) => a - b)).toEqual(
+          Array.from({ length: heads }, (_, i) => i + 1),
+        );
+        expect(out.entries.map((e) => e.order).sort((a, b) => a - b)).toEqual(
+          Array.from({ length: heads }, (_, i) => i + 1),
+        );
+      }
+    });
+  }
+
+  it('明示した枠番が重なっても、後の頭を空き枠に回して重ねない', () => {
+    // 個体から選んだ相手が、自分と同じ固定枠を持っている場合にあたる。
+    const field = lineupOf(9, (i) => ({ gateNumber: i === 0 || i === 4 || i === 7 ? 3 : 0 }));
+    for (const trial of [0, 1, 2, 3]) {
+      const out = runMultiRace(calculator, field, { seed: 7, trial });
+      const gates = gatesOf(out);
+      expect(new Set(gates).size).toBe(gates.length);
+      expect(gates.every((g) => g >= 1 && g <= 9)).toBe(true);
+      // 先の頭が枠を取る。
+      expect(gates[0]).toBe(3);
+    }
+  });
+
+  it('明示した枠番が重ならなければ、そのまま使う', () => {
+    const field = lineupOf(9, (i) => ({ gateNumber: i === 2 ? 5 : i === 6 ? 1 : 0 }));
+    const out = runMultiRace(calculator, field, { seed: 7, trial: 0 });
+    const gates = gatesOf(out);
+    expect(gates[2]).toBe(5);
+    expect(gates[6]).toBe(1);
+    expect(new Set(gates).size).toBe(9);
+  });
+
+  it('出走頭数が枠の数を超えると、同じ枠に入れずに止める', () => {
+    const field = lineupOf(4).map((entry) => ({
+      setting: { ...entry.setting, track: { ...track, gateCount: 3 } },
+    }));
+    expect(() => runMultiRace(calculator, field, { seed: 7, trial: 0 })).toThrow('枠の数');
+  });
+
+  it('18 頭では、順位率の条件を常に真とせず順位で判定する', () => {
+    const field = lineupOf(18);
+    const anySkill = data.skillsByName.get('末脚')![0]!;
+    type Predicate = ReturnType<typeof compileConditions>;
+    let front: Predicate[] = [];
+    let checked = 0;
+    let outside = 0;
+    const out = runMultiRace(calculator, field, {
+      seed: 7,
+      trial: 0,
+      onFrame: (frame, states) => {
+        if (frame === 1) {
+          front = states.map((state) =>
+            compileConditions(
+              anySkill,
+              [[new SkillCondition('order_rate', '<=', 50)]],
+              state.setting,
+              new RngSet(7, 0),
+              newSkillScratch(),
+            ),
+          );
+        }
+        if (frame % 60 !== 0) return;
+        for (let i = 0; i < states.length; i++) {
+          const state = states[i]!;
+          if (state.beforeStart || state.simulation.position >= state.setting.courseLength) continue;
+          // 18 頭では、順位率 50 以下は 9 位以内である。
+          expect(front[i]!(state)).toBe(state.order! <= 9);
+          checked++;
+          if (state.order! > 9) outside++;
+        }
+      },
+    });
+    expect(checked).toBeGreaterThan(0);
+    expect(outside).toBeGreaterThan(0);
+    // 帯の維持も落ちる。後ろから進む追込は、順位率 20 以前を維持できない。
+    const oi = out.states.find((state) => state.setting.base.uma.style === 'OI')!;
+    expect(oi.simulation.specialState['order_rate_in20_continue']).toBe(0);
   });
 });

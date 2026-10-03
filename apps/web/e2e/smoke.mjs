@@ -477,7 +477,10 @@ for (const r of cells) {
 }
 // 自分は相手より強くしてあるので、勝率は 1/9 より高い
 if (!(cells[0][1] > 11.1)) fail(`自分の勝率が低すぎる: ${cells[0][1]}`);
-await page.locator('section:has(h2:text("相手"))').screenshot({ path: 'docs/images/m9-field.png' });
+await page.locator('section:has(h2:text("出走表"))').screenshot({ path: 'docs/images/m9-field.png' });
+// 左の要約の頭数はコースの欄の値（単騎が使う）で、勝率の面の頭数とは別である。
+// 同じ面に食い違う頭数を並べないよう、勝率の面では出さない。
+if (/\d+ 頭/.test((await page.textContent('aside')) ?? '')) fail('勝率の面の左の要約に頭数が出ている');
 
 // 勝率の面から 1 レースを開く（#57）。
 // フレーム列は持ち回っていないので、押すたびに同じ種で走らせ直している。
@@ -522,6 +525,147 @@ await page.waitForTimeout(400);
 await page
   .locator('section:has([data-testid=multi-detail-head])')
   .screenshot({ path: 'docs/images/multi-race-detail.png' });
+
+// 出走頭数を変えて走らせる。頭数は勝率の面だけの値で、2 から 18 まで選べる。
+// 9 頭と 12 頭以外は順位率の境界を式で延ばして判定している（docs/order-condition.md）。
+// ここで見るのは、頭数どおりに走って着順が揃うこと、呼び名が結果に出ること、
+// 18 頭でも狭い幅で横にあふれないことである。
+const entriesSection = 'section:has(h2:text("出走表"))';
+// 相手の 1 頭（出走 2）にキャラを選ぶ。名前を押すと編集の行が開く
+const firstOpponent = page.locator(`${entriesSection} button[aria-expanded]`).first();
+await firstOpponent.click();
+const opponentCharaSelect = page.locator(`${entriesSection} [data-testid=opponent-chara]`);
+await opponentCharaSelect.selectOption({ index: 1 });
+const charaValue = await opponentCharaSelect.inputValue();
+const charaShort = charaValue.slice(charaValue.indexOf(']') + 1);
+console.log('--- 出走 2 のキャラ:', charaValue, '→', charaShort);
+if (charaShort === '') fail('相手のキャラを選べていない');
+if ((await firstOpponent.textContent())?.trim() !== charaShort) {
+  fail(`出走表の名前がキャラの短い名前になっていない: ${await firstOpponent.textContent()}`);
+}
+// キャラを選ぶと固有が入る（設定の面の固有の入力と同じ規則）
+const uniqueChip = page.locator(`${entriesSection} button[aria-pressed="true"]`);
+if ((await uniqueChip.count()) === 0) fail('相手のキャラを選んでも固有が入っていない');
+await firstOpponent.click();
+
+const entryRows = async () => page.locator('[data-testid=multi-entries] tbody tr').count();
+const runMultiWith = async (gateCount, trials) => {
+  await page.selectOption('[data-testid=multi-gate-count]', String(gateCount));
+  await page.waitForTimeout(150);
+  const rows = await entryRows();
+  if (rows !== gateCount) fail(`出走表の行が ${gateCount} 頭ぶんでない: ${rows}`);
+  await page.fill('input[type=number][max="50000"]', String(trials));
+  const runStarted = Date.now();
+  await page.click('button:has-text("勝率の計算")');
+  // 頭数を変えても前の結果は残る。結果に添えた頭数が変わるまで待つ
+  await page.waitForFunction(
+    (expected) => {
+      if ([...document.querySelectorAll('button')].some((b) => b.textContent?.includes('計算中'))) return false;
+      const meta = document.querySelector('[data-testid=multi-result-meta]')?.textContent ?? '';
+      return meta.replace(/\s+/g, ' ').trim().startsWith(`${expected} 頭`);
+    },
+    gateCount,
+    { timeout: 300000 },
+  );
+  await page.waitForTimeout(300);
+  console.log(`--- 勝率（${gateCount} 頭同時、${trials} 試行）:`, Date.now() - runStarted, 'ms（UI 操作込み）');
+  const rowsOfOrder = await readTable('着順');
+  for (const row of rowsOfOrder) console.log(' ', row.join(' | '));
+  if (rowsOfOrder.length !== gateCount + 1) fail(`${gateCount} 頭の着順の行数が想定と違う: ${rowsOfOrder.length}`);
+  // 頭数が足りずに定まらない率（2 頭の 3 着以内）も、内部の値（NaN）のまま出さない
+  if (rowsOfOrder.some((r) => r.some((c) => (c ?? '').includes('NaN')))) fail(`${gateCount} 頭の着順の表に NaN が出ている`);
+  const values = rowsOfOrder.slice(1).map((r) => r.map((c) => Number.parseFloat(c)));
+  const wins = values.reduce((a, r) => a + r[1], 0);
+  if (Math.abs(wins - 100) > 0.6) fail(`${gateCount} 頭で勝率の合計が 100 % にならない: ${wins}`);
+  const meanOrders = values.reduce((a, r) => a + r[4], 0) / values.length;
+  if (Math.abs(meanOrders - (gateCount + 1) / 2) > 0.05) {
+    fail(`${gateCount} 頭で平均着順の平均が ${(gateCount + 1) / 2} にならない: ${meanOrders}`);
+  }
+  // 出走 2 はキャラを選んだ相手。着順の表の呼び名は走らせたときのキャラから出る
+  const second = rowsOfOrder.slice(1).find((r) => /^2\b/.test(r[0] ?? ''));
+  if (second === undefined || !second[0].includes(charaShort)) {
+    fail(`${gateCount} 頭の着順の表に出走 2 のキャラの名前が出ていない: ${second?.[0]}`);
+  }
+  return rowsOfOrder;
+};
+
+await runMultiWith(18, 50);
+await page.locator('button[data-testid^="open-order-"]').first().click();
+await page.waitForSelector('[data-testid=multi-detail-head]', { timeout: 30000 });
+await page.waitForTimeout(300);
+const wideRows = await readTestTable('multi-detail-table');
+if (wideRows.length !== 18) fail(`18 頭の 1 本の着順表が 18 行でない: ${wideRows.length}`);
+const wideOrders = wideRows.map((r) => Number(r[0])).sort((a, b) => a - b);
+if (wideOrders.join(',') !== Array.from({ length: 18 }, (_, i) => i + 1).join(',')) {
+  fail(`18 頭の 1 本の着順が 1 から 18 まで揃っていない: ${wideOrders.join(',')}`);
+}
+if (!wideRows.some((r) => (r[1] ?? '').includes(charaShort))) fail('18 頭の 1 本の表にキャラの名前が出ていない');
+await page.setViewportSize({ width: 390, height: 900 });
+await page.waitForTimeout(400);
+const wideOverflow = await page.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+);
+console.log('--- 18 頭の 1 本を開いたまま幅 390:', wideOverflow, 'px');
+if (wideOverflow > 0) fail('18 頭で 1 本を開くと小さい画面で横にあふれる');
+await page.setViewportSize({ width: 1280, height: 1600 });
+await page.waitForTimeout(400);
+
+// いちばん少ない 2 頭（自分と相手 1 頭）でも着順が出ること
+await runMultiWith(2, 50);
+
+// 個体から選ぶ。偽サーバには個体の口が無いので、一覧だけをここで返す。
+// 一覧の行はキャラの名前を主に出し、保存名（脚質とステータスから組んだもの）は
+// 脇の構成と同じことを言うので出さない。名前の無い個体は、持っている固有の持ち主から補う。
+const savedUma = {
+  charaName: '',
+  speed: 1300,
+  stamina: 1100,
+  power: 1000,
+  guts: 700,
+  wisdom: 1000,
+  condition: 'GOOD',
+  style: 'SASI',
+  distanceFit: 'A',
+  surfaceFit: 'A',
+  styleFit: 'A',
+  popularity: 1,
+  gateNumber: 0,
+  uniqueLevel: 4,
+};
+await page.route('**/api/individuals', (route) =>
+  route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      items: [
+        // シューティングスターは [スペシャルドリーマー]スペシャルウィーク の固有
+        { id: 'e2e-1', label: '保存名A', uma: savedUma, skillIds: ['100011'], createdAt: '2026-09-26T03:00:00Z' },
+      ],
+    }),
+  }),
+);
+await page.click(`${entriesSection} button:has-text("個体から選択")`);
+const pickRow = page.locator(`${entriesSection} li button`).first();
+await pickRow.waitFor({ timeout: 10000 });
+const pickText = ((await pickRow.textContent()) ?? '').replace(/\s+/g, ' ').trim();
+console.log('--- 個体の一覧の行:', pickText);
+if (!pickText.startsWith('スペシャルウィーク')) fail(`個体の一覧の行がキャラの名前から始まらない: ${pickText}`);
+if (pickText.includes('保存名A')) fail('個体の一覧に保存名が脇の構成と重ねて出ている');
+if (!pickText.includes('差し') || !pickText.includes('1300/1100/1000/700/1000')) {
+  fail(`個体の一覧の行に脚質とステータスが出ていない: ${pickText}`);
+}
+await pickRow.click();
+await page.waitForTimeout(150);
+const pickedName = ((await firstOpponent.textContent()) ?? '').trim();
+if (pickedName !== 'スペシャルウィーク') fail(`個体から選んだ相手のキャラが補われていない: ${pickedName}`);
+// 結果の呼び名は走らせたときのもの。あとで相手を変えても、前の結果の行の名前は変わらない
+const afterPick = await readTable('着順');
+if (!(afterPick[2]?.[0] ?? '').includes(charaShort)) {
+  fail(`相手を変えたら前の結果の呼び名まで変わった: ${afterPick[2]?.[0]}`);
+}
+await page.unroute('**/api/individuals');
+// 後の段に影響しないよう、既定の 9 頭に戻しておく
+await page.selectOption('[data-testid=multi-gate-count]', '9');
 
 // 相手の入力欄もステータスと同じ上限を持つので、設定に戻してから次へ進む
 await goTab('設定');

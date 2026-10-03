@@ -74,7 +74,15 @@ export interface FieldProfile {
   readonly mixRate?: number;
 }
 
-/** チャンピオンズミーティング（9 頭）とリーグオブヒーローズ（12 頭）の既定 */
+/**
+ * 出走頭数ごとの既定の相手の想定。
+ *
+ * 基準はチャンピオンズミーティング（9 頭）とリーグオブヒーローズ（12 頭）だが、
+ * 勝率の面で選べる 2〜18 頭のどれでも同じ規則で作る。
+ *
+ * **9 頭の戻り値はスキル一覧の版の指紋に入る**（`packages/solver/src/skill-list-version.ts`）。
+ * 4 頭以上の割り振りを変えると、事前計算したスキル一覧の作り直しになる。
+ */
 export function defaultFieldProfile(gateCount: number): FieldProfile {
   const uma: FieldProfile['uma'] = {
     speed: 1100,
@@ -90,14 +98,8 @@ export function defaultFieldProfile(gateCount: number): FieldProfile {
     gateNumber: 0,
     uniqueLevel: 6,
   };
-  // 自分を除いた頭数を、逃げ 2 割、先行 3 割、差し 3 割、追込 2 割で割り振る
-  const total = gateCount - 1;
-  const nige = Math.max(1, Math.round(total * 0.2));
-  const sen = Math.max(1, Math.round(total * 0.3));
-  const sasi = Math.max(1, Math.round(total * 0.3));
-  const oi = Math.max(0, total - nige - sen - sasi);
   return {
-    counts: { NIGE: nige, SEN: sen, SASI: sasi, OI: oi, OONIGE: 0 },
+    counts: defaultCounts(gateCount - 1),
     uma,
     // 既定は docs/order-field.md 3 節の D である。相手を自分と同格にし、
     // 束の 1 本ごとに構成・強さ・やる気・スキルを引き直す。
@@ -108,6 +110,26 @@ export function defaultFieldProfile(gateCount: number): FieldProfile {
     redrawComposition: true,
     withSkills: true,
   };
+}
+
+/**
+ * 自分を除いた相手の頭数を、逃げ 2 割、先行 3 割、差し 3 割、追込 2 割で割り振る。
+ *
+ * 相手が 3 頭以上なら、逃げ・先行・差しに最低 1 頭ずつを置き、残りを追込にする。
+ * この枝は 9 頭と 12 頭の既定をそのまま保つためのもので、変えてはならない。
+ * 相手が 2 頭以下だと最低 1 頭ずつでは頭数を超えるので、同じ比の最大剰余で配る
+ * （1 頭なら先行、2 頭なら先行と差し）。
+ */
+function defaultCounts(total: number): Record<Style, number> {
+  if (total < 3) {
+    const [nige, sen, sasi, oi] = apportion(DEFAULT_STYLE_WEIGHTS, Math.max(0, total));
+    return { NIGE: nige!, SEN: sen!, SASI: sasi!, OI: oi!, OONIGE: 0 };
+  }
+  const nige = Math.max(1, Math.round(total * 0.2));
+  const sen = Math.max(1, Math.round(total * 0.3));
+  const sasi = Math.max(1, Math.round(total * 0.3));
+  const oi = Math.max(0, total - nige - sen - sasi);
+  return { NIGE: nige, SEN: sen, SASI: sasi, OI: oi, OONIGE: 0 };
 }
 
 /**
@@ -144,6 +166,9 @@ const COMPOSITIONS: readonly (readonly number[])[] = [
 
 const STYLE_ORDER: readonly Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
 
+/** 既定の脚質の比。並びは逃げ・先行・差し・追込で、2 割・3 割・3 割・2 割にあたる。 */
+const DEFAULT_STYLE_WEIGHTS: readonly number[] = [2, 3, 3, 2];
+
 /** やる気の引き当て表。絶好調に寄せてある。 */
 const CONDITION_DRAW: readonly Condition[] = ['BEST', 'BEST', 'GOOD', 'GOOD', 'NORMAL'];
 
@@ -174,18 +199,26 @@ function totalOf(counts: Readonly<Record<Style, number>>): number {
   return STYLE_ORDER.reduce((sum, style) => sum + (counts[style] ?? 0), 0) + (counts.OONIGE ?? 0);
 }
 
-/** 束の 1 本ぶんの脚質構成を引く。頭数は変えず、割り振りだけを変える。 */
-function drawCounts(total: number, sample: number): Record<Style, number> {
-  const base = COMPOSITIONS[drawIndex(sample, 11, COMPOSITIONS.length)]!;
-  const sum = base.reduce((a, b) => a + b, 0);
-  const exact = base.map((n) => (n * total) / sum);
+/**
+ * 頭数 `total` を比 `weights` で割り振る（最大剰余）。合計は必ず `total` になる。
+ * 端数は小数部の大きい順に配る。同じなら前の脚質から。
+ */
+function apportion(weights: readonly number[], total: number): number[] {
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const exact = weights.map((n) => (n * total) / sum);
   const counts = exact.map((x) => Math.floor(x));
   let rest = total - counts.reduce((a, b) => a + b, 0);
-  // 端数は小数部の大きい順に配る。同じなら前の脚質から。
   const order = exact
     .map((x, i) => ({ frac: x - Math.floor(x), i }))
     .sort((a, b) => b.frac - a.frac || a.i - b.i);
   for (let k = 0; rest > 0; k++, rest--) counts[order[k % order.length]!.i]!++;
+  return counts;
+}
+
+/** 束の 1 本ぶんの脚質構成を引く。頭数は変えず、割り振りだけを変える。 */
+function drawCounts(total: number, sample: number): Record<Style, number> {
+  const base = COMPOSITIONS[drawIndex(sample, 11, COMPOSITIONS.length)]!;
+  const counts = apportion(base, total);
   return { NIGE: counts[0]!, SEN: counts[1]!, SASI: counts[2]!, OI: counts[3]!, OONIGE: 0 };
 }
 
@@ -370,13 +403,16 @@ export function buildFieldBundle(
       setting: { ...setting, positionKeepMode: 'VIRTUAL' },
     }));
     const rows: number[][] = [];
-    runMultiRace(calculator, entries, {
-      seed: options.seed,
-      trial: s,
-      onFrame: (_frame, states) => {
-        rows.push(states.map((state) => Math.min(state.simulation.startPosition, courseLength)));
-      },
-    });
+    // 1 頭立て（相手 0 頭）では走らせる相手がいない。位置の無い 1 本にする。
+    if (entries.length > 0) {
+      runMultiRace(calculator, entries, {
+        seed: options.seed,
+        trial: s,
+        onFrame: (_frame, states) => {
+          rows.push(states.map((state) => Math.min(state.simulation.startPosition, courseLength)));
+        },
+      });
+    }
     const frames = Math.max(1, rows.length);
     const positions = new Float64Array(frames * opponents);
     for (let f = 0; f < rows.length; f++) {
@@ -537,9 +573,10 @@ export class RecordedField implements FieldView {
     return { front, behind };
   }
 
-  /** そのフレームで最も前にいる相手を、位置取りの判定に渡す形で返す。 */
+  /** そのフレームで最も前にいる相手を、位置取りの判定に渡す形で返す。相手がいなければ null。 */
   paceMaker(frameElapsed: number): RaceState | null {
     const { frames, opponents, positions, styles } = this.sample;
+    if (opponents === 0) return null;
     const frame = Math.min(frameElapsed, frames - 1);
     const offset = frame * opponents;
     let best = Number.NEGATIVE_INFINITY;

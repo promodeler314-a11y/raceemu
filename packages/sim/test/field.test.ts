@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { loadGameData } from '../../data/src/node.ts';
 import { RaceCalculator, updateFrame } from '../src/calculator.ts';
 import { bashinMeters } from '../src/data/constants.ts';
+import { ORDER_RATE_CONTINUE_TYPES, orderRateBoundaries } from '../src/data/orderRate.ts';
+import { orderRateContinueOf } from '../src/data/orderRateResolve.ts';
 import {
-  ORDER_RATE_CONTINUE_TYPES,
-  orderRateBoundaries,
-  resolveOrderRateContinue,
-} from '../src/data/orderRate.ts';
-import { buildFieldBundle, defaultFieldProfile, RecordedField } from '../src/field/field.ts';
+  buildFieldBundle,
+  defaultFieldProfile,
+  fixedFieldProfile,
+  RecordedField,
+  type FieldProfile,
+} from '../src/field/field.ts';
 import { nodeWorkerFactory } from '../src/parallel/node.ts';
 import { WorkerPool } from '../src/parallel/pool.ts';
 import { toSerializable, toSkillSummaries } from '../src/parallel/protocol.ts';
@@ -56,6 +59,72 @@ describe('順位率の対応表', () => {
     expect(orderRateBoundaries['>=:40:9']).toEqual({ atLeast: 4 });
     expect(orderRateBoundaries['>=:40:12']).toEqual({ atLeast: 5 });
     expect(orderRateBoundaries['>:50:9']).toEqual({ atLeast: 6 });
+  });
+});
+
+describe('既定の相手の想定', () => {
+  const totalOf = (profile: FieldProfile) =>
+    Object.values(profile.counts).reduce((sum, n) => sum + n, 0);
+
+  it('相手の合計が 1〜18 頭のどれでも出走頭数から 1 引いた数になる', () => {
+    for (let gateCount = 1; gateCount <= 18; gateCount++) {
+      expect(totalOf(defaultFieldProfile(gateCount)), String(gateCount)).toBe(gateCount - 1);
+      expect(totalOf(fixedFieldProfile(gateCount)), String(gateCount)).toBe(gateCount - 1);
+    }
+  });
+
+  it('相手が 2 頭以下なら、同じ比の最大剰余で配る', () => {
+    // 以前は逃げ・先行・差しに最低 1 頭ずつ置いていたので、2〜3 頭立てで相手が 3 頭になった。
+    const zero = { NIGE: 0, SEN: 0, SASI: 0, OI: 0, OONIGE: 0 };
+    expect(defaultFieldProfile(1).counts).toEqual(zero);
+    expect(defaultFieldProfile(2).counts).toEqual({ ...zero, SEN: 1 });
+    expect(defaultFieldProfile(3).counts).toEqual({ ...zero, SEN: 1, SASI: 1 });
+    expect(fixedFieldProfile(3).counts).toEqual({ ...zero, SEN: 1, SASI: 1 });
+  });
+
+  /**
+   * 9 頭の戻り値はスキル一覧の版の指紋に入る（packages/solver/src/skill-list-version.ts）。
+   * 1 ビットでも変わると、事前計算したスキル一覧を 20 時間かけて作り直すことになる。
+   * 値を直に書いて固定する。
+   */
+  const uma = {
+    speed: 1100,
+    stamina: 900,
+    power: 900,
+    guts: 600,
+    wisdom: 900,
+    condition: 'BEST',
+    distanceFit: 'A',
+    surfaceFit: 'A',
+    styleFit: 'A',
+    popularity: 5,
+    gateNumber: 0,
+    uniqueLevel: 6,
+  };
+  const drawn = {
+    matchSelf: true,
+    offset: 0,
+    sigma: 100,
+    drawCondition: true,
+    redrawComposition: true,
+    withSkills: true,
+  };
+  const fixed = {
+    matchSelf: false,
+    offset: 0,
+    sigma: 0,
+    drawCondition: false,
+    redrawComposition: false,
+    withSkills: false,
+  };
+
+  it('9 頭と 12 頭の戻り値が変わらない', () => {
+    const counts9 = { NIGE: 2, SEN: 2, SASI: 2, OI: 2, OONIGE: 0 };
+    const counts12 = { NIGE: 2, SEN: 3, SASI: 3, OI: 3, OONIGE: 0 };
+    expect(defaultFieldProfile(9)).toStrictEqual({ counts: counts9, uma, ...drawn });
+    expect(defaultFieldProfile(12)).toStrictEqual({ counts: counts12, uma, ...drawn });
+    expect(fixedFieldProfile(9)).toStrictEqual({ counts: counts9, uma, ...fixed });
+    expect(fixedFieldProfile(12)).toStrictEqual({ counts: counts12, uma, ...fixed });
   });
 });
 
@@ -138,13 +207,18 @@ describe('順位率の帯の維持', () => {
       field: withField ? bundle : null,
     }).state.simulation.specialState;
 
-  it('9 頭立てと 12 頭立てのすべての帯が対応表にある', () => {
+  it('9 頭立てと 12 頭立てのすべての帯が対応表にあり、それ以外の頭数は式で延ばす', () => {
     for (const type of ORDER_RATE_CONTINUE_TYPES) {
-      expect(resolveOrderRateContinue(type, 9), type).toBeDefined();
-      expect(resolveOrderRateContinue(type, 12), type).toBeDefined();
+      expect(orderRateContinueOf(type, 9)?.extrapolated, type).toBe(false);
+      expect(orderRateContinueOf(type, 12)?.extrapolated, type).toBe(false);
     }
-    // 対応表に無い頭数では引けない。その場合は満たしている前提に戻す。
-    expect(resolveOrderRateContinue('order_rate_in20_continue', 18)).toBeUndefined();
+    // 対応表に無い頭数は、以前は引けずに満たしている前提へ戻していた。
+    // 今は表の全項目を再現する式 H で延ばす（docs/order-condition.md 2.2 節）。
+    // 18 頭の順位率 20 以前は T = floor(20 × 17 / 100) + 1 = 4 で、4 位以内。
+    expect(orderRateContinueOf('order_rate_in20_continue', 18)).toEqual({
+      boundary: { atMost: 4 },
+      extrapolated: true,
+    });
   });
 
   it('フィールドが無ければ、本家と同じく満たしている前提のまま', () => {
@@ -308,5 +382,66 @@ describe('出走前の順位', () => {
     expect(state.beforeStart).toBe(true);
     expect(state.order).toBeNull();
     expect(orderIsOne(state)).toBe(true);
+  });
+});
+
+/**
+ * 9 頭と 12 頭以外の頭数（docs/order-condition.md 2.2 節）。
+ *
+ * 以前は対応表に無い頭数だと、順位率の条件は常に真で、出走前も真だった。
+ * 今は式 H で延ばした境界を、表にある頭数と同じ分岐で判定する。
+ */
+describe('9 頭と 12 頭以外の順位率（フィールド）', () => {
+  const track18 = { ...track, gateCount: 18 };
+  const bundle = buildFieldBundle(defaultFieldProfile(18), track18, system, data.trackData, {
+    samples: 6,
+    seed: 99,
+  });
+  const calculator = new RaceCalculator(system, data.trackData);
+  const setting18 = (style: 'NIGE' | 'SEN' | 'SASI' | 'OI'): RaceSetting => ({ ...setting(style), track: track18 });
+  const anySkill = data.skillsByName.get('末脚')![0]!;
+  const compile = (state: ReturnType<RaceCalculator['createState']>, operator: string, value: number) =>
+    compileConditions(
+      anySkill,
+      [[new SkillCondition('order_rate', operator, value)]],
+      state.setting,
+      new RngSet(7, 0),
+      newSkillScratch(),
+    );
+
+  it('相手が 17 頭になる', () => {
+    expect(bundle.opponents).toBe(17);
+  });
+
+  it('順位率の条件を順位で判定し、出走前は満たさない', () => {
+    const state = calculator.createState(setting18('OI'), {
+      seed: 7,
+      trial: 0,
+      field: new RecordedField(bundle, 0),
+    });
+    // 18 頭では、順位率 50 以下は 9 位以内、40 以上は 7 位以降になる。
+    const front = compile(state, '<=', 50);
+    const back = compile(state, '>=', 40);
+    expect(state.beforeStart).toBe(true);
+    expect(front(state)).toBe(false);
+    expect(back(state)).toBe(false);
+    const seen = new Set<boolean>();
+    for (let guard = 0; guard < 5000; guard++) {
+      if (updateFrame(state)) break;
+      if (state.beforeStart) continue;
+      const order = state.order!;
+      expect(front(state)).toBe(order <= 9);
+      expect(back(state)).toBe(order >= 7);
+      seen.add(order <= 9);
+    }
+    // 追込は序盤を後ろで進むので、9 位より後ろにいる時間がある。常に真ではない。
+    expect(seen.has(false)).toBe(true);
+  });
+
+  it('帯の維持も順位で落ちる', () => {
+    const oi = calculator.simulate(setting18('OI'), { seed: 7, trial: 0, field: bundle }).state;
+    expect(oi.simulation.specialState['order_rate_in20_continue']).toBe(0);
+    const nige = calculator.simulate(setting18('NIGE'), { seed: 7, trial: 0, field: bundle }).state;
+    expect(nige.simulation.specialState['order_rate_out70_continue']).toBe(0);
   });
 });

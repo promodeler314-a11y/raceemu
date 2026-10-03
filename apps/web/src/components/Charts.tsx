@@ -60,6 +60,14 @@ function legendValue(_u: uPlot, value: number | null): string {
   return value === null ? '' : value.toLocaleString('ja-JP', { maximumFractionDigits: 2 });
 }
 
+/** 凡例でまとめた項目の値。何本もの線を 1 項目で言うので、1 本の値は出さない。 */
+function blankLegendValue(): string {
+  return '';
+}
+
+/** 凡例でまとめた組のうち、代表以外の行に付ける目印（ChartProps の legendGroup）。 */
+const LEGEND_HIDDEN_CLASS = 'legend-grouped';
+
 function readPalette(): ChartPalette {
   const style = getComputedStyle(document.documentElement);
   const read = (name: string) => style.getPropertyValue(`--uma-${name}`).trim();
@@ -210,6 +218,13 @@ export interface ChartProps {
     dashed?: boolean;
     /** 線の太さ。省くと 2（破線は 1.5）。 */
     width?: number;
+    /**
+     * 凡例でまとめる組の名前。同じ名前の系列は、凡例では最初の 1 本だけが
+     * この名前で出て、残りは出ない。凡例を押すと組ごと表示と非表示が切り替わる。
+     * 同じ色の線がたくさんあって、凡例で 1 本ずつ見分けられないときに使う。
+     * まとめた項目には、カーソル位置の値を出さない（どの 1 本の値か言えないため）。
+     */
+    legendGroup?: string;
   }[];
   readonly bands: CourseBands;
   readonly height: number;
@@ -261,6 +276,23 @@ export function Chart({
     const element = ref.current;
     if (element === null) return;
     const palette = readPalette();
+    // 凡例でまとめる組。uPlot の系列の番号（0 は横軸なので系列は 1 から）で持つ。
+    // 組の最初の 1 本が凡例の項目を受け持ち、残りは凡例から隠す。
+    const groups = new Map<string, number[]>();
+    series.forEach((s, i) => {
+      if (s.legendGroup === undefined) return;
+      const members = groups.get(s.legendGroup);
+      if (members === undefined) groups.set(s.legendGroup, [i + 1]);
+      else members.push(i + 1);
+    });
+    const groupOf = (seriesIdx: number): number[] | undefined => {
+      const key = series[seriesIdx - 1]?.legendGroup;
+      return key === undefined ? undefined : groups.get(key);
+    };
+    const isHiddenInLegend = (i: number) => {
+      const members = groupOf(i + 1);
+      return members !== undefined && members[0] !== i + 1;
+    };
     // 軸の文字は canvas に描くので、uPlot の既定（system-ui のスタック）のままだと
     // 画面の書体と揃わない。大きさと太さは既定のままにする。
     const axis = {
@@ -294,21 +326,42 @@ export function Chart({
       // カーソルが無いとき、凡例の値の欄は既定で「--」になる。空にする（#102、A-7）
       series: [
         { label: xLabel, value: legendValue },
-        ...series.map((s) => ({
-          label: s.label,
-          value: legendValue,
+        ...series.map((s, i) => ({
+          label: s.legendGroup ?? s.label,
+          value: s.legendGroup === undefined ? legendValue : blankLegendValue,
           stroke: palette[s.slot ?? 'context'],
           width: s.width ?? (s.dashed === true ? 1.5 : 2),
           ...(s.dashed === true ? { dash: [4, 3] } : {}),
+          // 凡例から隠す行の目印。uPlot は系列の class を凡例の行に付ける
+          ...(isHiddenInLegend(i) ? { class: LEGEND_HIDDEN_CLASS } : {}),
           points: { show: false },
         })),
       ],
+      hooks: {
+        // 組の 1 本が切り替わったら、組の全部を代表（凡例に出ている 1 本）に揃える。
+        // 凡例の Ctrl+クリック（ほかを隠す）で隠した行だけが切り替わった場合も、代表に戻す。
+        // 第 3 引数の false は、ここからの切り替えで同じフックを呼び直さないため。
+        setSeries: [
+          (u, seriesIdx, opts) => {
+            if (seriesIdx === null || opts.show === undefined) return;
+            const members = groupOf(seriesIdx);
+            if (members === undefined) return;
+            const show = u.series[members[0]!]!.show;
+            for (const member of members) {
+              if (u.series[member]!.show !== show) u.setSeries(member, { show }, false);
+            }
+          },
+        ],
+      },
       plugins: [coursePlugin(bands, palette, setHoverSkill)],
     };
     // 横軸のあとに系列が並ぶ。値は Float64Array と (number | null)[] を混ぜられる。
     const data = [x, ...series.map((s) => s.values)] as uPlot.AlignedData;
     const created = new uPlot(options, data, element);
     plot.current = created;
+    for (const row of created.root.querySelectorAll<HTMLElement>(`.u-legend .${LEGEND_HIDDEN_CLASS}`)) {
+      row.style.display = 'none';
+    }
     const onResize = () => plot.current?.setSize({ width: element.clientWidth, height });
     window.addEventListener('resize', onResize);
     // タッチ端末にはカーソルが無く、スキルの印に合わせて名前を出せない（#103、UI 診断 第3節 A-8）。

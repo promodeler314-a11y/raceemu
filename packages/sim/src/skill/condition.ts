@@ -1,5 +1,5 @@
 import { bashinMeters, horseLane, styleValue, conditionValue } from '../data/constants.ts';
-import { orderRateBoundaries, resolveOrderRateContinue } from '../data/orderRate.ts';
+import { orderRateBoundaryOf, orderRateContinueOf } from '../data/orderRateResolve.ts';
 import type { Corner, Straight } from '../data/track.ts';
 import type { Rng, RngSet } from '../rng.ts';
 import type { DerivedSetting, RandomPosition } from '../setting.ts';
@@ -208,8 +208,9 @@ function compileCondition(
   // 従来どおり満たしている前提になる。
   if (orderRateContinueTypes.has(condition.type)) {
     const type = condition.type;
-    if (resolveOrderRateContinue(type, base.track.gateCount) === undefined) {
-      // 対応表に無い頭数。従来どおり満たしている前提にする。
+    if (orderRateContinueOf(type, base.track.gateCount) === undefined) {
+      // 9 頭と 12 頭で注記の表に無い帯か、1〜18 の整数でない頭数。従来どおり満たしている前提にする。
+      // 9 頭と 12 頭以外の 2〜18 頭は式で延ばした境界で判定する（docs/order-condition.md 2.2 節）。
       unsupportedConditions.add(`${type} (${base.track.gateCount}頭)`);
       return () => true;
     }
@@ -494,15 +495,18 @@ function compileCondition(
 
     case 'order_rate': {
       const gateCount = base.track.gateCount;
-      const boundary = orderRateBoundaries[`${condition.operator}:${condition.value}:${gateCount}`];
-      if (boundary === undefined) {
-        // 対応表は 9 頭立てと 12 頭立てだけを埋めてある。
-        // それ以外の頭数や未知の条件は、従来どおり満たしている前提にする。
+      // 9 頭立てと 12 頭立ては注記の表だけ、それ以外の 2〜18 頭は式で延ばした境界で引く。
+      // 延ばした頭数でも、表にある頭数と同じく出走前は満たさない扱いにする（下の beforeStart）。
+      // docs/order-condition.md 2.2 節を参照。
+      const resolved = orderRateBoundaryOf(condition.operator, condition.value, gateCount);
+      if (resolved === undefined) {
+        // 9 頭と 12 頭で注記の表に無い条件、1〜18 の整数でない頭数、未知の条件は、
+        // 従来どおり満たしている前提にする。記録が skill-coverage.test.ts の番人になる。
         unsupportedConditions.add(`order_rate ${condition.operator} ${condition.value} (${gateCount}頭)`);
         return () => true;
       }
-      const atLeast = boundary.atLeast;
-      const atMost = boundary.atMost;
+      const atLeast = resolved.boundary.atLeast;
+      const atMost = resolved.boundary.atMost;
       return (state) => {
         const order = state.order;
         if (order === null) return true;
