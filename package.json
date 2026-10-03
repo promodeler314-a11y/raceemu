@@ -20,6 +20,7 @@
     "skill-list-check": "tsx packages/solver/src/skill-list-check-cli.ts",
     "plan": "tsx packages/solver/src/plan-cli.ts",
     "api": "tsx apps/api/src/main.ts",
+    "mcp": "tsx apps/mcp/src/main.ts",
     "multi": "tsx packages/sim/src/multi/cli.ts",
     "order-field": "tsx packages/sim/src/field/order-cli.ts",
     "fetch-tessdata": "node scripts/fetch-tessdata.mjs",
@@ -40,12 +41,14 @@
     "vitest": "^2.1.9"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "onnxruntime-node": "^1.29.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "sharp": "^0.35.4",
     "tesseract.js": "7",
     "uplot": "^1.6.32",
+    "zod": "^4.6.5",
     "zustand": "^5.0.15"
   }
 }

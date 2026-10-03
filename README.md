@@ -94,6 +94,7 @@ git -C design-system pull      # 共有側の更新を取り込む。指し先�
 - [スキル画面の読み取り](docs/ocr-design.md)
 - [配信](docs/deploy.md)
 - [サーバ側で探索を回す設計](docs/server-design.md)
+- [MCP サーバーとして使う設計](docs/mcp-design.md)（画像から出走表を作って勝率を出す。起動は `pnpm -s mcp`）
 - [画面モック](design/README.md)と[モックと実装のズレ](docs/ui-gap.md)
 - [M10 の後の方針](docs/roadmap.md)（周辺ツールとの比較と、増築と磨きの候補）
 

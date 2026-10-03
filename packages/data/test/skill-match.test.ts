@@ -91,3 +91,20 @@ describe('スキルの引き当て', () => {
     expect(new Set(found.map((m) => m.skill.id)).size).toBe(found.length);
   });
 });
+
+describe('正規化で別々のスキル名が 1 つに潰れない', () => {
+  it('寄せた文字を足しても、名前どうしが区別できなくなる組は無い', () => {
+    // 〜 と ～、涛 と 濤、ヘ と へ、丸印、長音と一を寄せている。
+    // 寄せすぎると、別々の名前が同じ形になり、完全一致で引いたときに片方が引けなくなる。
+    const names = new Set(data.skills.map((skill) => skill.name));
+    const normalized = new Map<string, string>();
+    const collisions: string[] = [];
+    for (const name of names) {
+      const key = normalizeSkillName(name);
+      const other = normalized.get(key);
+      if (other !== undefined && other !== name) collisions.push(`${other} / ${name}`);
+      normalized.set(key, name);
+    }
+    expect(collisions).toEqual([]);
+  });
+});
