@@ -1,7 +1,10 @@
 /**
  * 全頭同時に走らせたときの挙動の実測。
- *   pnpm run multi [--trials 500] [--location 10006] [--course 10606]
+ *   pnpm run multi [--trials 500] [--gate 9] [--location 10006] [--course 10606]
  *   pnpm run multi --trials 30 --opponents roster --location 10008 --course 10808
+ *
+ * `--gate` は出走頭数（2〜18）。9 頭と 12 頭以外では、順位率の境界が式で延ばした
+ * 近似になる（docs/order-condition.md 2.2 節）。
  *
  * `--opponents roster` は 2 と 4 の相手を、実在のカードから組んだものに替える
  * （docs/order-field.md 4.7 節）。試行ごとに相手を組み直す。相手は試行番号だけで決まるので、
@@ -40,15 +43,38 @@ try {
 const data = loadGameData();
 const system = defaultSystemSetting();
 const calculator = new RaceCalculator(system, data.trackData);
+const gateCount = Number(arg('gate', '9'));
+if (!Number.isInteger(gateCount) || gateCount < 2 || gateCount > 18) {
+  console.error(`--gate は 2 から 18 の整数で指定する（${arg('gate', '9')} が渡された）`);
+  process.exit(1);
+}
 const track = {
   location: Number(arg('location', '10006')),
   course: Number(arg('course', '10606')),
   condition: 1,
-  gateCount: 9,
+  gateCount,
 } as const;
 const trials = Number(arg('trials', '500'));
 const styles: Style[] = ['NIGE', 'SEN', 'SASI', 'OI'];
 const styleLabel: Record<string, string> = { NIGE: '逃げ', SEN: '先行', SASI: '差し', OI: '追込' };
+
+/**
+ * 全頭を逃げ 2 割、先行 3 割、差し 3 割、追込 2 割で並べる（最大剰余。端数は小数部の
+ * 大きい順、同じなら前の脚質から）。9 頭では 2-3-2-2 になり、頭数を選べるようにする前の
+ * 並びと同じである。
+ */
+function lineupOf(heads: number): Style[] {
+  const weights = [2, 3, 3, 2];
+  const exact = weights.map((w) => (w * heads) / 10);
+  const counts = exact.map((x) => Math.floor(x));
+  let rest = heads - counts.reduce((a, b) => a + b, 0);
+  const order = exact
+    .map((x, i) => ({ frac: x - Math.floor(x), i }))
+    .sort((a, b) => b.frac - a.frac || a.i - b.i);
+  for (let k = 0; rest > 0; k++, rest--) counts[order[k % order.length]!.i]!++;
+  return styles.flatMap((style, i) => Array.from({ length: counts[i]! }, () => style));
+}
+const lineup = lineupOf(gateCount);
 
 const base = (style: Style, patch: Partial<RaceSetting['uma']> = {}): RaceSetting => ({
   uma: {
@@ -74,7 +100,7 @@ const useRoster = rosterSettings.model === 'roster' && prepared.roster !== null;
 const skillPool = opponentSkillPool(data.skillsById);
 
 /**
- * 試行番号から相手 8 頭を返す口。
+ * 試行番号から相手（出走頭数 − 1 頭）を返す口。
  *
  * 名簿のときは試行ごとに組み直す。`self` を渡すと自分と同格の強さになる
  * （渡さなければ `profile.uma` が基準）。相手は試行番号だけで決まる。
@@ -99,7 +125,7 @@ function opponentsFor(profile: FieldProfile, self?: RaceSetting['uma']): (trial:
 
 // 名簿のときは、引いた相手の例を先に出す。強さは自分（先行 1200-1000-900-600-900）に揃える。
 if (useRoster) {
-  const example = opponentsFor(defaultFieldProfile(9), base('SEN').uma)(0);
+  const example = opponentsFor(defaultFieldProfile(gateCount), base('SEN').uma)(0);
   console.log('名簿の相手の例（試行 0、強さは自分に揃えてある）');
   console.log('');
   console.log('| 枠 | キャラ | 脚質 | スキル数 | 固有 Lv |');
@@ -117,7 +143,6 @@ if (useRoster) {
 // 1. 全頭同じステータスで、脚質だけを変える。
 // M6 の 4 節と同じ問いに答える表になる。
 {
-  const lineup: Style[] = ['NIGE', 'NIGE', 'SEN', 'SEN', 'SEN', 'SASI', 'SASI', 'OI', 'OI'];
   const entries: MultiEntry[] = lineup.map((style) => ({ setting: base(style) }));
   const tally = new OrderTally(entries.length);
   const started = performance.now();
@@ -127,13 +152,14 @@ if (useRoster) {
   const detail = data.trackData[track.location]?.courses[track.course];
   console.log(
     `${data.trackData[track.location]?.name ?? track.location} ${detail?.name ?? track.course}` +
-      ` / 9 頭 / 全頭 1200-1000-900-600-900 / ${trials} 試行`,
+      ` / ${gateCount} 頭 / 全頭 1200-1000-900-600-900 / ${trials} 試行`,
   );
   console.log('');
   console.log('| 出走 | 脚質 | 1 着 | 2 着 | 3 着 | 4 着 | 5 着以下 | 平均着順 | 平均タイム |');
   console.log('| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |');
   for (const s of tally.summarizeAll()) {
-    const at = (order: number) => pct(s.counts[order]! / s.trials);
+    // 4 頭未満では出走より後ろの着順が無い。欄は残して「-」を出す
+    const at = (order: number) => (order <= entries.length ? pct((s.counts[order] ?? 0) / s.trials) : '-');
     let rest = 0;
     for (let order = 5; order <= entries.length; order++) rest += s.counts[order]!;
     console.log(
@@ -153,10 +179,10 @@ if (useRoster) {
   console.log('| 相手のスピード | 勝率 | 連対率 | 複勝率 | 平均着順 |');
   console.log('| --- | ---: | ---: | ---: | ---: |');
   for (const speed of [900, 1000, 1100, 1200, 1300, 1400]) {
-    const profile = defaultFieldProfile(9);
+    const profile = defaultFieldProfile(gateCount);
     // スピードを振る表なので、名簿のときも self は渡さない（渡すと自分に揃って振れなくなる）。
     const lineupAt = opponentsFor({ ...profile, uma: { ...profile.uma, speed } });
-    const tally = new OrderTally(track.gateCount);
+    const tally = new OrderTally(gateCount);
     for (let t = 0; t < trials; t++) {
       const entries: MultiEntry[] = [{ setting: base('SEN') }, ...lineupAt(t)];
       tally.add(runMultiRace(calculator, entries, { seed: 4649, trial: t }));
@@ -171,7 +197,6 @@ if (useRoster) {
 
 // 3. 位置取りが働いているか。脚質ごとに、途中の順位と入った位置取りを見る。
 {
-  const lineup: Style[] = ['NIGE', 'NIGE', 'SEN', 'SEN', 'SEN', 'SASI', 'SASI', 'OI', 'OI'];
   const entries: MultiEntry[] = lineup.map((style) => ({ setting: base(style) }));
   const races = Math.min(100, trials);
   const orderSum = lineup.map(() => 0);
@@ -217,7 +242,7 @@ if (useRoster) {
 {
   const skill = data.skillsByName.get('円弧のマエストロ')?.[0];
   if (skill !== undefined) {
-    const profile = defaultFieldProfile(9);
+    const profile = defaultFieldProfile(gateCount);
     const self = base('SEN');
     // 名簿の相手は自分と同格に揃える（profile の既定が matchSelf）。
     const lineupAt = opponentsFor(profile, self.uma);

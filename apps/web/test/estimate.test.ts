@@ -15,7 +15,8 @@ import {
   type PaceSample,
 } from '../src/store.ts';
 
-const track = { location: 10006, course: 10606, condition: 1, gateCount: 9 };
+/** 勝率の面の既定の頭数。コースの欄の頭数とは別に持つ。 */
+const multiGateCount = 9;
 
 /** 実測を 1 点だけ持つ状態。 */
 const one = (key: string, sample: PaceSample) => recordPace({}, key, sample);
@@ -75,15 +76,15 @@ describe('所要時間の見積もり', () => {
 
   it('全頭同時は頭数ごとに実測を分ける', () => {
     const pace = one(multiPaceKey(9), { count: 500, ms: 2800 });
-    expect(estimateMulti({ pace, track, multiTrials: 500 }).ms).toBeCloseTo(2800);
-    expect(estimateMulti({ pace, track: { ...track, gateCount: 12 }, multiTrials: 500 }).measured).toBe(
+    expect(estimateMulti({ pace, multiGateCount, multiTrials: 500 }).ms).toBeCloseTo(2800);
+    expect(estimateMulti({ pace, multiGateCount: 12, multiTrials: 500 }).measured).toBe(
       false,
     );
   });
 
   it('全頭同時の目安は、1 試行あたりが頭数に比例する', () => {
     const at = (gateCount: number, trials: number) =>
-      estimateMulti({ pace: {}, track: { ...track, gateCount }, multiTrials: trials }).ms;
+      estimateMulti({ pace: {}, multiGateCount: gateCount, multiTrials: trials }).ms;
     // 固定のぶんは頭数で変わらないので、差を取って比べる。
     const nine = at(9, 1100) - at(9, 100);
     const twelve = at(12, 1100) - at(12, 100);
@@ -93,8 +94,8 @@ describe('所要時間の見積もり', () => {
   it('単騎より全頭同時のほうが 1 試行は重い', () => {
     const solo = estimateRun({ pace: {}, useField: false, count: 1100 }).ms -
       estimateRun({ pace: {}, useField: false, count: 100 }).ms;
-    const multi = estimateMulti({ pace: {}, track, multiTrials: 1100 }).ms -
-      estimateMulti({ pace: {}, track, multiTrials: 100 }).ms;
+    const multi = estimateMulti({ pace: {}, multiGateCount, multiTrials: 1100 }).ms -
+      estimateMulti({ pace: {}, multiGateCount, multiTrials: 100 }).ms;
     expect(multi).toBeGreaterThan(solo);
   });
 

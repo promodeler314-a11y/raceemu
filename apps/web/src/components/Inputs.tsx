@@ -520,28 +520,74 @@ export function UmaInput() {
   );
 }
 
-/** 固有と進化の札。押すと持つかどうかが変わる。 */
-function SkillChip({
+/**
+ * 固有と進化の札。押すと持つかどうかが変わる。
+ *
+ * 設定の面と勝率の面の出走表（相手の編集の行）で使う。出走表は文字が 12px の
+ * 表の中に置くので、`size="sm"` で一回り小さくする。
+ */
+export function SkillChip({
   skill,
   selected,
   onToggle,
+  size = 'md',
 }: {
   skill: SkillData;
   selected: boolean;
   onToggle: () => void;
+  size?: 'sm' | 'md';
 }) {
   return (
     <button
       type="button"
       aria-pressed={selected}
       onClick={onToggle}
-      className={`rounded-sm border px-2 py-1 text-sm ${
+      className={`rounded-sm border px-2 ${size === 'sm' ? 'py-0.5 text-xs' : 'py-1 text-sm'} ${
         selected ? 'border-acc-ink bg-acc-tint text-acc-ink' : 'border-rule2 text-ink2'
       }`}
     >
       {selected ? '✓ ' : ''}
       {skill.name}
     </button>
+  );
+}
+
+/**
+ * 固有 Lv の選択欄。固有を持たないときは効かないので触れないようにする。
+ *
+ * 色を明示するのは、指定しないと親の label の薄い文字色（ink3）を受け継ぎ、
+ * 触れるときも無効に見えるためである。無効のときは色だけでなく、薄さと
+ * カーソルの形でも差を出す（DESIGN.md 3 節「色だけで情報を伝えない」）。
+ */
+export function UniqueLevelSelect({
+  value,
+  disabled,
+  onChange,
+  ariaLabel,
+}: {
+  value: number;
+  disabled: boolean;
+  onChange: (level: number) => void;
+  /** 同じ画面に複数並ぶとき、どの欄かを読み上げで言うための名前。省くと「固有Lv」。 */
+  ariaLabel?: string;
+}) {
+  return (
+    <label className="ml-1 flex items-center gap-1 text-xs text-ink3">
+      固有Lv
+      <select
+        className="num rounded-sm border border-rule2 bg-surface px-1 py-0.5 text-xs text-ink disabled:cursor-not-allowed disabled:text-ink3 disabled:opacity-60"
+        value={value}
+        disabled={disabled}
+        aria-label={ariaLabel}
+        onChange={(e) => onChange(Number(e.target.value))}
+      >
+        {[1, 2, 3, 4, 5, 6].map((level) => (
+          <option key={level} value={level}>
+            {level}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 
@@ -591,21 +637,11 @@ function UniqueSkillInput() {
               onToggle={() => toggleSkill(skill.id)}
             />
           ))}
-          <label className="ml-1 flex items-center gap-1 text-xs text-ink3">
-            固有Lv
-            <select
-              className="rounded-sm border border-rule2 bg-surface px-1 py-0.5 text-xs disabled:text-ink3"
-              value={uniqueLevel}
-              disabled={!hasUnique}
-              onChange={(e) => setUma({ uniqueLevel: Number(e.target.value) })}
-            >
-              {[1, 2, 3, 4, 5, 6].map((level) => (
-                <option key={level} value={level}>
-                  {level}
-                </option>
-              ))}
-            </select>
-          </label>
+          <UniqueLevelSelect
+            value={uniqueLevel}
+            disabled={!hasUnique}
+            onChange={(level) => setUma({ uniqueLevel: level })}
+          />
           {evos.map((skill) => (
             <SkillChip
               key={skill.id}
@@ -970,7 +1006,7 @@ export function OpponentInput() {
 }
 
 export function RunPanel() {
-  const { count, seed, running, progress, setCount, setSeed, run, useField, setUseField } =
+  const { count, seed, running, progress, setCount, setSeed, run, useField, setUseField, tab } =
     useStore();
   const gateCount = useStore((s) => s.track.gateCount);
   // 押す前に、どれくらい待つのかを出す。20 万試行は条件次第で数分かかる。
@@ -1040,7 +1076,11 @@ export function RunPanel() {
           onChange={(e) => setUseField(e.target.checked)}
         />
         順位条件を判定する
-        <span className="text-ink3">（相手 {gateCount - 1} 頭）</span>
+        {/*
+          相手の頭数はコースの欄の値（単騎が使う）から出す。勝率の面は自分の出走頭数で
+          走らせるので、そこで出すと出走表の頭数と食い違う。勝率の面では出さない。
+        */}
+        {tab !== 'field' && <span className="text-ink3">（相手 {gateCount - 1} 頭）</span>}
       </label>
       {/* キー操作の案内は、キーボードの無い狭い幅では出さない（#104） */}
       <span className="ml-auto hidden text-[11px] text-ink3 md:inline">

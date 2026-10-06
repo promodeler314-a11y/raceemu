@@ -1,4 +1,4 @@
-import { orderRateBoundaries, resolveOrderRateContinue } from '../data/orderRate.ts';
+import { orderRateBoundaryOf, orderRateContinueOf, type ResolvedOrderRate } from '../data/orderRateResolve.ts';
 import { FIELD_COMPUTED_TYPES } from '../field/conditions.ts';
 import type { DerivedSetting } from '../setting.ts';
 import { approximateConditions, approximateTypeToState, ignoreConditions } from './approximate.ts';
@@ -106,6 +106,22 @@ const OTHER_CHARACTER_SKILL_TYPES: ReadonlySet<string> = new Set([
 const NO_FIELD_REASON = '順位や距離差の条件。フィールドを渡していないので、満たしている扱いになる';
 const ORDER_FIELD_REASON =
   '順位は判定しているが、相手は作り物の束である。順位率の対応表もスキルデータの注記からの読み取りで、ゲームと突き合わせていない';
+/**
+ * 9 頭立てと 12 頭立て以外の順位率の理由。
+ *
+ * 注記は 9 頭と 12 頭の境界しか書いていないので、それ以外の頭数は式で延ばしている。
+ * 注記から引いた境界と同じ信頼度に見えないよう、理由を分ける。
+ * docs/order-condition.md 2.2 節を参照。
+ */
+const ORDER_RATE_EXTRAPOLATED_REASON =
+  '順位は判定しているが、相手は作り物の束である。順位率の境界は、注記がある 9 頭立てと 12 頭立て以外では式で延ばした近似で、ゲームと突き合わせていない';
+/**
+ * 順位率の境界を引けないとき。9 頭と 12 頭で注記の表に無い条件（式では埋めない）と、
+ * 1〜18 の整数でない頭数がここに来る。以前の文は内部の鍵（`>=:35:9` の形）を
+ * 画面に出していたので、条件の中身を書かない文にしてある。
+ */
+const ORDER_RATE_UNRESOLVED_REASON =
+  '順位率の境界を決められない頭数か条件なので、満たしている扱いになる';
 const DIFF_FIELD_REASON =
   '距離差は判定しているが、相手は作り物の束である。バ身の換算（1 バ身 = 2.5 m）も注記からの読み取りである';
 /**
@@ -126,6 +142,21 @@ function approximateReason(condition: SkillCondition): string {
   const approximation = key === undefined ? undefined : approximateConditions[key];
   if (approximation === undefined) return '他のウマ娘の振る舞いを確率で近似している';
   return `${approximation.displayName}を確率で近似している`;
+}
+
+/**
+ * 順位率（`order_rate` と帯の維持）の分類。
+ *
+ * 9 頭と 12 頭は注記の表だけ、それ以外の 2〜18 頭は式で延ばした境界で判定する。
+ * どちらも近似の印で、理由の文だけが違う。引けなければ落とす（9 頭と 12 頭で表に無い
+ * 条件もここに入り、コンパイル側は `unsupportedConditions` に記録する）。
+ */
+function orderRateNote(
+  resolved: ResolvedOrderRate | undefined,
+  note: (fidelity: Fidelity, reason: string) => FidelityNote,
+): FidelityNote {
+  if (resolved === undefined) return note('dropped', ORDER_RATE_UNRESOLVED_REASON);
+  return note('approximate', resolved.extrapolated ? ORDER_RATE_EXTRAPOLATED_REASON : ORDER_FIELD_REASON);
 }
 
 /** 条件 1 つを分類する。走らせずに決まる。 */
@@ -158,20 +189,14 @@ export function classifyCondition(
     if (!options.hasField) return note('dropped', NO_FIELD_REASON);
     return note('approximate', type === 'order' ? ORDER_FIELD_REASON : DIFF_FIELD_REASON);
   }
-  if (type === 'order_rate') {
+  if (type === 'order_rate' || orderRateContinueTypes.has(type)) {
     if (!options.hasField) return note('dropped', NO_FIELD_REASON);
-    const key = `${condition.operator}:${condition.value}:${setting.base.track.gateCount}`;
-    if (orderRateBoundaries[key] === undefined) {
-      return note('dropped', `順位率の対応表に ${setting.base.track.gateCount} 頭立ての ${key} が無い`);
-    }
-    return note('approximate', ORDER_FIELD_REASON);
-  }
-  if (orderRateContinueTypes.has(type)) {
-    if (!options.hasField) return note('dropped', NO_FIELD_REASON);
-    if (resolveOrderRateContinue(type, setting.base.track.gateCount) === undefined) {
-      return note('dropped', `順位率の対応表に ${setting.base.track.gateCount} 頭立ての ${type} が無い`);
-    }
-    return note('approximate', ORDER_FIELD_REASON);
+    const gateCount = setting.base.track.gateCount;
+    const resolved =
+      type === 'order_rate'
+        ? orderRateBoundaryOf(condition.operator, condition.value, gateCount)
+        : orderRateContinueOf(type, gateCount);
+    return orderRateNote(resolved, note);
   }
 
   // 前提スキルは、同じグループの強い方が発動したかで見ている。

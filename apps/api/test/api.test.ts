@@ -131,6 +131,25 @@ describe('要求の検査', () => {
     expect(resolved.field?.profile.uma.speed).toBeGreaterThan(0);
   });
 
+  it('field の頭数が base.track の頭数と食い違えば弾く', () => {
+    // 12 も 9 も 2〜18 の範囲に入るので、落ちるのは一致の検査だけである。
+    // 通すと、束を作る時点で runMultiRace が「枠の数を超えている」と投げる。
+    expect(() => checkRequest(body({ field: { gateCount: 12 } }), data)).toThrow(/base\.track\.gateCount/);
+    expect(() => checkRequest(body({ field: { gateCount: 12 } }), data)).toThrow(RequestError);
+    // 少ないほうも弾く。束が土台と違う頭数のレースを想定してしまう。
+    expect(() => checkRequest(body({ field: { gateCount: 5 } }), data)).toThrow(/base\.track\.gateCount/);
+  });
+
+  it('頭数の小数は弾く', () => {
+    expect(() => checkRequest(body({ field: { gateCount: 9.5 } }), data)).toThrow(/field\.gateCount は整数/);
+
+    const broken = body();
+    const base = broken['base'] as { track: { gateCount: number } };
+    broken['base'] = { ...base, track: { ...base.track, gateCount: 9.5 } };
+    expect(() => checkRequest(broken, data)).toThrow(RequestError);
+    expect(() => checkRequest(broken, data)).toThrow(/base\.track\.gateCount は整数/);
+  });
+
   it('stages は増加する順でなければ弾く', () => {
     expect(() => checkRequest(body({ stages: [600, 200] }), data)).toThrow(RequestError);
   });
