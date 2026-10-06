@@ -14,7 +14,7 @@ AGPL v3。コメントとドキュメントと commit メッセージはすべ�
 git submodule update --init    # design-system（見た目のトークン）。無いとビルドが止まる
 pnpm install --frozen-lockfile
 pnpm typecheck                 # tsc -b。noEmit なのでビルド成果物は出ない
-pnpm test                      # vitest run。43 ファイル 642 件
+pnpm test                      # vitest run。43 ファイル 646 件
 pnpm test packages/sim/test/plan.test.ts    # ファイルを絞る
 pnpm exec vitest run packages/sim/test/optimize.test.ts -t '予算を超える構成は返さない'  # テスト名で絞る
 pnpm dev                       # UI の開発サーバ
@@ -152,6 +152,8 @@ Claude Code や Claude Desktop から使う MCP サーバー（stdio）。設計
 読み取りは Claude が画像から行い、サーバーは画像を受け取らない。サーバーが持つのは、スキル名の解決（`packages/data/src/skill-resolve.ts`、完全一致だけを採り、近い名前は候補で返すだけ）と、出走表の点検（`packages/sim/src/multi/lineup.ts`）である。
 個体は `mcp-individuals.db` に保存する（`RACEEMU_MCP_DATA_DIR`、既定は `~/.raceemu`）。`apps/api` の個体は絞った適性しか持たず、形が違うので別のファイルにしてある。
 `RACEEMU_ASSETS_DIR` で、リポジトリの `assets` を書き換えずに、別の場所の新しいデータを試せる。
+
+リポジトリ直下の `.mcp.json` が、Claude Code にこのサーバーを登録する。初回は、プロジェクトの MCP サーバーを許可するか聞かれる。Claude Desktop など別のクライアントは、絶対パスで書く（`docs/mcp-design.md` 2.1 節）。
 
 `packages/data/assets/meta.json` は `sync-game-data.py` が書く（取り直した日と、4 つのデータの指紋）。**指紋が変わったときだけ書き直す**ので、データが変わらない週に PR が出ることはない。`--meta-only --date` 以外では、このスクリプトを手元で走らせない（本家から取得して `assets` を上書きする）。
 

@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "raceemu": {
+      "command": "pnpm",
+      "args": ["-s", "mcp"]
+    }
+  }
+}
