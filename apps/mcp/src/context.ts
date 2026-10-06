@@ -19,6 +19,8 @@ export interface McpContext {
   /** 保存した個体。出走表の `individual` で指すときに引く。 */
   readonly individuals: IndividualLookup;
   readonly store: IndividualStore;
+  /** スキル一覧（相手を補う順位表）の置き場。省くとリポジトリの既定（`SKILL_LIST_DIR`）。 */
+  readonly skillListDir?: string;
 }
 
 export interface ContextOptions {
@@ -28,6 +30,8 @@ export interface ContextOptions {
   readonly concurrency?: number;
   /** 個体の保存先。省くと `RACEEMU_MCP_DATA_DIR`、無ければ `~/.raceemu` */
   readonly store?: IndividualStore;
+  /** スキル一覧の置き場。省くとリポジトリの既定。テストで「順位表が無いコース」を作るのに使う。 */
+  readonly skillListDir?: string;
 }
 
 export function createContext(options: ContextOptions): McpContext {
@@ -39,6 +43,7 @@ export function createContext(options: ContextOptions): McpContext {
     runtime: new Runtime(options.concurrency),
     individuals: store,
     store,
+    ...(options.skillListDir === undefined ? {} : { skillListDir: options.skillListDir }),
   };
 }
 

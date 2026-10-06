@@ -1,10 +1,24 @@
 /**
  * 全頭同時に走らせたときの挙動の実測。
- *   pnpm multi [--trials 500] [--location 10006] [--course 10606]
+ *   pnpm run multi [--trials 500] [--location 10006] [--course 10606]
+ *   pnpm run multi --trials 30 --opponents roster --location 10008 --course 10808
+ *
+ * `--opponents roster` は 2 と 4 の相手を、実在のカードから組んだものに替える
+ * （docs/order-field.md 4.7 節）。試行ごとに相手を組み直す。相手は試行番号だけで決まるので、
+ * 4 のようにスキルを足す前後を比べるときも同じ相手になる。
+ * ほかに `--sp-budget`、`--unique-level`、`--roster-file`。1 と 3 は相手を使わない。
  */
 import { loadGameData } from '../../../data/src/node.ts';
+import {
+  prepareRoster,
+  ROSTER_FALLBACK_NOTE,
+  rosterFieldProfile,
+  rosterSettingsFromArgv,
+  type RosterCliSettings,
+} from '../../../solver/src/opponent-roster-setup.ts';
 import { RaceCalculator } from '../calculator.ts';
-import { defaultFieldProfile, opponentSettings } from '../field/field.ts';
+import { defaultFieldProfile, opponentSettings, type FieldProfile } from '../field/field.ts';
+import { opponentSkillPool } from '../field/opponent-skills.ts';
 import { defaultSystemSetting, type RaceSetting } from '../setting.ts';
 import type { Style } from '../data/constants.ts';
 import { runMultiRace, type MultiEntry } from './race.ts';
@@ -13,6 +27,14 @@ import { OrderTally } from './summary.ts';
 function arg(name: string, fallback: string): string {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 && index + 1 < process.argv.length ? process.argv[index + 1]! : fallback;
+}
+
+let rosterSettings: RosterCliSettings;
+try {
+  rosterSettings = rosterSettingsFromArgv(process.argv);
+} catch (error) {
+  console.error((error as Error).message);
+  process.exit(1);
 }
 
 const data = loadGameData();
@@ -40,6 +62,57 @@ const base = (style: Style, patch: Partial<RaceSetting['uma']> = {}): RaceSettin
 });
 
 const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
+
+/** 名簿の相手は、そのコースの順位表と名簿が作れたときだけ使う。作れなければ典型スキルで回す。 */
+const prepared =
+  rosterSettings.model === 'roster'
+    ? prepareRoster(data, rosterSettings, track)
+    : { roster: null, notes: [] };
+for (const note of prepared.notes) console.error(note);
+if (rosterSettings.model === 'roster' && prepared.roster === null) console.error(ROSTER_FALLBACK_NOTE);
+const useRoster = rosterSettings.model === 'roster' && prepared.roster !== null;
+const skillPool = opponentSkillPool(data.skillsById);
+
+/**
+ * 試行番号から相手 8 頭を返す口。
+ *
+ * 名簿のときは試行ごとに組み直す。`self` を渡すと自分と同格の強さになる
+ * （渡さなければ `profile.uma` が基準）。相手は試行番号だけで決まる。
+ * 典型のときは今までどおり、引き直さない固定の相手を 1 度だけ作って使い回す。
+ */
+function opponentsFor(profile: FieldProfile, self?: RaceSetting['uma']): (trial: number) => MultiEntry[] {
+  if (!useRoster) {
+    const fixed: MultiEntry[] = opponentSettings(profile, track).map((setting) => ({ setting }));
+    return () => fixed;
+  }
+  const withRoster = rosterFieldProfile(profile, rosterSettings, prepared.roster);
+  return (trial) =>
+    opponentSettings(withRoster, track, {
+      sample: trial,
+      roster: prepared.roster,
+      skillsById: data.skillsById,
+      trackData: data.trackData,
+      skillPool,
+      self: self ?? null,
+    }).map((setting) => ({ setting }));
+}
+
+// 名簿のときは、引いた相手の例を先に出す。強さは自分（先行 1200-1000-900-600-900）に揃える。
+if (useRoster) {
+  const example = opponentsFor(defaultFieldProfile(9), base('SEN').uma)(0);
+  console.log('名簿の相手の例（試行 0、強さは自分に揃えてある）');
+  console.log('');
+  console.log('| 枠 | キャラ | 脚質 | スキル数 | 固有 Lv |');
+  console.log('| --- | --- | --- | ---: | ---: |');
+  example.forEach(({ setting }, slot) => {
+    const uma = setting.uma;
+    console.log(
+      `| ${slot + 1} | ${uma.charaName === '' ? '（典型スキル）' : uma.charaName} | ${styleLabel[uma.style]}` +
+        ` | ${setting.skills.length} | ${uma.uniqueLevel} |`,
+    );
+  });
+  console.log('');
+}
 
 // 1. 全頭同じステータスで、脚質だけを変える。
 // M6 の 4 節と同じ問いに答える表になる。
@@ -81,10 +154,13 @@ const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
   console.log('| --- | ---: | ---: | ---: | ---: |');
   for (const speed of [900, 1000, 1100, 1200, 1300, 1400]) {
     const profile = defaultFieldProfile(9);
-    const opponents = opponentSettings({ ...profile, uma: { ...profile.uma, speed } }, track);
-    const entries: MultiEntry[] = [{ setting: base('SEN') }, ...opponents.map((setting) => ({ setting }))];
-    const tally = new OrderTally(entries.length);
-    for (let t = 0; t < trials; t++) tally.add(runMultiRace(calculator, entries, { seed: 4649, trial: t }));
+    // スピードを振る表なので、名簿のときも self は渡さない（渡すと自分に揃って振れなくなる）。
+    const lineupAt = opponentsFor({ ...profile, uma: { ...profile.uma, speed } });
+    const tally = new OrderTally(track.gateCount);
+    for (let t = 0; t < trials; t++) {
+      const entries: MultiEntry[] = [{ setting: base('SEN') }, ...lineupAt(t)];
+      tally.add(runMultiRace(calculator, entries, { seed: 4649, trial: t }));
+    }
     const me = tally.summarize(0);
     console.log(
       `| ${speed} | ${pct(me.winRate)} | ${pct(me.quinellaRate)} | ${pct(me.showRate)} | ${me.meanOrder.toFixed(2)} |`,
@@ -137,16 +213,19 @@ const pct = (x: number) => `${(100 * x).toFixed(1)} %`;
 }
 
 // 4. 共通乱数の効き。相手を固定したまま、自分にスキルを 1 つ足す。
+// 名簿のときは試行ごとに相手が変わるが、試行番号で決まるので足す前後で同じ相手になる。
 {
   const skill = data.skillsByName.get('円弧のマエストロ')?.[0];
   if (skill !== undefined) {
     const profile = defaultFieldProfile(9);
-    const opponents = opponentSettings(profile, track).map((setting) => ({ setting }));
+    const self = base('SEN');
+    // 名簿の相手は自分と同格に揃える（profile の既定が matchSelf）。
+    const lineupAt = opponentsFor(profile, self.uma);
     const run = (skills: typeof skill[]) => {
-      const entries: MultiEntry[] = [{ setting: { ...base('SEN'), skills } }, ...opponents];
       const times: number[] = [];
       const orders: number[] = [];
       for (let t = 0; t < trials; t++) {
+        const entries: MultiEntry[] = [{ setting: { ...self, skills } }, ...lineupAt(t)];
         const out = runMultiRace(calculator, entries, { seed: 4649, trial: t });
         const me = out.entries[0]!;
         times.push(me.result.raceTime);

@@ -12,6 +12,7 @@ import { runMultiRace } from '../../../packages/sim/src/multi/race.ts';
 import { OrderTally } from '../../../packages/sim/src/multi/summary.ts';
 import { defaultSystemSetting, type TrackRef } from '../../../packages/sim/src/setting.ts';
 import { createContext } from '../src/context.ts';
+import { buildFillGroups, planFill } from '../src/fill-opponents.ts';
 import { IndividualStore } from '../src/individuals.ts';
 import { round } from '../src/lineup-service.ts';
 import { createRaceemuServer } from '../src/server.ts';
@@ -341,6 +342,215 @@ describe('win_rate', () => {
     expect(b.isError).not.toBe(true);
     // 同じ入力と種なので、同じ結果が返る。
     expect(a.structuredContent!['runners']).toEqual(b.structuredContent!['runners']);
+  });
+});
+
+describe('win_rate: fill_opponents（出走表の頭数が足りないとき、相手を補う）', () => {
+  const el = withoutDebuffs(byName('エルコンドルパサー'));
+  const tsuyoshi = withoutDebuffs(byName('ツルマルツヨシ'));
+  interface FillResult {
+    filled: number;
+    gateCount: number;
+    lineups: number;
+    trialsPerLineup: number[];
+    keys: { lineup: number; sample: number; raceSeed: number }[];
+    opponentsWinRate: number;
+    example: { slot: number; charaName: string | null; styleLabel: string; skillCount: number; uniqueLevel: number }[];
+    reasons?: string[];
+  }
+
+  it('1 頭の出走表が 9 頭になる。notes に、補ったことと相手の組み方が載る', async () => {
+    const args = { lineup: [el], track: TOKYO_2400, trials: 4, seed: 5, fill_opponents: { lineups: 2 } };
+    const res = await call('win_rate', args);
+    expect(res.isError).not.toBe(true);
+    const structured = res.structuredContent!;
+    expect(structured['runners']).toHaveLength(1);
+    expect(structured['trials']).toBe(4);
+    const fill = structured['fillOpponents'] as FillResult;
+    expect(fill).toMatchObject({ filled: 8, gateCount: 9, lineups: 2, trialsPerLineup: [2, 2] });
+    // 組ごとに相手と乱数の種が違う（同じ種で回すと、組どうしが相関する）。
+    expect(new Set(fill.keys.map((k) => k.raceSeed)).size).toBe(2);
+    expect(new Set(fill.keys.map((k) => k.sample)).size).toBe(2);
+    // 1 組目の相手の例。実在のカードから引かれ、固有 Lv は指定（既定 4）で、スキルを持つ。
+    expect(fill.example).toHaveLength(8);
+    for (const e of fill.example) {
+      expect(e.charaName, `枠 ${e.slot}`).not.toBeNull();
+      expect(e.uniqueLevel).toBe(4);
+      expect(e.skillCount).toBeGreaterThan(8);
+    }
+    // 出走表の頭が 1 着になる割合と、補った相手が 1 着になる割合で、ほぼ全部になる。
+    const [row] = structured['runners'] as { winRate: number }[];
+    expect(row!.winRate + fill.opponentsWinRate).toBeCloseTo(1, 3);
+    // notes と本文に、補ったこと・組の数・組み方・推定であることが書いてある。
+    const notes = (structured['notes'] as string[]).join('\n');
+    expect(notes).toContain('相手を 8 頭補って、9 頭で回しました');
+    expect(notes).toContain('2 組を引き');
+    expect(notes).toContain('固有 Lv4');
+    expect(notes).toContain('SP 10000');
+    expect(notes).toContain('推定');
+    expect(notes).toContain('相手の組の選び方による揺れは含みません');
+    expect(notes).toContain('ゲームと突き合わせていません'); // 今までの注意も残っている
+    expect(res.content[0]!.text).toContain('9 頭（出走表 1 + 補った 8）');
+    expect(res.content[0]!.text).toContain('補った相手の例');
+    // 同じ入力なら、同じ相手に同じ乱数で回って、同じ結果になる。
+    const again = await call('win_rate', args);
+    expect(again.structuredContent!['runners']).toEqual(structured['runners']);
+    expect((again.structuredContent!['fillOpponents'] as FillResult).example).toEqual(fill.example);
+  });
+
+  it('指定した固有 Lv と SP 予算が、相手と notes に効く。試行より組が多ければ、組を減らす', async () => {
+    const res = await call('win_rate', {
+      lineup: [el],
+      track: TOKYO_2400,
+      trials: 2,
+      fill_opponents: { gate_count: 5, unique_level: 2, sp_budget: 0, lineups: 1 },
+    });
+    expect(res.isError).not.toBe(true);
+    const fill = res.structuredContent!['fillOpponents'] as FillResult;
+    expect(fill).toMatchObject({ filled: 4, gateCount: 5, lineups: 1 });
+    expect(fill.example.map((e) => e.uniqueLevel)).toEqual([2, 2, 2, 2]);
+    const notes = (res.structuredContent!['notes'] as string[]).join('\n');
+    expect(notes).toContain('固有 Lv2');
+    expect(notes).toContain('SP 0 の予算');
+    // 試行より組が多いときは、組を減らして、そう書く。
+    const few = await call('win_rate', { lineup: [el], track: TOKYO_2400, trials: 2, fill_opponents: { gate_count: 4, lineups: 5 } });
+    expect((few.structuredContent!['fillOpponents'] as FillResult).lineups).toBe(2);
+    expect((few.structuredContent!['notes'] as string[]).join('\n')).toContain('指定の 5 組から 2 組に減らしました');
+  });
+
+  it('合算は、組ごとに直接 runMultiRace を回して OrderTally に足した値と、1 つも違わない', async () => {
+    const lineup = [el, tsuyoshi, withoutDebuffs(byName('スーパークリーク'))];
+    const fillInput = { gate_count: 5, sp_budget: 10000, unique_level: 4, lineups: 2 };
+    const trials = 6;
+    const seed = 7;
+    const res = await call('win_rate', { lineup, track: TOKYO_2400, trials, seed, fill_opponents: fillInput });
+    expect(res.isError).not.toBe(true);
+    const rows = res.structuredContent!['runners'] as {
+      name: string;
+      winRate: number;
+      quinellaRate: number;
+      showRate: number;
+      meanOrder: number;
+      meanTime: number;
+    }[];
+    expect(rows).toHaveLength(3);
+
+    // 道具を通さずに、同じ組を作って、組ごとの種で回す。試行番号は組ごとに 0 から数える。
+    const resolver = new SkillResolver(data.skills);
+    const runners = lineup.map((entry) => toLineupRunner(entry as never));
+    const track: TrackRef = { ...TOKYO_2400, gateCount: 5, season: 1, weather: 1, time: 1 };
+    const decision = planFill(data, fillInput, runners, TOKYO_2400);
+    expect(decision.kind).toBe('fill');
+    if (decision.kind !== 'fill') return;
+    const popularity = assignPopularity(runners);
+    const own = runners.map((r: LineupRunner, i: number) => {
+      const skills = resolver.resolveLineup({ chara: r.chara, unique: r.unique?.name, skills: r.skills }).skills;
+      return buildRaceSetting(r, skills, track, data.trackData, popularity[i]!).setting;
+    });
+    const calculator = new RaceCalculator(defaultSystemSetting(), data.trackData);
+    const tally = new OrderTally(5);
+    const groups = buildFillGroups(decision.plan, data, track, seed, trials);
+    expect(groups.map((g) => g.count)).toEqual([3, 3]);
+    for (const group of groups) {
+      const entries = [...own, ...group.opponents].map((setting) => ({ setting }));
+      for (let t = 0; t < group.count; t++) tally.add(runMultiRace(calculator, entries, { seed: group.raceSeed, trial: t }));
+    }
+    for (const [i, runner] of runners.entries()) {
+      const direct = tally.summarize(i);
+      const row = rows.find((r) => r.name === runner.name)!;
+      expect(row.winRate, runner.name).toBe(round(direct.winRate, 4));
+      expect(row.quinellaRate, runner.name).toBe(round(direct.quinellaRate, 4));
+      expect(row.showRate, runner.name).toBe(round(direct.showRate, 4));
+      expect(row.meanOrder, runner.name).toBe(round(direct.meanOrder, 2));
+      expect(row.meanTime, runner.name).toBe(round(direct.meanTime, 3));
+    }
+  });
+
+  it('省くと今までと同じ。頭数が足りているときも、補わずに同じ結果になる', async () => {
+    const lineup = [el, tsuyoshi, withoutDebuffs(byName('スーパークリーク'))];
+    const plain = await call('win_rate', { lineup, track: TOKYO_2400, trials: 8, seed: 3 });
+    expect(plain.isError).not.toBe(true);
+    // 省いたときは、補った相手に関わる項目も、notes も出ない。
+    expect(plain.structuredContent).not.toHaveProperty('fillOpponents');
+    expect((plain.structuredContent!['notes'] as string[]).join('')).not.toContain('補っ');
+    expect(plain.content[0]!.text).toContain('3 頭 / 8 試行');
+    // 3 頭の出走表に gate_count 3 を指定しても、補う頭は 0 なので、結果は同じ。理由だけが notes に足される。
+    const full = await call('win_rate', { lineup, track: TOKYO_2400, trials: 8, seed: 3, fill_opponents: { gate_count: 3 } });
+    expect(full.structuredContent!['runners']).toEqual(plain.structuredContent!['runners']);
+    expect(full.structuredContent!['fillOpponents']).toMatchObject({ filled: 0, gateCount: 3 });
+    expect((full.structuredContent!['notes'] as string[]).join('')).toContain('相手は補っていません');
+  });
+
+  it('進捗は、全組を通した試行数で通知される', async () => {
+    const seen: number[] = [];
+    const res = await call(
+      'win_rate',
+      { lineup: [el], track: TOKYO_2400, trials: 20, fill_opponents: { gate_count: 4, lineups: 2 } },
+      {
+        onprogress: (p) => {
+          seen.push(p.progress);
+        },
+      },
+    );
+    expect(res.isError).not.toBe(true);
+    expect(seen.at(-1)).toBe(20);
+    expect([...seen].sort((a, b) => a - b)).toEqual(seen);
+  });
+
+  it('出走表が 1 頭で、補わないなら、2 頭以上と伝える', async () => {
+    const res = await call('win_rate', { lineup: [el], track: TOKYO_2400, trials: 2 });
+    expect(res.isError).toBe(true);
+    expect(res.content[0]!.text).toContain('2 頭以上');
+  });
+
+  describe('順位表が無いコース', () => {
+    // スキル一覧が空の場所を指す文脈。順位表が無いので、名簿は作れない。
+    const emptyDir = mkdtempSync(join(tmpdir(), 'raceemu-mcp-nolist-'));
+    const noListStoreDir = mkdtempSync(join(tmpdir(), 'raceemu-mcp-nolist-store-'));
+    const noListContext = createContext({
+      data,
+      meta,
+      concurrency: 1,
+      store: new IndividualStore(noListStoreDir),
+      skillListDir: emptyDir,
+    });
+    const noListServer = createRaceemuServer(noListContext);
+    const noListClient = new Client({ name: 'no-list-test', version: '0' });
+    beforeAll(async () => {
+      const [clientSide, serverSide] = InMemoryTransport.createLinkedPair();
+      await Promise.all([noListServer.connect(serverSide), noListClient.connect(clientSide)]);
+    });
+    afterAll(async () => {
+      await noListClient.close();
+      await noListContext.runtime.dispose();
+      noListContext.store.close();
+      rmSync(emptyDir, { recursive: true, force: true });
+      rmSync(noListStoreDir, { recursive: true, force: true });
+    });
+    const callNoList = async (args: Record<string, unknown>) =>
+      (await noListClient.callTool({ name: 'win_rate', arguments: args })) as unknown as ToolResult;
+
+    it('補わずに、出走表の頭だけで回し、理由を notes に書く', async () => {
+      const res = await callNoList({ lineup: [el, tsuyoshi], track: TOKYO_2400, trials: 4, fill_opponents: {} });
+      expect(res.isError).not.toBe(true);
+      expect(res.structuredContent!['runners']).toHaveLength(2);
+      const fill = res.structuredContent!['fillOpponents'] as FillResult;
+      expect(fill.filled).toBe(0);
+      expect(fill.reasons!.join('')).toContain('順位表が無いコース');
+      const notes = (res.structuredContent!['notes'] as string[]).join('\n');
+      expect(notes).toContain('相手を補えませんでした');
+      expect(notes).toContain('出走表の頭だけで回します');
+      // MCP は相手を 1 頭も足さない。典型スキルの相手で回すとは言わない（CLI の扱いである）。
+      expect(notes).not.toContain('典型スキル');
+      expect(res.content[0]!.text).toContain('2 頭 / 4 試行');
+    });
+
+    it('1 頭だけなら、回せないので、理由つきで伝える', async () => {
+      const res = await callNoList({ lineup: [el], track: TOKYO_2400, trials: 4, fill_opponents: {} });
+      expect(res.isError).toBe(true);
+      expect(res.content[0]!.text).toContain('2 頭以上');
+      expect(res.content[0]!.text).toContain('順位表が無いコース');
+    });
   });
 });
 

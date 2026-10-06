@@ -2,8 +2,24 @@ import { RaceCalculator } from '../calculator.ts';
 import { framePerSecond, type Condition, type Style } from '../data/constants.ts';
 import type { RaceTrack } from '../data/track.ts';
 import { runMultiRace, type MultiEntry } from '../multi/race.ts';
-import type { RaceSetting, SystemSetting, TrackRef, UmaStatus } from '../setting.ts';
+import {
+  DerivedSetting,
+  emptyPassiveBonus,
+  type RaceSetting,
+  type SystemSetting,
+  type TrackRef,
+  type UmaStatus,
+} from '../setting.ts';
+import { canTriggerStatic } from '../skill/static-screen.ts';
 import type { SkillData } from '../skill/types.ts';
+import {
+  DEFAULT_ROSTER_PROFILE,
+  drawRosterOpponents,
+  type OpponentRoster,
+  type RosterProfile,
+  type RosterSkillFilter,
+  type RosterStyle,
+} from './opponent-roster.ts';
 import type { OpponentSkillPool } from './opponent-skills.ts';
 import type { RaceState } from '../state.ts';
 
@@ -72,6 +88,18 @@ export interface FieldProfile {
   readonly mixSkillIds?: readonly string[];
   /** 上を配る相手の割合。0 から 1 で、0 なら混ぜない。 */
   readonly mixRate?: number;
+  /**
+   * 相手の作り方。省くと 'typical' で、典型スキルを持たせる（今までと同じ）。
+   *
+   * 'roster' にすると、脚質の枠ごとに実在のカードを引き、固有・進化・継承固有と
+   * 白金緑を持たせる。名簿（`options.roster`）が渡らないときは典型スキルに落ちる。
+   * 既定の想定にはこのキーを足さない。`skill-list` の版が既定の想定の中身から
+   * 指紋を作るので、足すと事前計算が全部作り直しになる。
+   * `opponent-roster.ts` を参照。
+   */
+  readonly opponentModel?: 'typical' | 'roster';
+  /** 名簿の相手の組み方。省くと `DEFAULT_ROSTER_PROFILE`。 */
+  readonly roster?: RosterProfile;
 }
 
 /** チャンピオンズミーティング（9 頭）とリーグオブヒーローズ（12 頭）の既定 */
@@ -273,13 +301,61 @@ export interface OpponentOptions {
   readonly skillPool?: OpponentSkillPool | null;
   /** 全頭に同じスキルを持たせる。`withSkills` が働くときはそちらが優先される。 */
   readonly skills?: readonly SkillData[];
-  /** ID から実体を引く表。`mixSkillIds` にこれが要る。 */
+  /** ID から実体を引く表。`mixSkillIds` と、名簿の相手にこれが要る。 */
   readonly skillsById?: ReadonlyMap<string, SkillData> | null;
+  /** 実在のカードの名簿。`opponentModel` が 'roster' のときに引く。 */
+  readonly roster?: OpponentRoster | null;
+  /**
+   * コースのデータ。名簿の相手に渡すと、季節・天候・バ場のような出走前に決まる条件で
+   * 発動しようがないスキルを買わせない。省くと絞らない。
+   */
+  readonly trackData?: Record<number, RaceTrack> | null;
   /**
    * 束の何本目か。渡すと構成・強さ・やる気・スキルを引き直す。
    * 省くと引き直さず、`profile` の通りに並べる。
    */
   readonly sample?: number | null;
+}
+
+/**
+ * 名簿の相手のスキルを、出走前に決まる条件で絞る判定を作る。
+ *
+ * 脚質ごとに基準のステータスで設定を導出し、結果はスキルごとに覚える。
+ * ステータスの揺れは見ない（絞るのは季節・天候・バ場・コース・脚質のような、揺れに依らない条件である）。
+ */
+function rosterSkillFilter(
+  base: FieldProfile['uma'],
+  track: TrackRef,
+  trackData: Record<number, RaceTrack>,
+): RosterSkillFilter {
+  const derived = new Map<RosterStyle, DerivedSetting>();
+  const memo = new Map<string, boolean>();
+  return (skill, style) => {
+    const key = `${style}:${skill.id}`;
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    let setting = derived.get(style);
+    if (setting === undefined) {
+      setting = new DerivedSetting(
+        {
+          uma: { ...base, charaName: '', style },
+          track,
+          skills: [],
+          skillActivateAdjustment: 'NONE',
+          randomPosition: 'RANDOM',
+          debuffCounts: {},
+          positionKeepMode: 'APPROXIMATE',
+          positionKeepRate: 100,
+        },
+        emptyPassiveBonus(),
+        trackData,
+      );
+      derived.set(style, setting);
+    }
+    const ok = canTriggerStatic(skill, setting);
+    memo.set(key, ok);
+    return ok;
+  };
 }
 
 /** 相手の想定から、相手 N-1 頭ぶんの設定を作る。全頭同時に走らせる側でも使う。 */
@@ -296,18 +372,48 @@ export function opponentSettings(
       : profile.counts;
   const pool = options.skillPool ?? null;
   const settings: RaceSetting[] = [];
+
+  // 名簿から引く指定のときは、枠ごとの実在カードとスキルを先に決める。
+  // 枠の並びは下の巡回と同じで、同じ束の本で同じウマ娘（衣装違いを含む）が 2 度出ないよう全枠をまとめて引く。
+  // 引けなかった枠（カードが尽きた）は null で、下で典型スキルの経路に落ちる。
+  const roster = options.roster ?? null;
+  const skillsById = options.skillsById ?? null;
+  let drawn: ReturnType<typeof drawRosterOpponents> | null = null;
+  if (profile.opponentModel === 'roster' && roster !== null && skillsById !== null) {
+    const slots: Style[] = [];
+    for (const style of STYLE_ORDER) {
+      for (let i = 0; i < (counts[style] ?? 0); i++) slots.push(style);
+    }
+    drawn = drawRosterOpponents(
+      roster,
+      profile.roster ?? DEFAULT_ROSTER_PROFILE,
+      slots,
+      sample ?? 0,
+      skillsById,
+      options.trackData == null ? undefined : rosterSkillFilter(base, track, options.trackData),
+    );
+  }
+  const rosterUniqueLevel = (profile.roster ?? DEFAULT_ROSTER_PROFILE).uniqueLevel;
+
   let index = 0;
   for (const style of STYLE_ORDER) {
     for (let i = 0; i < (counts[style] ?? 0); i++, index++) {
       // 鍵は束の本と相手の添字から作る。同じ本なら何度作っても同じ相手になる。
       const key = sample === null ? -1 : sample * 32 + index;
+      const draw = drawn?.[index] ?? null;
       const skills =
-        profile.withSkills === true && pool !== null && key >= 0
-          ? drawSkills(pool[style] ?? [], key)
-          : [...(options.skills ?? [])];
+        draw !== null
+          ? [...draw.skills]
+          : profile.withSkills === true && pool !== null && key >= 0
+            ? drawSkills(pool[style] ?? [], key)
+            : [...(options.skills ?? [])];
       mixInto(skills, profile, options.skillsById ?? null, key);
+      const uma = drawUma(base, profile, key);
       settings.push({
-        uma: { ...drawUma(base, profile, key), charaName: '', style },
+        uma:
+          draw !== null
+            ? { ...uma, charaName: draw.card.charaName, style, uniqueLevel: rosterUniqueLevel }
+            : { ...uma, charaName: '', style },
         track,
         skills,
         skillActivateAdjustment: 'NONE',
@@ -348,8 +454,10 @@ export function buildFieldBundle(
     readonly self?: UmaStatus | null;
     /** 相手に持たせるスキルの候補 */
     readonly skillPool?: OpponentSkillPool | null;
-    /** ID から実体を引く表。`profile.mixSkillIds` にこれが要る。 */
+    /** ID から実体を引く表。`profile.mixSkillIds` と、名簿の相手にこれが要る。 */
     readonly skillsById?: ReadonlyMap<string, SkillData> | null;
+    /** 実在のカードの名簿。`profile.opponentModel` が 'roster' のときに引く。 */
+    readonly roster?: OpponentRoster | null;
   },
 ): FieldBundle {
   const calculator = new RaceCalculator(system, trackData);
@@ -362,6 +470,8 @@ export function buildFieldBundle(
       skillPool: options.skillPool,
       skills: options.skills,
       skillsById: options.skillsById,
+      roster: options.roster,
+      trackData,
       sample: s,
     });
     opponents = settings.length;
