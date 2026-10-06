@@ -87,6 +87,11 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
           prepared.runners.map((p) => p.runner),
           args.track,
           context.skillListDir,
+          prepared.runners.map((p) =>
+            p.skills.skills
+              .filter((skill) => skill.rarity === 'normal' || skill.rarity === 'rare')
+              .reduce((sum, skill) => sum + skill.sp, 0),
+          ),
         );
   const plan = fillDecision?.kind === 'fill' ? fillDecision.plan : null;
   const fillSkipped = fillDecision?.kind === 'none' ? fillDecision.notes : [];

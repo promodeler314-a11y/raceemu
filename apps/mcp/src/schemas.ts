@@ -102,9 +102,11 @@ export const fillOpponentsSchema = z.object({
   sp_budget: z
     .number()
     .min(0)
-    .default(DEFAULT_ROSTER_PROFILE.spBudget)
+    .optional()
     .describe(
-      `補う相手が白・金・緑のスキルに使う SP の予算（表示されている SP の合計）。大きいほど相手が強い。既定は ${DEFAULT_ROSTER_PROFILE.spBudget}`,
+      '補う相手が白・金・緑のスキルに使う SP の予算（表示されている SP の合計）。大きいほど相手が強い。' +
+        '省くと、出走表の頭が持つ白・金・緑の表示 SP の平均に揃える（相手を自分と同格にする）。' +
+        `出走表の頭がスキルを持たないときは ${DEFAULT_ROSTER_PROFILE.spBudget}`,
     ),
   unique_level: z
     .number()

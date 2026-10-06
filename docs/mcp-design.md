@@ -198,13 +198,13 @@ MCP の `progressToken` が渡されていれば、`WorkerPool` の `onProgress(
 出走表が頭数に足りないときに、残りの相手を名簿から自動で補う口を持つ。**渡さなければ今までと同じで、補わない。**
 
 ```json
-{ "lineup": [ ... ], "track": { ... }, "fill_opponents": { "gate_count": 9, "sp_budget": 10000, "unique_level": 4, "lineups": 8 } }
+{ "lineup": [ ... ], "track": { ... }, "fill_opponents": { "gate_count": 9, "unique_level": 4, "lineups": 8 } }
 ```
 
 - `gate_count`：出走頭数の合計。既定は 9（チャンピオンズミーティング）。出走表がこれ以上なら補わない（理由を `notes` に書く）。
-- `sp_budget`：相手が白・金・緑に使う SP の予算（表示の合計）。既定は `DEFAULT_ROSTER_PROFILE` の値で、仮である。**相手の強さはここで合わせる**（[order-field.md](order-field.md) の 4.7 節）。
+- `sp_budget`：相手が白・金・緑に使う SP の予算（表示の合計）。**省くと、出走表の頭が持つ白・金・緑の表示 SP の平均に揃える**（相手を自分と同格にする）。出走表の頭がスキルを持たないときだけ `DEFAULT_ROSTER_PROFILE` の値（仮）になる。相手の強さは予算に敏感で、9000 と 10000 の間で自分の勝率が 40 ポイント近く動く（[order-field.md](order-field.md) の 4.7 節）。どの決め方をしたかは `notes` に書く。
 - `unique_level`：相手の固有スキルのレベル。既定は 4。
-- `lineups`：相手を何組引くか。既定は 8。全項目に既定があるので `{}` でもよい。
+- `lineups`：相手を何組引くか。既定は 8。どの項目も省けるので `{}` でもよい。
 - `lineup` は、これを渡すときに限って 1 頭から受ける（渡さないときは 2 頭以上）。
 
 相手の作り方は、中核の `opponentSettings` の名簿の経路（`opponentModel: 'roster'`）をそのまま使う。

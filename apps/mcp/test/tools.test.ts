@@ -355,6 +355,7 @@ describe('win_rate: fill_opponents（出走表の頭数が足りないとき、�
     trialsPerLineup: number[];
     keys: { lineup: number; sample: number; raceSeed: number }[];
     opponentsWinRate: number;
+    profile: { spBudget: number };
     example: { slot: number; charaName: string | null; styleLabel: string; skillCount: number; uniqueLevel: number }[];
     reasons?: string[];
   }
@@ -386,7 +387,15 @@ describe('win_rate: fill_opponents（出走表の頭数が足りないとき、�
     expect(notes).toContain('相手を 8 頭補って、9 頭で回しました');
     expect(notes).toContain('2 組を引き');
     expect(notes).toContain('固有 Lv4');
-    expect(notes).toContain('SP 10000');
+    // sp_budget を省いたので、予算は出走表の頭（エル 1 頭）の白・金・緑の表示 SP に揃う。
+    const resolver = new SkillResolver(data.skills);
+    const runner = toLineupRunner(el as never);
+    const own = resolver.resolveLineup({ chara: runner.chara, unique: runner.unique?.name, skills: runner.skills }).skills;
+    const ownSp = own.filter((s) => s.rarity === 'normal' || s.rarity === 'rare').reduce((sum, s) => sum + s.sp, 0);
+    expect(ownSp).toBeGreaterThan(0);
+    expect(fill.profile.spBudget).toBe(ownSp);
+    expect(notes).toContain(`SP ${ownSp} の予算`);
+    expect(notes).toContain('平均に揃えました');
     expect(notes).toContain('推定');
     expect(notes).toContain('相手の組の選び方による揺れは含みません');
     expect(notes).toContain('ゲームと突き合わせていません'); // 今までの注意も残っている
@@ -412,6 +421,7 @@ describe('win_rate: fill_opponents（出走表の頭数が足りないとき、�
     const notes = (res.structuredContent!['notes'] as string[]).join('\n');
     expect(notes).toContain('固有 Lv2');
     expect(notes).toContain('SP 0 の予算');
+    expect(notes).toContain('指定の値です');
     // 試行より組が多いときは、組を減らして、そう書く。
     const few = await call('win_rate', { lineup: [el], track: TOKYO_2400, trials: 2, fill_opponents: { gate_count: 4, lineups: 5 } });
     expect((few.structuredContent!['fillOpponents'] as FillResult).lineups).toBe(2);

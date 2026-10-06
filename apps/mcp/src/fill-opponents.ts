@@ -35,6 +35,8 @@ export interface FillPlan {
   readonly center: UmaStatus;
   /** 名簿と順位表の用意で出た説明（置いてある表が古い、など）。応答の notes に載せる。 */
   readonly preparedNotes: readonly string[];
+  /** SP 予算の決め方。指定、出走表の平均、既定値のどれか。 */
+  readonly budgetSource: 'input' | 'lineup' | 'default';
 }
 
 export type FillDecision =
@@ -55,6 +57,9 @@ function meanOf(values: readonly number[]): number {
  *   名簿は「そのコースで効くスキル」を順位表から買うので、順位表が無いと作れない。
  *
  * 相手の強さは、出走表の全頭の平均ステータスに揃える（1 頭だけなら、その頭に）。
+ * SP 予算も、指定が無ければ出走表の頭が持つ白・金・緑の表示 SP の平均に揃える（`lineupSp`）。
+ * 相手の強さは予算に敏感で（京都 芝2200m 外で 9000 と 10000 の間で、自分の勝率が 40 ポイント近く動く。
+ * docs/order-field.md 4.7 節）、固定の既定値では、持ち物の多い出走表にも少ない出走表にも合わない。
  * 相手の作り方の既定（`defaultFieldProfile`）が「自分と同格」で、出走表が複数頭のときは
  * 自分にあたる 1 頭が決まらないため。適性は全部 A、やる気は束の 1 本ごとに引き直す。
  */
@@ -64,6 +69,8 @@ export function planFill(
   runners: readonly LineupRunner[],
   course: { readonly location: number; readonly course: number },
   dir: string = SKILL_LIST_DIR,
+  /** 出走表の頭ごとの、白・金・緑の表示 SP の合計。`sp_budget` を省いたときに平均を予算にする。 */
+  lineupSp: readonly number[] = [],
 ): FillDecision {
   const filled = input.gate_count - runners.length;
   if (filled <= 0) {
@@ -75,9 +82,13 @@ export function planFill(
     };
   }
 
+  const lineupBudget = lineupSp.length === 0 ? 0 : meanOf(lineupSp);
+  const budgetSource: FillPlan['budgetSource'] =
+    input.sp_budget !== undefined ? 'input' : lineupBudget > 0 ? 'lineup' : 'default';
   const profile: RosterProfile = {
     ...DEFAULT_ROSTER_PROFILE,
-    spBudget: input.sp_budget,
+    spBudget:
+      budgetSource === 'input' ? input.sp_budget! : budgetSource === 'lineup' ? lineupBudget : DEFAULT_ROSTER_PROFILE.spBudget,
     uniqueLevel: input.unique_level,
   };
   const prepared = prepareRoster(data, { model: 'roster', profile, rosterFile: null }, course, dir);
@@ -124,6 +135,7 @@ export function planFill(
       fieldProfile,
       center,
       preparedNotes: prepared.notes,
+      budgetSource,
     },
   };
 }
@@ -251,7 +263,7 @@ export interface FillNotesInput {
  * 結果だけが 1 人歩きして、相手が推定であることが落ちるのを防ぐ。
  */
 export function fillNotes(plan: FillPlan, input: FillNotesInput): string[] {
-  const { profile, center, fieldProfile } = plan;
+  const { profile, center, fieldProfile, budgetSource } = plan;
   const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
   const counts = input.groups.map((g) => g.count);
   const perGroup = Math.min(...counts) === Math.max(...counts) ? `${counts[0]}` : `${Math.min(...counts)}〜${Math.max(...counts)}`;
@@ -273,6 +285,11 @@ export function fillNotes(plan: FillPlan, input: FillNotesInput): string[] {
       '名簿と得意脚質はデータからの推定で、ゲームの出走者の実測ではありません。',
     `相手の能力は、出走表の平均（スピード ${center.speed}、スタミナ ${center.stamina}、パワー ${center.power}、根性 ${center.guts}、賢さ ${center.wisdom}）を中心に、` +
       `1 頭ごとに標準偏差 ${fieldProfile.sigma ?? 0} 程度ばらつかせ、やる気は引き直しています。適性はすべて A、人気は 5 番人気です。`,
+    budgetSource === 'input'
+      ? `SP の予算 ${profile.spBudget} は指定の値です。相手の強さは予算に敏感なので、出走表の頭の持ち物と見比べてください。`
+      : budgetSource === 'lineup'
+        ? `SP の予算 ${profile.spBudget} は、出走表の頭が持つ白・金・緑の表示 SP の平均に揃えました（相手を自分と同格にする）。`
+        : `出走表の頭が白・金・緑を持たないので、SP の予算は既定の ${profile.spBudget} にしました。出走表より相手がかなり強くなります。`,
     `補った相手が 1 着になった割合は合計 ${pct(input.opponentsWinRate)}（1 頭あたり ${pct(input.opponentsWinRate / plan.filled)}）です。` +
       `出走表の頭の勝率の合計は 100% になりません。`,
     '勝率の ± は試行の揺れだけで、相手の組の選び方による揺れは含みません。seed か lineups を変えて、結果が動かないか確かめてください。',
