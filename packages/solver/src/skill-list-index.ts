@@ -21,6 +21,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { join } from 'node:path';
 import {
   SKILL_LIST_FORMAT,
+  isSkillListCourseFile,
   isSkillListIndex,
   skillListCourseKey,
   type SkillListCourseFile,
@@ -129,6 +130,32 @@ export function readSkillListIndex(dir: string): SkillListIndex | null {
     return isSkillListIndex(parsed) ? parsed : null;
   } catch {
     // 壊れていたら作り直す。読めない 1 枚を残すより、新しい版だけを指すほうが良い。
+    return null;
+  }
+}
+
+/**
+ * 置いてあるコース 1 枚を読む。`index.json` の版（いま配っている版）の中から探す。
+ *
+ * 一覧に無いコース（まだ測っていない）、一覧が無い・壊れている、ファイルが読めない・形が古い
+ * ときは null。呼ぶ側が「測ってない」として扱う（相手の名簿なら典型スキルに落とす）。
+ * 版のディレクトリを自分で当てにいかない。版は一覧だけが知っている（`SkillListIndex` の注記）。
+ */
+export function readSkillListCourse(
+  dir: string,
+  location: number,
+  course: number,
+): SkillListCourseFile | null {
+  const index = readSkillListIndex(dir);
+  if (index === null) return null;
+  const entry = index.courses.find(
+    (item) => item.course.location === location && item.course.course === course,
+  );
+  if (entry === undefined) return null;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(join(dir, entry.file), 'utf8'));
+    return isSkillListCourseFile(parsed) ? parsed : null;
+  } catch {
     return null;
   }
 }

@@ -36,6 +36,8 @@ pnpm sensitivity --trials 600     # 近似確率を半分と倍に振ったと�
 pnpm plan --chara スペシャルウィーク --budget 600
 pnpm run multi --trials 500    # 全頭同時（multi は pnpm の下位コマンドと衝突するので run を挟む）
 pnpm order-field --trials 200  # 順位条件の判定が相手の作り方でどう変わるか
+pnpm order-field --exp redraw --opponents roster --location 10008 --course 10808   # 相手を実在の育成ウマ娘から組む（opt-in。--sp-budget、--unique-level、--roster-file）
+pnpm run multi --trials 30 --opponents roster --location 10008 --course 10808       # 同じ口。試行ごとに相手を組み直す
 pnpm cross --surface 1 --category MIDDLE --count 500   # コース横断（--distance 2000 でぴったりの距離、--field で順位条件あり）
 pnpm skill-list --courses 10006-10606   # 全スキルの単体評価をコースごとに事前計算して apps/web/public/skill-list に置く
 pnpm skill-list --list         # 137 コースのうち何が測ってあるか。--shard 0/24 で分けて回す（全部で 20 時間超）

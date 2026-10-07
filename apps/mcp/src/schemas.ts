@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { DEFAULT_ROSTER_PROFILE } from '../../../packages/sim/src/field/opponent-roster.ts';
 import type { LineupRunner } from '../../../packages/sim/src/multi/lineup.ts';
 
 /**
@@ -85,6 +86,44 @@ export const trackSchema = z.object({
   time: z.number().int().min(1).max(4).default(1).describe('時刻。4 でナイター。通常は 1'),
 });
 export type TrackInput = z.infer<typeof trackSchema>;
+
+/**
+ * 出走表の頭数が足りないときに、相手を補う指定（`win_rate` の `fill_opponents`）。
+ * 渡さなければ補わない。`{}` でも補う（全項目に既定がある）。docs/mcp-design.md 3.3 節。
+ */
+export const fillOpponentsSchema = z.object({
+  gate_count: z
+    .number()
+    .int()
+    .min(2)
+    .max(18)
+    .default(9)
+    .describe('出走頭数の合計。出走表がこれに足りない分だけ相手を補う。既定は 9（チャンピオンズミーティング）'),
+  sp_budget: z
+    .number()
+    .min(0)
+    .optional()
+    .describe(
+      '補う相手が白・金・緑のスキルに使う SP の予算（表示されている SP の合計）。大きいほど相手が強い。' +
+        '省くと、出走表の頭が持つ白・金・緑の表示 SP の平均に揃える（相手を自分と同格にする）。' +
+        `出走表の頭がスキルを持たないときは ${DEFAULT_ROSTER_PROFILE.spBudget}`,
+    ),
+  unique_level: z
+    .number()
+    .int()
+    .min(1)
+    .max(6)
+    .default(DEFAULT_ROSTER_PROFILE.uniqueLevel)
+    .describe(`補う相手の固有スキルのレベル。既定は ${DEFAULT_ROSTER_PROFILE.uniqueLevel}`),
+  lineups: z
+    .number()
+    .int()
+    .min(1)
+    .max(32)
+    .default(8)
+    .describe('補う相手を何組引くか。試行をこの数で等分して回し、合算する。多いほど、相手の引き方による偏りが小さい。既定は 8'),
+});
+export type FillOpponentsInput = z.infer<typeof fillOpponentsSchema>;
 
 /** zod で検査した出走表 1 頭を、シミュレータ側の型に直す。形は同じなので、型を合わせるだけ。 */
 export function toLineupRunner(runner: z.infer<typeof runnerSchema>): LineupRunner {

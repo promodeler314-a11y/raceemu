@@ -1,5 +1,6 @@
 import type { RaceTrack } from '../data/track.ts';
 import type { FieldProfile } from '../field/field.ts';
+import type { OpponentRoster } from '../field/opponent-roster.ts';
 import type { RaceSetting, SystemSetting, TrackRef } from '../setting.ts';
 import type { SkillData } from '../skill/types.ts';
 import { ADJUSTMENT_COUNT_BUCKETS, type RaceSimulationResult } from '../state.ts';
@@ -107,6 +108,14 @@ export interface FieldSpec {
   readonly track: TrackRef;
   readonly seed: number;
   readonly samples: number;
+  /**
+   * 実在のカードの名簿。`profile.opponentModel` が 'roster' のときだけ引く。
+   * 素のデータなので、そのまま構造化クローンで送れる。束の鍵（`runner.ts` の
+   * `resolveField`）は指定の JSON なので、名簿の中身が変われば別の束になる。
+   * 名簿は 100 KB を超えうるので、塊のたびに JSON にする費用が気になるなら、
+   * 鍵だけを別に持たせる。
+   */
+  readonly roster?: OpponentRoster;
 }
 
 export interface ChunkResponse {

@@ -38,9 +38,10 @@ const SMALL_LINEUP = ['エルコンドルパサー', 'スーパークリーク']
 }));
 
 /**
- * 起動して initialize、tools/list、data_info、win_rate の呼び出しを送り、4 つの応答が揃ったら止める。
+ * 起動して initialize、tools/list、data_info、win_rate の呼び出し 2 つを送り、5 つの応答が揃ったら止める。
  *
  * win_rate は Worker を立てて回す。Worker の出力が標準出力に流れる経路は、data_info だけでは通らない。
+ * 2 つ目の win_rate は fill_opponents つきで、名簿と順位表を読んで相手を補う経路（solver の読み込み）を通す。
  */
 function handshake(command: string, args: readonly string[], cwd: string, shell: boolean): Promise<Handshake> {
   return new Promise((resolve, reject) => {
@@ -81,6 +82,20 @@ function handshake(command: string, args: readonly string[], cwd: string, shell:
             arguments: { lineup: SMALL_LINEUP, track: { location: 10006, course: 10606 }, trials: 12 },
           },
         });
+        send({
+          jsonrpc: '2.0',
+          id: 5,
+          method: 'tools/call',
+          params: {
+            name: 'win_rate',
+            arguments: {
+              lineup: SMALL_LINEUP.slice(0, 1),
+              track: { location: 10006, course: 10606 },
+              trials: 4,
+              fill_opponents: { gate_count: 4, lineups: 2 },
+            },
+          },
+        });
       }
       const ids = lines.flatMap((line) => {
         try {
@@ -89,7 +104,7 @@ function handshake(command: string, args: readonly string[], cwd: string, shell:
           return [];
         }
       });
-      if (ids.includes(1) && ids.includes(2) && ids.includes(3) && ids.includes(4)) finish();
+      if ([1, 2, 3, 4, 5].every((id) => ids.includes(id))) finish();
     });
     send({
       jsonrpc: '2.0',
@@ -121,6 +136,13 @@ function expectCleanProtocol(result: Handshake): void {
   expect(win.result.isError).not.toBe(true);
   expect(win.result.structuredContent.trials).toBe(12);
   expect(win.result.structuredContent.runners).toHaveLength(2);
+  // 相手を補う経路（名簿と順位表の読み込み、組ごとの計算）も、標準出力に何も混ぜずに返る。
+  const fill = byId.get(5) as {
+    result: { isError?: boolean; structuredContent: { trials: number; fillOpponents: { filled: number; lineups: number } } };
+  };
+  expect(fill.result.isError).not.toBe(true);
+  expect(fill.result.structuredContent.trials).toBe(4);
+  expect(fill.result.structuredContent.fillOpponents).toMatchObject({ filled: 3, lineups: 2 });
   // ログは標準エラー出力へ出ている。
   expect(result.stderr).toContain('[raceemu-mcp]');
 }
