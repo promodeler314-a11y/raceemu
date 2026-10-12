@@ -24061,5 +24061,193 @@
         "frequency": 100
       }
     ]
+  },
+  {
+    "id": 30318,
+    "name": "[めぐるぐるぐるトレセン日和]ライスシャワー",
+    "chara": "ライスシャワー",
+    "rarity": 3,
+    "type": "根性",
+    "skills": [
+      "京都レース場○",
+      "スタミナキープ",
+      "抜け出し準備",
+      "直滑降",
+      "先行のコツ○",
+      "登山家",
+      "ウマ好み",
+      "実直な走り"
+    ],
+    "hints": [
+      {
+        "talent": 0,
+        "level": 1,
+        "frequency": 20
+      },
+      {
+        "talent": 1,
+        "level": 1,
+        "frequency": 30
+      },
+      {
+        "talent": 2,
+        "level": 1,
+        "frequency": 40
+      },
+      {
+        "talent": 3,
+        "level": 2,
+        "frequency": 50
+      },
+      {
+        "talent": 4,
+        "level": 2,
+        "frequency": 50
+      }
+    ]
+  },
+  {
+    "id": 30319,
+    "name": "[晩餐]ナリタブライアン",
+    "chara": "ナリタブライアン",
+    "rarity": 3,
+    "type": "賢さ",
+    "skills": [
+      "先行直線○",
+      "先行コーナー○",
+      "先行のコツ○",
+      "攻めの姿勢",
+      "食らいつき",
+      "本領発揮",
+      "飛躍の予感",
+      "決定打",
+      "目覚めの時",
+      "余勢を駆って",
+      "淀みなし",
+      "前進あるのみ",
+      "もう一踏ん張り",
+      "大立ち回り",
+      "流れに任せて"
+    ],
+    "hints": [
+      {
+        "talent": 0,
+        "level": 1,
+        "frequency": 60
+      },
+      {
+        "talent": 1,
+        "level": 1,
+        "frequency": 70
+      },
+      {
+        "talent": 2,
+        "level": 1,
+        "frequency": 80
+      },
+      {
+        "talent": 3,
+        "level": 1,
+        "frequency": 90
+      },
+      {
+        "talent": 4,
+        "level": 2,
+        "frequency": 100
+      }
+    ]
+  },
+  {
+    "id": 30320,
+    "name": "[冷凜なるビスクドール]アドマイヤグルーヴ",
+    "chara": "アドマイヤグルーヴ",
+    "rarity": 3,
+    "type": "賢さ",
+    "skills": [
+      "秋ウマ娘○",
+      "垂れウマ回避",
+      "中距離直線○",
+      "中距離コーナー○",
+      "尻尾上がり",
+      "しとやかな足取り",
+      "自信家",
+      "想い焦がれて",
+      "心惹かれて",
+      "灯を胸に",
+      "勝負を懸けて",
+      "もう一踏ん張り",
+      "怯むことなく"
+    ],
+    "hints": [
+      {
+        "talent": 0,
+        "level": 2,
+        "frequency": 60
+      },
+      {
+        "talent": 1,
+        "level": 2,
+        "frequency": 70
+      },
+      {
+        "talent": 2,
+        "level": 3,
+        "frequency": 80
+      },
+      {
+        "talent": 3,
+        "level": 3,
+        "frequency": 90
+      },
+      {
+        "talent": 4,
+        "level": 4,
+        "frequency": 100
+      }
+    ]
+  },
+  {
+    "id": 30321,
+    "name": "[“最強”なる眷属]ドゥラメンテ",
+    "chara": "ドゥラメンテ",
+    "rarity": 3,
+    "type": "パワー",
+    "skills": [
+      "末脚",
+      "冷静",
+      "打開策",
+      "たぎる血潮",
+      "惜しみなし",
+      "むきだしの情熱",
+      "影を追って",
+      "巨歩"
+    ],
+    "hints": [
+      {
+        "talent": 0,
+        "level": 1,
+        "frequency": 20
+      },
+      {
+        "talent": 1,
+        "level": 1,
+        "frequency": 30
+      },
+      {
+        "talent": 2,
+        "level": 1,
+        "frequency": 40
+      },
+      {
+        "talent": 3,
+        "level": 2,
+        "frequency": 50
+      },
+      {
+        "talent": 4,
+        "level": 2,
+        "frequency": 50
+      }
+    ]
   }
 ]
