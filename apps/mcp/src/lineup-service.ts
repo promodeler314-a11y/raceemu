@@ -8,6 +8,7 @@ import {
   type LineupRunner,
   type StyleChoice,
 } from '../../../packages/sim/src/multi/lineup.ts';
+import type { CostModel } from '../../../packages/solver/src/cost.ts';
 import { isIndividualRef, toLineupRunner, type LineupEntry } from './schemas.ts';
 
 /**
@@ -145,8 +146,11 @@ export function prepareRunner(
   return { index, runner, individualId, skills, style: chooseStyle(runner), issues };
 }
 
-/** 1 つの解決結果を、応答に載せる形にする。画像と見比べられるよう、入力した名前を残す。 */
-export function describeResolution(entry: SkillResolution): Record<string, unknown> {
+/**
+ * 1 つの解決結果を、応答に載せる形にする。画像と見比べられるよう、入力した名前を残す。
+ * `sp` は費用の読み方を通す。継承進化は `SkillData.sp` が 0 で、継承版の値段で数える。
+ */
+export function describeResolution(entry: SkillResolution, costModel: CostModel): Record<string, unknown> {
   if (entry.status === 'resolved') {
     return {
       input: entry.input,
@@ -155,7 +159,7 @@ export function describeResolution(entry: SkillResolution): Record<string, unkno
       id: entry.skill.id,
       rarity: entry.skill.rarity,
       asUnique: entry.asUnique,
-      sp: entry.skill.sp,
+      sp: costModel.cost(entry.skill.id),
     };
   }
   return {

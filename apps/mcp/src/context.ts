@@ -1,6 +1,7 @@
 import type { GameData } from '../../../packages/data/src/index.ts';
 import type { DataMeta } from '../../../packages/data/src/node.ts';
 import { SkillResolver } from '../../../packages/data/src/skill-resolve.ts';
+import { createCostModel, type CostModel } from '../../../packages/solver/src/cost.ts';
 import { defaultDataDir, IndividualStore } from './individuals.ts';
 import type { IndividualLookup } from './lineup-service.ts';
 import { Runtime } from './runtime.ts';
@@ -15,6 +16,11 @@ export interface McpContext {
   readonly data: GameData;
   readonly meta: DataMeta | null;
   readonly resolver: SkillResolver;
+  /**
+   * スキルの費用の読み方。応答の `sp` と費用の合計は、`SkillData.sp` を直に読まずこれを通す。
+   * 継承進化（rarity 'special'）は `sp` が 0 で、継承版の値段で数えるため（ヒントは見込まない）。
+   */
+  readonly costModel: CostModel;
   readonly runtime: Runtime;
   /** 保存した個体。出走表の `individual` で指すときに引く。 */
   readonly individuals: IndividualLookup;
@@ -40,6 +46,7 @@ export function createContext(options: ContextOptions): McpContext {
     data: options.data,
     meta: options.meta,
     resolver: new SkillResolver(options.data.skills),
+    costModel: createCostModel(options.data.skillsById),
     runtime: new Runtime(options.concurrency),
     individuals: store,
     store,

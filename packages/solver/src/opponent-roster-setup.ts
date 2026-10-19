@@ -1,6 +1,7 @@
 /**
  * 相手の名簿（`packages/sim/src/field/opponent-roster.ts`）を CLI で使うための用意。
- * `pnpm order-field` と `pnpm run multi` が同じ 4 つの口を持つので、ここに 1 か所だけ置く。
+ * `pnpm order-field`、`pnpm run multi`、`pnpm plan`、`pnpm optimize` が同じ 4 つの口を持つので、
+ * ここに 1 か所だけ置く。
  *
  *   --opponents typical|roster   相手の作り方。既定は typical（今までと同じ）
  *   --sp-budget N                名簿の相手が白・金・緑に使う SP の予算（表示の合計）
@@ -14,8 +15,9 @@
  * 黙って落とさず、理由を `notes` に入れる。
  *
  * **このファイルは Node でしか動かない**（`node:fs` を読む）。画面から import してはならない。
- * sim の CLI（`order-cli.ts`、`multi/cli.ts`）がここを import する。sim の計算側は
- * solver を import しない（CLI の入口だけが、データと同じように上の層へ手を伸ばす）。
+ * sim の CLI（`order-cli.ts`、`multi/cli.ts`）と solver の CLI（`plan-cli.ts`、`optimize-cli.ts`）が
+ * ここを import する。sim の計算側は solver を import しない（CLI の入口だけが、データと同じように
+ * 上の層へ手を伸ばす）。
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -29,6 +31,8 @@ import {
   type OpponentRoster,
   type RosterProfile,
 } from '../../sim/src/field/opponent-roster.ts';
+import type { FieldSpec } from '../../sim/src/parallel/protocol.ts';
+import type { TrackRef } from '../../sim/src/setting.ts';
 import { opponentRankingFromSkillList, opponentRankingTier } from './opponent-ranking.ts';
 import { readSkillListCourse } from './skill-list-index.ts';
 import { readSkillListDataset, skillListVersion } from './skill-list-version.ts';
@@ -60,6 +64,17 @@ export interface RosterCliSettings {
   readonly profile: RosterProfile;
   /** `--roster-file` のパス。無ければ null。 */
   readonly rosterFile: string | null;
+  /**
+   * `--sp-budget` が無く、呼ぶ側が渡した既定（`RosterArgvDefaults.spBudget`）を使ったときだけ真。
+   * 表示のために持つ。これを知らない呼び出し（MCP など）は、キーを足さなくてよい。
+   */
+  readonly spBudgetFromRun?: boolean;
+}
+
+/** `--sp-budget` を省いたときの値を、呼ぶ側が決められるようにする。 */
+export interface RosterArgvDefaults {
+  /** 相手の SP 予算。省くと `DEFAULT_ROSTER_PROFILE.spBudget`。 */
+  readonly spBudget?: number;
 }
 
 function valueOf(argv: readonly string[], name: string): string | null {
@@ -75,13 +90,22 @@ function numberOf(argv: readonly string[], name: string, fallback: number): numb
   return value;
 }
 
-/** コマンドラインから名簿の指定を読む。値がおかしければ Error を投げる。 */
-export function rosterSettingsFromArgv(argv: readonly string[]): RosterCliSettings {
+/**
+ * コマンドラインから名簿の指定を読む。値がおかしければ Error を投げる。
+ *
+ * `--sp-budget` を省いたときの値は、既定では `DEFAULT_ROSTER_PROFILE.spBudget` で、
+ * `defaults.spBudget` で呼ぶ側が差し替えられる（探索の CLI は、自分の予算に揃える）。
+ */
+export function rosterSettingsFromArgv(
+  argv: readonly string[],
+  defaults: RosterArgvDefaults = {},
+): RosterCliSettings {
   const model = valueOf(argv, 'opponents') ?? 'typical';
   if (model !== 'typical' && model !== 'roster') {
     throw new Error(`--opponents は typical か roster: ${model}`);
   }
-  const spBudget = numberOf(argv, 'sp-budget', DEFAULT_ROSTER_PROFILE.spBudget);
+  const fromRun = valueOf(argv, 'sp-budget') === null && defaults.spBudget !== undefined;
+  const spBudget = numberOf(argv, 'sp-budget', defaults.spBudget ?? DEFAULT_ROSTER_PROFILE.spBudget);
   if (spBudget < 0) throw new Error(`--sp-budget は 0 以上: ${spBudget}`);
   const uniqueLevel = numberOf(argv, 'unique-level', DEFAULT_ROSTER_PROFILE.uniqueLevel);
   if (!Number.isInteger(uniqueLevel) || uniqueLevel < 1 || uniqueLevel > 6) {
@@ -91,6 +115,7 @@ export function rosterSettingsFromArgv(argv: readonly string[]): RosterCliSettin
     model,
     profile: { ...DEFAULT_ROSTER_PROFILE, spBudget, uniqueLevel },
     rosterFile: valueOf(argv, 'roster-file'),
+    ...(fromRun ? { spBudgetFromRun: true } : {}),
   };
 }
 
@@ -177,4 +202,65 @@ export function rosterFieldProfile(
 ): FieldProfile {
   if (settings.model !== 'roster' || roster === null) return base;
   return { ...base, opponentModel: 'roster', roster: settings.profile };
+}
+
+/** 探索の CLI が、名簿の相手を使っていることを標準出力の見出しに書く 1 行。 */
+export function rosterOpponentsLine(settings: RosterCliSettings): string {
+  return (
+    `相手 実在のカードの名簿（SP 予算 ${settings.profile.spBudget}` +
+    `${settings.spBudgetFromRun === true ? '、自分の予算に揃えた' : ''}、固有 Lv${settings.profile.uniqueLevel}）`
+  );
+}
+
+export interface SearchFieldOptions {
+  readonly settings: RosterCliSettings;
+  readonly data: GameData;
+  /** 順位条件を判定するか。偽（`--field off`）なら束を作らない。 */
+  readonly useField: boolean;
+  /** 相手の想定。名簿の指定を足す前のもの。 */
+  readonly profile: FieldProfile;
+  readonly track: TrackRef;
+  readonly seed: number;
+  readonly samples: number;
+  /** 順位表の置き場。省くとスキル一覧の置き場。 */
+  readonly dir?: string;
+  /** 説明の出し先。省くと標準エラー（標準出力は結果のために空けておく）。 */
+  readonly log?: (message: string) => void;
+}
+
+/**
+ * 探索（`pnpm plan`、`pnpm optimize`）の相手の束の指定を作る。
+ *
+ * 順位条件を判定しない（`useField` が偽）なら null を返す。束が要らないので、名簿も使わない。
+ * 名簿の指定があっても、その旨を理由とともに `log` へ出して今までどおり回す。
+ * 名簿が作れないコース（順位表が無い）も、理由と `ROSTER_FALLBACK_NOTE` を出して典型スキルの相手で回す。
+ *
+ * **typical のときに返す指定は、名簿の口を足す前と同じ形である**（`roster` のキーを足さない）。
+ * 束の鍵は指定の JSON なので、キーが増えると同じ相手が別の束になる。
+ */
+export function searchFieldSpec(options: SearchFieldOptions): FieldSpec | null {
+  const log = options.log ?? ((message: string) => console.error(message));
+  const { settings, profile, track, seed, samples } = options;
+  if (!options.useField) {
+    if (settings.model === 'roster') {
+      log('--opponents roster は順位条件を判定するときだけ効く。--field off なので、相手の束を作らず今までどおり回す。');
+    }
+    return null;
+  }
+  const plain: FieldSpec = { profile, track, seed, samples };
+  if (settings.model !== 'roster') return plain;
+
+  const prepared = prepareRoster(options.data, settings, track, options.dir);
+  for (const note of prepared.notes) log(note);
+  if (prepared.roster === null) {
+    log(ROSTER_FALLBACK_NOTE);
+    return plain;
+  }
+  return {
+    profile: rosterFieldProfile(profile, settings, prepared.roster),
+    track,
+    seed,
+    samples,
+    roster: prepared.roster,
+  };
 }

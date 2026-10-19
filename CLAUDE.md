@@ -34,6 +34,8 @@ pnpm monotonicity --trials 60  # 逆算の前提（単調性）の検査
 pnpm optimize --budget 600 --style SEN
 pnpm sensitivity --trials 600     # 近似確率を半分と倍に振ったときの幅（--near 1.25,2.5,5 で「近く」の距離を振る）
 pnpm plan --chara スペシャルウィーク --budget 600
+pnpm plan --budget 600 --inherit "黄金を訪ねて,光れ！弾けろ！超新星爆発！:進化" --inherit-hint 2   # 家系の継承固有（進化は :進化）を必須にし、費用を予算から先に払う
+pnpm plan --budget 600 --opponents roster --location 10008 --course 10808   # 相手を名簿から。--sp-budget を省くと --budget（ヒント割引後。plan は継承固有の費用を引いた残り）に揃える。相手は割引前の表示 SP で買うので、ヒントがあるほど相手が弱めに出る。実戦に近づけるなら自分の白・金・緑の表示 SP の合計を --sp-budget で明示する（optimize も同じ）
 pnpm run multi --trials 500    # 全頭同時（multi は pnpm の下位コマンドと衝突するので run を挟む）
 pnpm order-field --trials 200  # 順位条件の判定が相手の作り方でどう変わるか
 pnpm order-field --exp redraw --opponents roster --location 10008 --course 10808   # 相手を実在の育成ウマ娘から組む（opt-in。--sp-budget、--unique-level、--roster-file）
