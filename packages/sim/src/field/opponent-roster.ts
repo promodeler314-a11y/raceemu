@@ -93,6 +93,22 @@ export const DEFAULT_ROSTER_PROFILE: RosterProfile = {
   spread: 10,
 };
 
+/**
+ * 持っているスキルの、白・金・緑（rarity 'normal' と 'rare'）の表示 SP の合計。
+ *
+ * 名簿の相手の `RosterProfile.spBudget` と同じ数え方である。ヒントの割引前の表示 SP を、
+ * 緑（能力を引き出すスキル）も含めて足す。固有・進化・継承固有・継承進化は数えない。
+ * 相手の強さは SP の予算に敏感なので、相手の予算を自分に揃えるときは、この関数で
+ * 自分の合計を出す。緑を数え忘れると、自分だけ予算が約 1000 SP 多く見えて相手が弱くなる。
+ */
+export function displaySpTotal(skills: readonly SkillData[]): number {
+  let total = 0;
+  for (const skill of skills) {
+    if (skill.rarity === 'normal' || skill.rarity === 'rare') total += skill.sp;
+  }
+  return total;
+}
+
 /** 1 頭ぶんの引き当て。スキルは固有・進化・継承固有・緑・白金の順に並ぶ。 */
 export interface RosterDraw {
   readonly card: OpponentRosterCard;

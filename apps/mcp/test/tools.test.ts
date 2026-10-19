@@ -7,6 +7,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { loadDataMeta, loadGameData } from '../../../packages/data/src/node.ts';
 import { SkillResolver } from '../../../packages/data/src/skill-resolve.ts';
 import { RaceCalculator } from '../../../packages/sim/src/calculator.ts';
+import { displaySpTotal } from '../../../packages/sim/src/field/opponent-roster.ts';
 import { assignPopularity, buildRaceSetting, type LineupRunner } from '../../../packages/sim/src/multi/lineup.ts';
 import { runMultiRace } from '../../../packages/sim/src/multi/race.ts';
 import { OrderTally } from '../../../packages/sim/src/multi/summary.ts';
@@ -141,6 +142,20 @@ describe('find_skills', () => {
     expect(hit!.pick).toBeNull();
     expect(hit!.candidates[0]!.name).toBe('迸る月流星');
   });
+
+  it('継承進化は SkillData.sp が 0 でも、継承版の値段（200）を費用として返す', async () => {
+    // 名前は継承版と同じなので、名前では継承版（901411）に引かれ、継承進化は alternatives に出る。
+    const res = await call('find_skills', { names: ['光れ！弾けろ！超新星爆発！', '91101411'] });
+    const [named, indexed] = res.structuredContent!['results'] as {
+      pick: { id: string; rarity: string; sp: number };
+      alternatives: { id: string; rarity: string; sp: number }[];
+      candidates: { id: string; sp: number }[];
+    }[];
+    expect(named!.pick).toMatchObject({ id: '901411', rarity: 'inherit', sp: 200 });
+    expect(named!.alternatives).toEqual([expect.objectContaining({ id: '91101411', rarity: 'special', sp: 200 })]);
+    expect(named!.candidates.find((c) => c.id === '91101411')?.sp).toBe(200);
+    expect(indexed!.pick).toMatchObject({ id: '91101411', rarity: 'special', sp: 200 });
+  });
 });
 
 describe('check_lineup', () => {
@@ -194,6 +209,13 @@ describe('check_lineup', () => {
     expect(codes).toContain('same_group'); // 右回り○ と 右回り◎
     // 畳んだぶん、採った数は入力より少ない。
     expect(runner!.skillCount).toBe(el.skills.length + 1 /* 固有 */ + 1 /* 右回り◎ */);
+  });
+
+  it('継承進化を ID で挙げたとき、採ったスキルの sp は継承版の値段（200）になる', async () => {
+    const el = withoutDebuffs(byName('エルコンドルパサー')) as Extract<LineupEntry, { skills: unknown }>;
+    const res = await call('check_lineup', { lineup: [{ ...el, skills: [...el.skills, '91101411'] }] });
+    const [runner] = res.structuredContent!['runners'] as { skills: { id: string; sp: number }[] }[];
+    expect(runner!.skills.find((s) => s.id === '91101411')?.sp).toBe(200);
   });
 
   it('保存した個体を指しても、まだ何も保存していなければ見つからないと伝える', async () => {
@@ -561,6 +583,30 @@ describe('win_rate: fill_opponents（出走表の頭数が足りないとき、�
       expect(res.content[0]!.text).toContain('2 頭以上');
       expect(res.content[0]!.text).toContain('順位表が無いコース');
     });
+
+    it('skill_gain の勝率の対比較は、補えなければ回さず、理由を返す（獲得バ身は返る）', async () => {
+      const res = (await noListClient.callTool({
+        name: 'skill_gain',
+        arguments: {
+          runner: tsuyoshi,
+          add: ['円弧のマエストロ'],
+          track: TOKYO_2400,
+          trials: 4,
+          win_rate: { gate_count: 4 },
+        },
+      })) as unknown as ToolResult;
+      expect(res.isError).not.toBe(true);
+      const s = res.structuredContent!;
+      expect(s['bashin']).toBeDefined();
+      const win = s['winRate'] as { skipped: boolean; reasons: string[] };
+      expect(win.skipped).toBe(true);
+      expect(win.reasons.join('')).toContain('順位表が無いコース');
+      const notes = (s['notes'] as string[]).join('\n');
+      expect(notes).toContain('勝率の対比較は回していません');
+      expect(notes).toContain('順位表が無いコース');
+      // 出走表の頭だけで回す、という win_rate 向けの前置きは出さない。
+      expect(notes).not.toContain('出走表の頭だけで回します');
+    });
   });
 });
 
@@ -595,6 +641,19 @@ describe('skill_gain', () => {
     expect(again.structuredContent!['bashin']).toEqual(s['bashin']);
   });
 
+  it('継承進化を足したときの費用は、継承版の値段（200）で数える。継承版と並べても 1 つぶん', async () => {
+    // 継承進化は skills.json に sp が無く、SkillData.sp は 0。そのまま足すと費用 0 pt と返っていた。
+    const res = await call('skill_gain', { runner: tsuyoshi, add: ['91101411'], track: TOKYO_2400, trials: 4 });
+    expect(res.isError).not.toBe(true);
+    const s = res.structuredContent!;
+    expect(s['costSp']).toBe(200);
+    expect(s['added']).toEqual([expect.objectContaining({ id: '91101411', rarity: 'special', sp: 200 })]);
+    expect(res.content[0]!.text).toContain('200 pt');
+    // 同じグループ（継承版と継承進化）を両方挙げても、総額は 1 つぶん。
+    const both = await call('skill_gain', { runner: tsuyoshi, add: ['901411', '91101411'], track: TOKYO_2400, trials: 4 });
+    expect(both.structuredContent!['costSp']).toBe(200);
+  });
+
   it('すでに持っているスキルだけを足そうとしたら、そう伝える', async () => {
     const res = await call('skill_gain', { runner: tsuyoshi, add: ['王手'], track: TOKYO_2400, trials: 10 });
     expect(res.isError).toBe(true);
@@ -605,5 +664,184 @@ describe('skill_gain', () => {
     const res = await call('skill_gain', { runner: tsuyoshi, add: ['存在しないスキル名'], track: TOKYO_2400, trials: 10 });
     expect(res.isError).toBe(true);
     expect(res.content[0]!.text).toContain('解決できません');
+  });
+
+  describe('win_rate（勝率の対比較）', () => {
+    interface Stat {
+      mean: number;
+      se: number;
+    }
+    interface Arm {
+      winRate: number;
+      winRateSe: number;
+      meanOrder: number;
+      meanTime: number;
+    }
+    interface WinRateGain {
+      skipped: boolean;
+      reasons?: string[];
+      gateCount: number;
+      filled: number;
+      trials: number;
+      lineups: number;
+      trialsPerLineup: number[];
+      keys: { lineup: number; sample: number; raceSeed: number }[];
+      budget: { spBudget: number; source: string; baselineDisplaySp: number };
+      baseline: Arm;
+      variant: Arm;
+      delta: { winRate: Stat; meanOrder: Stat; meanTime: Stat };
+      skills: { id: string; name: string; triggerRate: number; medianFirstPosition: number | null; medianFirstPositionRatio: number | null }[];
+      byLineup: { lineup: number; trials: number; baselineWinRate: number; variantWinRate: number }[];
+    }
+    const winArgs = { gate_count: 5, lineups: 2 };
+    const trials = 8;
+    const seed = 3;
+    const winOf = (res: ToolResult) => res.structuredContent!['winRate'] as WinRateGain;
+
+    it('Δ勝率・Δ平均着順・発動率と発動位置が返り、基準の側は win_rate の結果と、案の側は直接回した値と、1 つも違わない', async () => {
+      const res = await call('skill_gain', {
+        runner: tsuyoshi,
+        add: ['円弧のマエストロ'],
+        track: TOKYO_2400,
+        trials,
+        seed,
+        win_rate: winArgs,
+      });
+      expect(res.isError).not.toBe(true);
+      const win = winOf(res);
+      expect(win.skipped).toBe(false);
+      expect(win).toMatchObject({ gateCount: 5, filled: 4, trials, lineups: 2, trialsPerLineup: [4, 4] });
+      expect(win.byLineup.map((g) => g.trials)).toEqual([4, 4]);
+      // 予算を省いたので、基準の 1 頭の白・金・緑の表示 SP の合計に揃う。
+      expect(win.budget.source).toBe('lineup');
+      expect(win.budget.spBudget).toBe(win.budget.baselineDisplaySp);
+      expect(win.budget.baselineDisplaySp).toBeGreaterThan(0);
+      // 差には誤差が付く。足したスキルの発動率と、最初の発動位置の中央値（コースの中）が返る。
+      expect(Number.isFinite(win.delta.winRate.mean) && win.delta.winRate.se >= 0).toBe(true);
+      expect(Number.isFinite(win.delta.meanOrder.mean) && win.delta.meanOrder.se >= 0).toBe(true);
+      expect(win.delta.meanTime.mean).toBeLessThan(0);
+      expect(win.skills).toHaveLength(1);
+      expect(win.skills[0]).toMatchObject({ name: '円弧のマエストロ' });
+      expect(win.skills[0]!.triggerRate).toBeGreaterThan(0);
+      expect(win.skills[0]!.medianFirstPosition).toBeGreaterThan(0);
+      expect(win.skills[0]!.medianFirstPosition).toBeLessThan(2400);
+      // 応答の文章と notes に、読み方と前提が載る。
+      const text = res.content[0]!.text;
+      expect(text).toContain('勝率の対比較');
+      expect(text).toContain('最初の発動位置の中央値');
+      const notes = (res.structuredContent!['notes'] as string[]).join('\n');
+      expect(notes).toContain('SP 予算');
+      expect(notes).toContain('名簿と得意脚質はデータからの推定');
+      expect(notes).toContain('ゲームと突き合わせていません');
+      expect(notes).toContain('相手の組の選び方による揺れは含みません');
+
+      // 同じ入力の win_rate の、出走表の頭の行と一致する（相手も種も同じ）。
+      const plain = await call('win_rate', {
+        lineup: [tsuyoshi],
+        track: TOKYO_2400,
+        trials,
+        seed,
+        fill_opponents: winArgs,
+      });
+      const row = (plain.structuredContent!['runners'] as { winRate: number; meanOrder: number; meanTime: number }[])[0]!;
+      expect(win.baseline.winRate).toBe(row.winRate);
+      expect(win.baseline.meanTime).toBe(row.meanTime);
+      expect(round(win.baseline.meanOrder, 2)).toBe(row.meanOrder);
+      expect(win.keys).toEqual((plain.structuredContent!['fillOpponents'] as { keys: unknown })['keys']);
+
+      // 道具を通さずに、同じ組で基準と案を回して、試行ごとの差を取った値と一致する。
+      const resolver = new SkillResolver(data.skills);
+      const runner = toLineupRunner(tsuyoshi as never);
+      const own = resolver.resolveLineup({ chara: runner.chara, unique: runner.unique?.name, skills: runner.skills }).skills;
+      const hit = resolver.resolve('円弧のマエストロ');
+      expect(hit.status).toBe('resolved');
+      if (hit.status !== 'resolved') return;
+      const track: TrackRef = { ...TOKYO_2400, gateCount: 5, season: 1, weather: 1, time: 1 };
+      const decision = planFill(data, { gate_count: 5, unique_level: 4, lineups: 2 }, [runner], TOKYO_2400, undefined, [
+        displaySpTotal(own),
+      ]);
+      expect(decision.kind).toBe('fill');
+      if (decision.kind !== 'fill') return;
+      const baseSetting = buildRaceSetting(runner, own, track, data.trackData, 1).setting;
+      const plusSetting = { ...baseSetting, skills: [...baseSetting.skills, hit.skill] };
+      const calculator = new RaceCalculator(defaultSystemSetting(), data.trackData);
+      const wins = { base: 0, plus: 0 };
+      const orderDiff: number[] = [];
+      const timeDiff: number[] = [];
+      for (const group of buildFillGroups(decision.plan, data, track, seed, trials)) {
+        const rest = group.opponents.map((setting) => ({ setting }));
+        for (let t = 0; t < group.count; t++) {
+          const before = runMultiRace(calculator, [{ setting: baseSetting }, ...rest], { seed: group.raceSeed, trial: t });
+          const after = runMultiRace(calculator, [{ setting: plusSetting }, ...rest], { seed: group.raceSeed, trial: t });
+          wins.base += before.entries[0]!.order === 1 ? 1 : 0;
+          wins.plus += after.entries[0]!.order === 1 ? 1 : 0;
+          orderDiff.push(after.entries[0]!.order - before.entries[0]!.order);
+          timeDiff.push(after.entries[0]!.result.raceTime - before.entries[0]!.result.raceTime);
+        }
+      }
+      const mean = (values: number[]) => values.reduce((a, b) => a + b, 0) / values.length;
+      expect(win.variant.winRate).toBe(round(wins.plus / trials, 4));
+      expect(win.delta.winRate.mean).toBe(round((wins.plus - wins.base) / trials, 4));
+      expect(win.delta.meanOrder.mean).toBe(round(mean(orderDiff), 3));
+      expect(win.delta.meanTime.mean).toBe(round(mean(timeDiff), 4));
+    });
+
+    it('発動しないスキルを足すと、差は勝率も着順もタイムも厳密に 0 になる（共通乱数）', async () => {
+      const res = await call('skill_gain', {
+        runner: tsuyoshi,
+        add: ['追込直線◎'],
+        track: TOKYO_2400,
+        trials,
+        seed,
+        win_rate: winArgs,
+      });
+      expect(res.isError).not.toBe(true);
+      const win = winOf(res);
+      expect(win.delta).toEqual({
+        winRate: { mean: 0, se: 0 },
+        meanOrder: { mean: 0, se: 0 },
+        meanTime: { mean: 0, se: 0 },
+      });
+      expect(win.variant).toEqual(win.baseline);
+      expect(win.skills[0]).toMatchObject({ triggerRate: 0, medianFirstPosition: null, medianFirstPositionRatio: null });
+      expect(win.byLineup.every((g) => g.baselineWinRate === g.variantWinRate)).toBe(true);
+      expect(res.content[0]!.text).toContain('発動せず');
+      expect((res.structuredContent!['notes'] as string[]).join('\n')).toContain('1 度も発動しませんでした');
+    });
+
+    it('SP 予算を指定すると、その値で相手を組み、指定の値だと notes に書く', async () => {
+      const res = await call('skill_gain', {
+        runner: tsuyoshi,
+        add: ['円弧のマエストロ'],
+        track: TOKYO_2400,
+        trials: 2,
+        win_rate: { gate_count: 4, lineups: 1, sp_budget: 6000 },
+      });
+      expect(res.isError).not.toBe(true);
+      const win = winOf(res);
+      expect(win.budget).toMatchObject({ spBudget: 6000, source: 'input' });
+      expect(win).toMatchObject({ gateCount: 4, filled: 3, lineups: 1 });
+      expect((res.structuredContent!['notes'] as string[]).join('\n')).toContain('相手の SP 予算 6000 は指定の値です');
+    });
+
+    it('省くと今までと同じ。win_rate を渡しても、獲得バ身の側は変わらない', async () => {
+      const args = { runner: tsuyoshi, add: ['円弧のマエストロ'], track: TOKYO_2400, trials: 6, seed };
+      const plain = await call('skill_gain', args);
+      expect(plain.isError).not.toBe(true);
+      const s = plain.structuredContent!;
+      expect(Object.keys(s).sort()).toEqual(
+        ['added', 'baseline', 'bashin', 'costSp', 'elapsedMs', 'fieldSize', 'notes', 'runner', 'seconds', 'seed', 'track', 'trials'].sort(),
+      );
+      expect(plain.content[0]!.text).not.toContain('勝率の対比較');
+      expect((s['notes'] as string[]).join('\n')).not.toContain('勝率の対比較');
+
+      const withWin = await call('skill_gain', { ...args, win_rate: { gate_count: 3, lineups: 1 } });
+      const w = withWin.structuredContent!;
+      expect(w['bashin']).toEqual(s['bashin']);
+      expect(w['seconds']).toEqual(s['seconds']);
+      expect(w['baseline']).toEqual(s['baseline']);
+      expect(w['costSp']).toBe(s['costSp']);
+      expect(w['winRate']).toBeDefined();
+    });
   });
 });

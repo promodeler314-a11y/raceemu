@@ -10,7 +10,9 @@ import {
   SKILL_LIST_DIR,
   prepareRoster,
   rosterFieldProfile,
+  rosterOpponentsLine,
   rosterSettingsFromArgv,
+  searchFieldSpec,
 } from '../src/opponent-roster-setup.ts';
 import { readSkillListCourse } from '../src/skill-list-index.ts';
 
@@ -33,6 +35,22 @@ describe('名簿の指定（コマンドライン）', () => {
     expect(settings.model).toBe('roster');
     expect(settings.profile).toEqual({ ...DEFAULT_ROSTER_PROFILE, spBudget: 8000, uniqueLevel: 6 });
     expect(settings.rosterFile).toBe('x.txt');
+  });
+
+  it('--sp-budget を省いたときの値は、呼ぶ側が決められる。指定があればそちらが勝つ', () => {
+    // 探索の CLI（plan / optimize）は、省いたら自分の予算に揃える。
+    const followed = rosterSettingsFromArgv(['--opponents', 'roster'], { spBudget: 600 });
+    expect(followed.profile.spBudget).toBe(600);
+    expect(followed.spBudgetFromRun).toBe(true);
+    const given = rosterSettingsFromArgv(['--opponents', 'roster', '--sp-budget', '8000'], { spBudget: 600 });
+    expect(given.profile.spBudget).toBe(8000);
+    expect('spBudgetFromRun' in given).toBe(false);
+    // 既定を渡さない呼び出しは、今までと同じ（キーも増えない）
+    const plain = rosterSettingsFromArgv(['--opponents', 'roster']);
+    expect(plain.profile.spBudget).toBe(DEFAULT_ROSTER_PROFILE.spBudget);
+    expect('spBudgetFromRun' in plain).toBe(false);
+    // 0 も有効な既定（予算を使い切った構成）
+    expect(rosterSettingsFromArgv([], { spBudget: 0 }).profile.spBudget).toBe(0);
   });
 
   it('おかしな値は黙って既定に落とさず、エラーにする', () => {
@@ -136,5 +154,76 @@ describe('相手の想定への足し方', () => {
     expect(profile.opponentModel).toBe('roster');
     expect(profile.roster?.spBudget).toBe(5000);
     expect('opponentModel' in base).toBe(false);
+  });
+});
+
+describe('探索の相手の束（searchFieldSpec）', () => {
+  const profile = { ...defaultFieldProfile(9), offset: 0 };
+  const common = { data, profile, seed: 9001, samples: 64 };
+  const tokyo = { location: 10006, course: 10606, condition: 1, gateCount: 9 } as const;
+  const hasTokyo = readSkillListCourse(SKILL_LIST_DIR, tokyo.location, tokyo.course) !== null;
+  const logged = (): { log: (m: string) => void; lines: string[] } => {
+    const lines: string[] = [];
+    return { log: (m) => lines.push(m), lines };
+  };
+
+  it('typical のときは、名簿の口を足す前と同じ指定を返す（キーも増えない）', () => {
+    const { log, lines } = logged();
+    const spec = searchFieldSpec({ ...common, settings: rosterSettingsFromArgv([]), useField: true, track: tokyo, log });
+    // 束の鍵は指定の JSON。キーが増えると同じ相手が別の束になる。
+    expect(JSON.stringify(spec)).toBe(JSON.stringify({ profile, track: tokyo, seed: 9001, samples: 64 }));
+    expect(spec).not.toBeNull();
+    expect('roster' in spec!).toBe(false);
+    expect(lines).toEqual([]);
+  });
+
+  it('--field off なら束を作らない。名簿の指定があれば、効かない理由を出す', () => {
+    const quiet = logged();
+    expect(
+      searchFieldSpec({ ...common, settings: rosterSettingsFromArgv([]), useField: false, track: tokyo, log: quiet.log }),
+    ).toBeNull();
+    expect(quiet.lines).toEqual([]);
+
+    const noisy = logged();
+    expect(
+      searchFieldSpec({
+        ...common,
+        settings: rosterSettingsFromArgv(['--opponents', 'roster']),
+        useField: false,
+        track: tokyo,
+        log: noisy.log,
+      }),
+    ).toBeNull();
+    expect(noisy.lines.join('\n')).toContain('--field off');
+  });
+
+  it('順位表が無いコースでは、理由と落とし先を出して典型スキルの相手の指定を返す', () => {
+    const { log, lines } = logged();
+    const track = { location: 1, course: 2, condition: 1, gateCount: 9 } as const;
+    const spec = searchFieldSpec({
+      ...common,
+      settings: rosterSettingsFromArgv(['--opponents', 'roster']),
+      useField: true,
+      track,
+      log,
+    });
+    expect(JSON.stringify(spec)).toBe(JSON.stringify({ profile, track, seed: 9001, samples: 64 }));
+    expect(lines.join('\n')).toContain('順位表が無いコース');
+    expect(lines[lines.length - 1]).toBe(ROSTER_FALLBACK_NOTE);
+  });
+
+  it.skipIf(!hasTokyo)('名簿が作れれば、想定に名簿の指定を足し、名簿そのものを載せる', () => {
+    const { log, lines } = logged();
+    const settings = rosterSettingsFromArgv(['--opponents', 'roster'], { spBudget: 600 });
+    const spec = searchFieldSpec({ ...common, settings, useField: true, track: tokyo, log });
+    expect(spec?.profile.opponentModel).toBe('roster');
+    expect(spec?.profile.roster?.spBudget).toBe(600);
+    expect(spec?.roster?.cards.length).toBeGreaterThan(200);
+    // 渡した想定は変えない
+    expect('opponentModel' in profile).toBe(false);
+    expect(lines.join('\n')).toContain('SP 予算 600');
+    expect(lines).not.toContain(ROSTER_FALLBACK_NOTE);
+    expect(rosterOpponentsLine(settings)).toContain('SP 予算 600、自分の予算に揃えた');
+    expect(rosterOpponentsLine(rosterSettingsFromArgv(['--sp-budget', '9000']))).not.toContain('揃えた');
   });
 });

@@ -310,3 +310,117 @@ describe('限界貢献度', () => {
     }
   });
 });
+
+describe('必須のスキル（required）', () => {
+  const shared = { stages: [60, 120], maxRounds: 1, measurePositionCompetition: false } as const;
+  const maestro = skill('円弧のマエストロ');
+  const inherits = data.skills.filter((s) => s.rarity === 'inherit').slice(0, 8).map((s) => s.id);
+
+  it('必須は構成に残り、費用を予算から先に引き、予算を超えない', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const context = makeContext(pool);
+      const model = context.cost;
+      // 円弧のマエストロ（340 pt）は候補にも入れておく。必須と同じものは候補から外れる。
+      const candidates = [maestro, skill('中距離コーナー○'), skill('中距離直線○'), skill('一匹狼')].map((s) => s.id);
+      const budget = 450;
+      const result = await optimizeSkills(context, { ...shared, candidates, budget, required: [maestro.id] });
+
+      expect(result.required).toEqual([maestro.id]);
+      expect(result.requiredCost).toBe(model.cost(maestro.id));
+      // 探索が使えるのは残りの 110 pt。必須の費用は数えているので、合わせて予算に収まる。
+      expect(result.cost).toBeLessThanOrEqual(budget - result.requiredCost);
+      for (const entry of result.top) {
+        expect(entry.cost + result.requiredCost).toBeLessThanOrEqual(budget);
+        expect(entry.skillIds).not.toContain(maestro.id);
+      }
+      expect(result.best).not.toContain(maestro.id);
+      expect(result.singles.map((s) => s.skillId)).not.toContain(maestro.id);
+
+      // すべての評価に必須が入っている。最良の構成の短縮量は、必須を持った構成から見た値になる。
+      const evaluator = new Evaluator(context);
+      const withRequired = await evaluator.evaluate([maestro.id], 120);
+      const bare = await evaluator.evaluate([], 120);
+      const best = result.top[0]!;
+      const expectedDiff = pairedDiff(withRequired, await evaluator.evaluate([maestro.id, ...best.skillIds], 120));
+      expect(best.diff.mean).toBe(expectedDiff.mean);
+      // 必須を足したぶんの短縮量は別に返る
+      expect(result.requiredDiff).not.toBeNull();
+      expect(result.requiredDiff!.mean).toBe(pairedDiff(bare, withRequired).mean);
+      expect(result.requiredDiff!.mean).toBeGreaterThan(0);
+    } finally {
+      await pool.dispose();
+    }
+  }, 180000);
+
+  it('必須を指定しなければ、以前と同じ答えを返す', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const candidates = ['中距離コーナー○', '中距離直線○', '一匹狼'].map((n) => skill(n).id);
+      const options = { ...shared, candidates, budget: 200 };
+      const plain = await optimizeSkills(makeContext(pool), options);
+      const empty = await optimizeSkills(makeContext(pool), { ...options, required: [] });
+      expect(empty.required).toEqual([]);
+      expect(empty.requiredCost).toBe(0);
+      expect(empty.requiredDiff).toBeNull();
+      expect([...empty.best].sort()).toEqual([...plain.best].sort());
+      expect(empty.bestDiff.mean).toBe(plain.bestDiff.mean);
+    } finally {
+      await pool.dispose();
+    }
+  }, 180000);
+
+  it('必須の固有の継承版も、本数の上限に数える', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 2);
+    try {
+      const context = makeContext(pool);
+      // 上限 3 のうち 3 本を必須が使っているので、候補の継承版はもう取れない。
+      const required = inherits.slice(0, 3);
+      const candidates = [...inherits.slice(3, 6), skill('中距離コーナー○').id, skill('一匹狼').id];
+      const result = await optimizeSkills(context, {
+        ...shared,
+        candidates,
+        budget: 3000,
+        required,
+        inheritedUniqueLimit: 3,
+      });
+      const isInherit = (id: string) => context.cost.rarity(id) === 'inherit';
+      expect(result.required).toEqual(required);
+      expect(result.best.filter(isInherit)).toHaveLength(0);
+      for (const entry of result.top) expect(entry.skillIds.filter(isInherit)).toHaveLength(0);
+    } finally {
+      await pool.dispose();
+    }
+  }, 180000);
+
+  it('満たす構成が無いときは投げる', async () => {
+    const pool = new WorkerPool(nodeWorkerFactory, 1);
+    try {
+      const context = makeContext(pool);
+      const candidates = [skill('一匹狼').id];
+      // 必須の費用が予算を超える
+      await expect(
+        optimizeSkills(context, { ...shared, candidates, budget: 100, required: [maestro.id] }),
+      ).rejects.toThrow('予算');
+      // 固有の継承版の必須が上限（既定は 6）を超える
+      await expect(
+        optimizeSkills(context, { ...shared, candidates, budget: 5000, required: inherits.slice(0, 7) }),
+      ).rejects.toThrow('上限');
+      // 継承進化も継承版の枠を 1 つ使う。継承版 6 本に足すと、7 本目として上限を超える。
+      // （継承進化の費用は継承版の値段から引くので、費用が 0 の 'special' は枠に数えない）
+      const evolved = data.skills.find((s) => s.id === '91101411')!;
+      expect(evolved.rarity).toBe('special');
+      expect(context.cost.cost(evolved.id)).toBeGreaterThan(0);
+      const sixOthers = inherits.filter((id) => context.cost.group(id) !== evolved.group).slice(0, 6);
+      await expect(
+        optimizeSkills(context, { ...shared, candidates, budget: 5000, required: [...sixOthers, evolved.id] }),
+      ).rejects.toThrow('上限');
+      // 費用の表に無い ID
+      await expect(
+        optimizeSkills(context, { ...shared, candidates, budget: 5000, required: ['no-such-skill'] }),
+      ).rejects.toThrow('見つからない');
+    } finally {
+      await pool.dispose();
+    }
+  }, 60000);
+});

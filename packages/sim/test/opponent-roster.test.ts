@@ -12,6 +12,7 @@ import {
 } from '../src/field/field.ts';
 import {
   DEFAULT_ROSTER_PROFILE,
+  displaySpTotal,
   drawRosterOpponents,
   type OpponentRanking,
   type OpponentRoster,
@@ -210,6 +211,35 @@ describe('名簿から相手を引く（drawRosterOpponents）', () => {
         expect(draw!.skills.filter(isWhiteOrGold)).toHaveLength(0);
         // 固有は予算に数えないので、残る
         expect(draw!.skills[0]!.id).toBe(draw!.card.uniqueId);
+      }
+    }
+  });
+
+  it('表示 SP の合計（displaySpTotal）は、予算と同じ数え方で、緑を含み、固有・進化・継承を数えない', () => {
+    const white = data.skills.find((s) => s.rarity === 'normal' && s.sp > 0 && s.type !== 'passive')!;
+    const gold = data.skills.find((s) => s.rarity === 'rare' && s.sp > 0 && s.type !== 'passive')!;
+    const green = data.skills.find((s) => s.rarity === 'normal' && s.sp > 0 && s.type === 'passive')!;
+    const others = [
+      data.skillsById.get('101411')!, // 固有
+      data.skills.find((s) => s.rarity === 'evo' && s.sp > 0)!, // 進化
+      data.skillsById.get('901411')!, // 継承固有（200）
+      data.skillsById.get('91101411')!, // 継承進化（sp は 0）
+    ];
+    expect(others.map((s) => s.rarity)).toEqual(['unique', 'evo', 'inherit', 'special']);
+    expect(others.find((s) => s.rarity === 'inherit')!.sp).toBeGreaterThan(0);
+    expect(displaySpTotal([])).toBe(0);
+    expect(displaySpTotal([white, gold, green])).toBe(white.sp + gold.sp + green.sp);
+    // 緑を数え忘れると合計が足りなくなる
+    expect(displaySpTotal([white, gold, green])).toBeGreaterThan(white.sp + gold.sp);
+    expect(displaySpTotal([white, gold, green, ...others])).toBe(white.sp + gold.sp + green.sp);
+
+    // 名簿の相手では、予算に数えたものと一致する（予算を超えず、緑も入っている）
+    const budget = 3000;
+    const profile: RosterProfile = { ...DEFAULT_ROSTER_PROFILE, spBudget: budget };
+    for (let sample = 0; sample < 6; sample++) {
+      for (const draw of drawRosterOpponents(roster, profile, slots, sample, data.skillsById)) {
+        expect(displaySpTotal(draw!.skills)).toBe(spent(draw!.skills));
+        expect(displaySpTotal(draw!.skills)).toBeLessThanOrEqual(budget);
       }
     }
   });
