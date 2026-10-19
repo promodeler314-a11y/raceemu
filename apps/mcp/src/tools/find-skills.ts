@@ -19,13 +19,15 @@ export function registerFindSkills(server: McpServer, context: McpContext): void
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
     ({ names }) => {
+      // sp は SkillData.sp を直に読まず、費用の読み方を通す（継承進化は sp が 0 で、継承版の値段で数える）。
+      const { costModel } = context;
       const results = names.map((query) => {
         const hit = context.resolver.resolve(query);
         const candidates = context.resolver.search(query, 5).map((c) => ({
           id: c.id,
           name: c.name,
           rarity: c.rarity,
-          sp: c.sp,
+          sp: costModel.cost(c.id),
           holder: c.holder,
           score: round(c.score),
         }));
@@ -33,8 +35,8 @@ export function registerFindSkills(server: McpServer, context: McpContext): void
           return {
             query,
             status: 'resolved' as const,
-            pick: { id: hit.skill.id, name: hit.skill.name, rarity: hit.skill.rarity, sp: hit.skill.sp },
-            alternatives: hit.alternatives.map((s) => ({ id: s.id, name: s.name, rarity: s.rarity, sp: s.sp })),
+            pick: { id: hit.skill.id, name: hit.skill.name, rarity: hit.skill.rarity, sp: costModel.cost(hit.skill.id) },
+            alternatives: hit.alternatives.map((s) => ({ id: s.id, name: s.name, rarity: s.rarity, sp: costModel.cost(s.id) })),
             candidates,
           };
         }

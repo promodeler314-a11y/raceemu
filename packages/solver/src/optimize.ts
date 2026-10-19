@@ -262,6 +262,25 @@ export interface OptimizeOptions {
    * 相手を判定していないときは効かない。docs/order-field.md 4.6 節を参照。
    */
   readonly selfConsistent?: boolean;
+  /**
+   * 必ず持つスキル。家系で決まった継承固有のように、取るかどうかを選べないものを渡す。
+   *
+   * 最初から構成に入れ、局所探索の入れ替え対象にしない。評価の土台（`context.base` の
+   * 候補でないスキル）と同じ扱いで、すべての評価に入る。したがって短縮量は
+   * 「必須を持った構成」から見た値であり、`best` と `top` の `skillIds` には必須を含めない
+   * （候補から選んだものだけが入る）。必須を足したぶんの短縮量は `requiredDiff` で別に返す。
+   *
+   * 費用は予算から先に引く。探索が使える予算は `budget - requiredCost` で、
+   * 結果の `cost + requiredCost` が `budget` を超えることはない。
+   * 必須のうち固有の継承版（継承進化も、継承版を積んで進化させるので 1 本に数える）も
+   * `inheritedUniqueLimit` の本数に数え、候補から選べる本数は残りになる。
+   *
+   * 同じグループの必須は上位の 1 つに絞る。必須と同じグループの候補は外す（同じグループから
+   * 2 つ取ることはできず、費用は表示ポイントの総額なので、必須が枠を持っている）。
+   * 必須の費用が予算を超えるとき、継承版の必須が上限を超えるとき、費用の表に無い ID があるときは、
+   * 満たす構成が無いので投げる。
+   */
+  readonly required?: readonly string[];
 }
 
 export interface OptimizeEntry {
@@ -272,7 +291,9 @@ export interface OptimizeEntry {
 }
 
 export interface OptimizeResult {
+  /** 候補から選んだスキル。`required` は含めない。構成の全体は `required` と合わせたもの。 */
   readonly best: readonly string[];
+  /** 必須を持った構成から見た短縮量。必須が無ければ、何も取らない構成から見た値。 */
   readonly bestDiff: PairedDiff;
   /** 最終段まで残った構成を、短縮量の大きい順に並べたもの */
   readonly top: readonly OptimizeEntry[];
@@ -281,7 +302,14 @@ export interface OptimizeResult {
   readonly marginals: readonly SingleEffect[];
   /** 買えないが効いているもの。測らなかったときは null。 */
   readonly positionCompetition: PositionCompetitionEffect | null;
+  /** `best` の費用。必須の費用は含めない（`requiredCost`）。 */
   readonly cost: number;
+  /** 必須のスキル（同じグループは上位の 1 つに絞ったもの）。指定が無ければ空。 */
+  readonly required: readonly string[];
+  /** 必須の費用。予算に先に数えたぶんで、`cost + requiredCost ≤ budget` になる。 */
+  readonly requiredCost: number;
+  /** 必須を足したことによる短縮量（必須を持たない構成から見る）。必須が無ければ null。 */
+  readonly requiredDiff: PairedDiff | null;
   readonly races: number;
   readonly evaluations: number;
   readonly rounds: number;
@@ -289,12 +317,27 @@ export interface OptimizeResult {
 }
 
 const DEFAULT_STAGES = [200, 600, 2000];
-const DEFAULT_INHERITED_UNIQUE_LIMIT = 6;
+/** 固有の継承版を積める本数の既定。ゲームの上限である。 */
+export const DEFAULT_INHERITED_UNIQUE_LIMIT = 6;
 /** 途中経過を出す間隔。候補が数百あるので、黙って何分も走るのを避ける。 */
 const PROGRESS_EVERY = 25;
 const DEFAULT_NEIGHBOUR_TOP_K = 30;
 /** 自己整合で自分の構成を配る相手の割合 */
 const SELF_CONSISTENT_RATE = 0.3;
+
+/**
+ * 固有の継承版の枠を 1 つ使うスキルか。
+ *
+ * 継承版（rarity 'inherit'）のほかに、継承進化（rarity 'special'）も数える。継承進化は
+ * 継承版を積んで進化させるもので、枠は継承版と同じ 1 つを使う。継承版を持たない 'special'
+ * （イベント専用、育成シナリオ固有のヒーロー系、デバフなど、大半はこれ。買うものではなく費用が 0）は
+ * 枠を使わないので、費用が正かどうかで見分ける。
+ * 候補に継承進化は入らない（`candidates.ts` は sp が無いものを落とす）ので、効くのは必須だけである。
+ */
+function usesInheritedSlot(skillId: string, model: CostModel): boolean {
+  const rarity = model.rarity(skillId);
+  return rarity === 'inherit' || (rarity === 'special' && model.cost(skillId) > 0);
+}
 
 /** 固有の継承版の本数が上限に収まっているか。 */
 function withinInheritedUniqueLimit(
@@ -304,7 +347,7 @@ function withinInheritedUniqueLimit(
 ): boolean {
   let count = 0;
   for (const id of skillIds) {
-    if (model.rarity(id) === 'inherit') count++;
+    if (usesInheritedSlot(id, model)) count++;
   }
   return count <= limit;
 }
@@ -333,12 +376,43 @@ export async function optimizeSkills(
     if (options.signal?.aborted === true) throw new SimulationCancelled();
   };
 
-  const candidates = [...new Set(options.candidates)];
+  // 必須。取るかどうかを選べないので、評価の土台に入れ、費用と継承版の本数だけ先に引く。
+  for (const id of options.required ?? []) {
+    // 費用の表に無い ID は、グループが引けず、費用も 0 になる。黙って通さない。
+    if (context.cost.group(id) === -1) throw new Error(`必須のスキルが見つからない: ${id}`);
+  }
+  const required = dedupeByGroup([...new Set(options.required ?? [])], context.cost);
+  const requiredSet = new Set(required);
+  const requiredGroups = new Set(required.map((id) => context.cost.group(id)));
+  const requiredCost = context.cost.totalCost(required);
+  const requiredInherited = required.filter((id) => usesInheritedSlot(id, context.cost)).length;
+  if (requiredCost > options.budget) {
+    throw new Error(`必須のスキルの費用（${requiredCost} pt）が予算（${options.budget} pt）を超えている`);
+  }
+  if (requiredInherited > inheritedUniqueLimit) {
+    throw new Error(
+      `必須の固有の継承版（${requiredInherited} 本）が上限（${inheritedUniqueLimit} 本）を超えている`,
+    );
+  }
+  // 探索が使える分。以降の予算と本数の判定は、必須を引いたあとの値で行う。
+  const budget = options.budget - requiredCost;
+  const pickableInherited = inheritedUniqueLimit - requiredInherited;
+
+  const candidateSet = new Set(options.candidates);
+  const candidates = [...candidateSet].filter(
+    (id) => !requiredSet.has(id) && !requiredGroups.has(context.cost.group(id)),
+  );
   const firstStage = stages[0]!;
   const lastStage = stages[stages.length - 1]!;
 
-  // 基準は候補を 1 つも取らない構成
-  const baseIds = context.base.skillIds.filter((id) => !candidates.includes(id));
+  // 基準は候補を 1 つも取らない構成。必須は土台に入れる（外さず、すべての評価に入る）。
+  const baseIds = [
+    ...context.base.skillIds.filter((id) => !candidateSet.has(id) && !requiredSet.has(id)),
+    ...required,
+  ];
+  if (required.length > 0) {
+    report(`必須: ${required.length} 個 / ${requiredCost} pt（残りの予算 ${budget} pt）`);
+  }
   let baseline = await evaluator.evaluate(baseIds, lastStage);
 
   // 位置取り調整の参考行。基準の評価をそのまま使うので、余分に走るのは 1 回ぶんだけ。
@@ -392,8 +466,8 @@ export async function optimizeSkills(
       if ((bounds.get(id) ?? 0) <= bestEfficiency) break;
       const next = dedupeByGroup([...held, id], context.cost);
       const addedCost = context.cost.totalCost(next) - heldCost;
-      if (heldCost + addedCost > options.budget) continue;
-      if (!withinInheritedUniqueLimit(next, context.cost, inheritedUniqueLimit)) continue;
+      if (heldCost + addedCost > budget) continue;
+      if (!withinInheritedUniqueLimit(next, context.cost, pickableInherited)) continue;
       const evaluation = await evaluator.evaluate([...baseIds, ...next], firstStage);
       const diff = pairedDiff(currentEval, evaluation);
       const efficiency = addedCost <= 0 ? 0 : diff.mean / addedCost;
@@ -473,6 +547,16 @@ export async function optimizeSkills(
     baseline = await evaluator.evaluate(baseIds, lastStage);
   }
 
+  // 必須を足したぶんの短縮量。相手が確定したあとの束で、必須を外した構成と比べる。
+  let requiredDiff: PairedDiff | null = null;
+  if (required.length > 0) {
+    const withoutRequired = await evaluator.evaluate(
+      baseIds.filter((id) => !requiredSet.has(id)),
+      lastStage,
+    );
+    requiredDiff = pairedDiff(withoutRequired, baseline);
+  }
+
   // 最終段まで残った構成は、採否によらず記録する。
   // 採用したものだけを残すと、僅差で負けた構成が見えなくなるためである。
 
@@ -497,9 +581,9 @@ export async function optimizeSkills(
   for (; rounds < maxRounds; rounds++) {
     abort();
     const neighbours = buildNeighbourhood(current, candidates, moveCandidates, context.cost, {
-      budget: options.budget,
+      budget,
       baseIds,
-      inheritedUniqueLimit,
+      inheritedUniqueLimit: pickableInherited,
     });
     if (neighbours.length === 0) break;
     report(`第 ${rounds + 1} 巡: 近傍 ${neighbours.length} 通り`);
@@ -554,6 +638,9 @@ export async function optimizeSkills(
     marginals,
     positionCompetition,
     cost: context.cost.totalCost(selected(current, candidates)),
+    required,
+    requiredCost,
+    requiredDiff,
     races: evaluator.races,
     evaluations: evaluator.evaluations,
     rounds,

@@ -263,7 +263,8 @@ CLI では `--opponent -100` のように相手の強さを振れる。
 予算に敏感な理由は確かめていない。効き ÷ SP の順に買うと終わりのほうに値の張る強い金が並び、予算の切れ目で 8 頭がそろって強い金を 1 個持つか持たないかが変わる、と見ている。
 
 **だから予算は、固定の既定値ではなく、自分の持ち物に揃えて決める。** `DEFAULT_ROSTER_PROFILE` の 10000 は仮の値で、この測定で決めたものではない。
-MCP の `fill_opponents` は、`sp_budget` を省くと出走表の頭が持つ白・金・緑の表示 SP の平均を予算にする。CLI は `--sp-budget` で渡す（CLI の自分は典型の持ち物なので、揃える先が無い）。
+MCP の `fill_opponents` は、`sp_budget` を省くと出走表の頭が持つ白・金・緑の表示 SP の平均を予算にする。CLI は `--sp-budget` で渡す（`order-field` と `multi` の自分は典型の持ち物なので、揃える先が無い）。
+探索の CLI（`pnpm plan`、`pnpm optimize`）は、省くと走らせる前に決まる自分の予算に揃える（下の「足したもの」）。
 
 この実装の CLI で見ると、予算がつまみとして効いていることは確かめられる。
 `pnpm order-field --exp redraw --level strong --opponents roster --location 10008 --course 10808`（40 試行）で、自分を典型の 8 個にしたときの、ゴールで 9 着になった割合は次のとおり。
@@ -292,6 +293,10 @@ CLI の自分は典型の 8 個のままなので、この表は「名簿の相�
 - `FieldProfile.opponentModel`（`'typical'` か `'roster'`）と `FieldProfile.roster`（組み方）。名簿は `buildFieldBundle` と `opponentSettings` の `roster` で渡す。並列実行では `FieldSpec.roster`。
 - CLI の `--opponents roster`、`--sp-budget`、`--unique-level`、`--roster-file`。`pnpm order-field` では D（`--exp redraw`）にだけ、`pnpm run multi` では 2 と 4 に効く。
   `multi` は試行ごとに `opponentSettings` で相手を組み直し、最初の試行の 8 頭（キャラ名・脚質・スキル数）を出す。自分はスキルを持たないので、勝率は 0 % に張りつく。勝率を見るには持ち物のある自分が要る。
+- 探索の CLI（`pnpm plan`、`pnpm optimize`）にも同じ 4 つの口を足した（`--location`、`--course` でコースも選べる）。束の指定（`FieldSpec.roster`）に名簿を載せるので、探索の全候補が同じ名簿の相手と走る。
+  `--sp-budget` を省くと、相手の予算は自分の `--budget` になる（`plan` は家系の継承固有の費用を引いた残り。継承固有は白・金・緑ではなく、相手の予算に数えない）。
+  束は基準の設定から 1 度だけ作って使い回し、束の鍵に自分の持ち物は入らないので、探索の途中で自分が何を取ったかから相手の予算は決められない。走らせる前に決まる予算を使う目安である（探索が選ぶ継承固有と、ヒントの割引は見込まない）。
+  `--field off` と順位表の無いコースでは、理由を標準エラーに出して今までどおり（典型スキルの相手、または束なし）で回す。省いたときは束の指定の形も変わらない。
 - MCP の `win_rate` の `fill_opponents`（[mcp-design.md](mcp-design.md) の 3.3 節）。出走表が頭数に足りないときに、残りの相手を名簿から補う。渡さなければ今までと同じである。
   順位表が無いコースでは、CLI は典型スキルの相手に落とすが、MCP は補わずに出走表の頭だけで回し、理由を `notes` に書く。
 - [#56](https://github.com/promodeler314-a11y/raceemu/issues/56)（相手のプリセットと個体のローカル保存）の 2 番目（相手のプリセット）のうち、コースごとに所持スキルを載せる部分を、CLI で一部満たす。脚質の構成と強さの帯を選んで 8 頭を埋める画面は未着手である。

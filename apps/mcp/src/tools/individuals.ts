@@ -70,7 +70,7 @@ export function registerIndividualTools(server: McpServer, context: McpContext):
         prepared.skills.skills.map((s) => s.id),
         label,
       );
-      const warnings = describeRunner(prepared)['warnings'] as { code: string; message: string }[];
+      const warnings = describeRunner(prepared, context.costModel)['warnings'] as { code: string; message: string }[];
       const stored = result.individual;
       const text = [
         result.updated

@@ -3,10 +3,18 @@
  *   pnpm optimize [--budget 600] [--style SEN] [--stamina 1000]
  *                 [--opponent -100|0|100] [--selfconsistent on]
  *                 [--all on] [--dropped include]
+ *                 [--location 10006] [--course 10606]
+ *                 [--opponents roster] [--sp-budget N] [--unique-level N] [--roster-file PATH]
  *
  * `--all on` は候補を決め打ちの 20 個ではなく、買えるスキル全体にする
  * （docs/server-design.md 8 節の 7）。数百個になるので、サーバ側で回す前の
  * 実測はここで取る。`--dropped include` で ▲ も候補に残す。
+ *
+ * `--opponents roster` は相手を実在の育成ウマ娘から組む（docs/order-field.md 4.7 節）。
+ * 順位条件を判定するとき（`--field off` でないとき）に効き、`--sp-budget` を省くと
+ * 相手の SP 予算は `--budget` になる。順位表の無いコースでは典型スキルの相手に落とす。
+ * 理由は標準エラーに出る。育成計画を扱わない（家系の継承固有を持たない）ので、`--inherit` は
+ * `pnpm plan` だけにある。
  */
 import { loadGameData } from '../../data/src/node.ts';
 import { defaultFieldProfile } from '../../sim/src/field/field.ts';
@@ -23,6 +31,12 @@ import { classifySkills, FIDELITY_MARK } from '../../sim/src/skill/classify.ts';
 import { buildAllSkillCandidates } from './candidates.ts';
 import { createCostModel } from './cost.ts';
 import { optimizeSkills, pairedDiff, Evaluator, type OptimizeContext } from './optimize.ts';
+import {
+  rosterOpponentsLine,
+  rosterSettingsFromArgv,
+  searchFieldSpec,
+  type RosterCliSettings,
+} from './opponent-roster-setup.ts';
 
 function arg(name: string, fallback: string): string {
   const index = process.argv.indexOf(`--${name}`);
@@ -31,7 +45,21 @@ function arg(name: string, fallback: string): string {
 
 const data = loadGameData();
 const system = defaultSystemSetting();
-const track = { location: 10006, course: 10606, condition: 1, gateCount: 9 } as const;
+const track = {
+  location: Number(arg('location', '10006')),
+  course: Number(arg('course', '10606')),
+  condition: 1,
+  gateCount: 9,
+} as const;
+const trackLocation = data.trackData[track.location];
+const trackCourse = trackLocation?.courses[track.course];
+if (trackLocation === undefined || trackCourse === undefined) {
+  console.error(`コースが見つからない: --location ${track.location} --course ${track.course}`);
+  process.exit(1);
+}
+/** 既定のコースは今までの見出しのまま。 */
+const trackLabel =
+  track.location === 10006 && track.course === 10606 ? '東京芝2400' : `${trackLocation.name} ${trackCourse.name}`;
 const budget = Number(arg('budget', '600'));
 const stamina = Number(arg('stamina', '1000'));
 const style = arg('style', 'SEN') as 'NIGE' | 'SEN' | 'SASI' | 'OI';
@@ -91,19 +119,33 @@ if (useAllSkills) {
   );
 }
 
+// 名簿の相手の SP 予算は、省いたら `--budget`（自分が白・金・緑に使える SP）に揃える。
+// 相手の強さは SP の予算に敏感で、自分と食い違えば比べる意味が薄れる。相手の束は基準の設定から
+// 1 度だけ作り、全候補で使い回す（束の鍵に自分の持ち物は入らない）ので、探索の途中で
+// 自分が何を取ったかからは決められない。走らせる前に決まる `--budget` を使う。
+let rosterSettings: RosterCliSettings;
+try {
+  rosterSettings = rosterSettingsFromArgv(process.argv, { spBudget: budget });
+} catch (error) {
+  console.error((error as Error).message);
+  process.exit(1);
+}
+const field = searchFieldSpec({
+  settings: rosterSettings,
+  data,
+  useField,
+  profile: { ...defaultFieldProfile(9), offset: opponentOffset },
+  track,
+  seed: 9001,
+  samples: 64,
+});
+
 const pool = new WorkerPool(nodeWorkerFactory);
 const cost = createCostModel(data.skillsById);
 const context: OptimizeContext = {
   pool, system, cost, seed: 20260904,
   base: toSerializable({ ...setting, skills: [] }),
-  field: useField
-    ? {
-        profile: { ...defaultFieldProfile(9), offset: opponentOffset },
-        track,
-        seed: 9001,
-        samples: 64,
-      }
-    : null,
+  field,
 };
 const name = (id: string) => data.skillsById.get(id)?.name ?? id;
 
@@ -121,7 +163,8 @@ const marked = (id: string) => {
   return name(id) + (fidelity === undefined ? '' : FIDELITY_MARK[fidelity.fidelity]);
 };
 
-console.log(`東京芝2400 / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'} / 相手 ${opponentOffset >= 0 ? '+' : ''}${opponentOffset} / 自己整合 ${selfConsistent ? 'あり' : 'なし'}`);
+console.log(`${trackLabel} / 脚質 ${style} / スタミナ ${stamina} / 予算 ${budget} pt / 順位条件 ${useField ? '判定する' : '無視'} / 相手 ${opponentOffset >= 0 ? '+' : ''}${opponentOffset} / 自己整合 ${selfConsistent ? 'あり' : 'なし'}`);
+if (field?.roster !== undefined) console.log(rosterOpponentsLine(rosterSettings));
 console.log(
   `候補 ${candidates.length} 個: ` +
     (useAllSkills

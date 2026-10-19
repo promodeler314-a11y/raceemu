@@ -40,8 +40,12 @@ export interface FillPlan {
 }
 
 export type FillDecision =
-  /** 補わない（頭数が足りている、順位表が無い）。理由を `notes` に持つ。 */
-  | { readonly kind: 'none'; readonly notes: readonly string[] }
+  /**
+   * 補わない（頭数が足りている、順位表が無い）。理由を `notes` に持つ。
+   * `reasons` は理由だけで、「出走表の頭だけで回す」という `win_rate` 向けの前置きを含まない
+   * （`skill_gain` の勝率の対比較は、補えなければ回さない）。
+   */
+  | { readonly kind: 'none'; readonly notes: readonly string[]; readonly reasons: readonly string[] }
   | { readonly kind: 'fill'; readonly plan: FillPlan };
 
 /** 平均を整数にする。出走表の頭が 1 頭なら、その頭の値になる。 */
@@ -74,12 +78,8 @@ export function planFill(
 ): FillDecision {
   const filled = input.gate_count - runners.length;
   if (filled <= 0) {
-    return {
-      kind: 'none',
-      notes: [
-        `出走表がすでに ${runners.length} 頭で、gate_count（${input.gate_count}）以上なので、相手は補っていません。`,
-      ],
-    };
+    const reason = `出走表がすでに ${runners.length} 頭で、gate_count（${input.gate_count}）以上なので、相手は補っていません。`;
+    return { kind: 'none', notes: [reason], reasons: [reason] };
   }
 
   const lineupBudget = lineupSp.length === 0 ? 0 : meanOf(lineupSp);
@@ -93,7 +93,11 @@ export function planFill(
   };
   const prepared = prepareRoster(data, { model: 'roster', profile, rosterFile: null }, course, dir);
   if (prepared.roster === null) {
-    return { kind: 'none', notes: ['相手を補えませんでした（出走表の頭だけで回します）。', ...prepared.notes] };
+    return {
+      kind: 'none',
+      notes: ['相手を補えませんでした（出走表の頭だけで回します）。', ...prepared.notes],
+      reasons: prepared.notes,
+    };
   }
 
   const center: UmaStatus = {
@@ -259,11 +263,29 @@ export interface FillNotesInput {
 }
 
 /**
+ * 相手の組み方と能力の説明（応答の `notes` に書く 2 行）。
+ * `win_rate` の補いと、`skill_gain` の勝率の対比較が、同じ文面で相手を説明する。
+ * 名簿と得意脚質がデータからの推定であることを、必ずここに含める。
+ */
+export function opponentModelNotes(plan: FillPlan): string[] {
+  const { profile, center, fieldProfile } = plan;
+  return [
+    `相手の組み方: 実在のカードを脚質の枠ごとに引き（脚質の構成は組ごとに引き直し）、固有 Lv${profile.uniqueLevel}、進化スキル、` +
+      `脚質で効く継承固有 ${profile.inheritCount} 個を持たせ、SP ${profile.spBudget} の予算で、` +
+      `緑を先に ${profile.greenCount} 個買わせ、残りを白・金・緑の「効き÷SP」の順に使わせています` +
+      `（ヒントが出なかった扱いで ${Math.round(profile.hintMissRate * 100)}% は飛ばす。緑は先取りの分のほかにも買うので、1 頭の緑は ${profile.greenCount} 個より多い）。` +
+      '名簿と得意脚質はデータからの推定で、ゲームの出走者の実測ではありません。',
+    `相手の能力は、出走表の平均（スピード ${center.speed}、スタミナ ${center.stamina}、パワー ${center.power}、根性 ${center.guts}、賢さ ${center.wisdom}）を中心に、` +
+      `1 頭ごとに標準偏差 ${fieldProfile.sigma ?? 0} 程度ばらつかせ、やる気は引き直しています。適性はすべて A、人気は 5 番人気です。`,
+  ];
+}
+
+/**
  * 応答の `notes` に書く説明。補ったこと、組の数、相手の組み方、前提の限界（docs/mcp-design.md 4.2 節）。
  * 結果だけが 1 人歩きして、相手が推定であることが落ちるのを防ぐ。
  */
 export function fillNotes(plan: FillPlan, input: FillNotesInput): string[] {
-  const { profile, center, fieldProfile, budgetSource } = plan;
+  const { profile, budgetSource } = plan;
   const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
   const counts = input.groups.map((g) => g.count);
   const perGroup = Math.min(...counts) === Math.max(...counts) ? `${counts[0]}` : `${Math.min(...counts)}〜${Math.max(...counts)}`;
@@ -278,13 +300,7 @@ export function fillNotes(plan: FillPlan, input: FillNotesInput): string[] {
       (input.groups.length < input.requestedLineups
         ? `（試行が少ないため、組は指定の ${input.requestedLineups} 組から ${input.groups.length} 組に減らしました）`
         : ''),
-    `相手の組み方: 実在のカードを脚質の枠ごとに引き（脚質の構成は組ごとに引き直し）、固有 Lv${profile.uniqueLevel}、進化スキル、` +
-      `脚質で効く継承固有 ${profile.inheritCount} 個を持たせ、SP ${profile.spBudget} の予算で、` +
-      `緑を先に ${profile.greenCount} 個買わせ、残りを白・金・緑の「効き÷SP」の順に使わせています` +
-      `（ヒントが出なかった扱いで ${Math.round(profile.hintMissRate * 100)}% は飛ばす。緑は先取りの分のほかにも買うので、1 頭の緑は ${profile.greenCount} 個より多い）。` +
-      '名簿と得意脚質はデータからの推定で、ゲームの出走者の実測ではありません。',
-    `相手の能力は、出走表の平均（スピード ${center.speed}、スタミナ ${center.stamina}、パワー ${center.power}、根性 ${center.guts}、賢さ ${center.wisdom}）を中心に、` +
-      `1 頭ごとに標準偏差 ${fieldProfile.sigma ?? 0} 程度ばらつかせ、やる気は引き直しています。適性はすべて A、人気は 5 番人気です。`,
+    ...opponentModelNotes(plan),
     budgetSource === 'input'
       ? `SP の予算 ${profile.spBudget} は指定の値です。相手の強さは予算に敏感なので、出走表の頭の持ち物と見比べてください。`
       : budgetSource === 'lineup'

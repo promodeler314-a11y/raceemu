@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
+import { displaySpTotal } from '../../../../packages/sim/src/field/opponent-roster.ts';
 import { defaultSystemSetting, type TrackRef } from '../../../../packages/sim/src/setting.ts';
 import { assignPopularity, buildRaceSetting, STYLE_LABEL } from '../../../../packages/sim/src/multi/lineup.ts';
 import { OrderTally } from '../../../../packages/sim/src/multi/summary.ts';
@@ -87,11 +88,7 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
           prepared.runners.map((p) => p.runner),
           args.track,
           context.skillListDir,
-          prepared.runners.map((p) =>
-            p.skills.skills
-              .filter((skill) => skill.rarity === 'normal' || skill.rarity === 'rare')
-              .reduce((sum, skill) => sum + skill.sp, 0),
-          ),
+          prepared.runners.map((p) => displaySpTotal(p.skills.skills)),
         );
   const plan = fillDecision?.kind === 'fill' ? fillDecision.plan : null;
   const fillSkipped = fillDecision?.kind === 'none' ? fillDecision.notes : [];

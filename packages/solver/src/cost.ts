@@ -11,6 +11,14 @@ import type { SkillData } from '../../sim/src/skill/types.ts';
  *
  * ヒントレベルによる割引は、レベルごとの係数を掛けて求める。
  * 既定はレベル 0、つまり割引なしである。
+ *
+ * 継承進化のスキル（rarity 'special'、例 91101411 光れ！弾けろ！超新星爆発！）は
+ * skills.json に sp が無く、SkillData では 0 になる。これは継承版（同じ group の
+ * rarity 'inherit'、例 901411）を買って進化させるものなので、継承版の値段で数える。
+ * ヒントレベルは、継承進化のスキル自身の ID に指定があればそれを使い、無ければ継承版の ID のものを使う。
+ * ヒントは買える側（継承版）に付くもので、進化にポイントはかからないからである。
+ * 継承版が見つからなければ 0 のまま。
+ * 継承版と継承進化は同じグループなので、両方を挙げても総額は 1 つぶんである。
  */
 export interface CostModel {
   /** スキル ID から、そのスキルを持つまでの総額 */
@@ -34,12 +42,29 @@ export function createCostModel(
 ): CostModel {
   const hintLevels = options.hintLevels ?? {};
 
+  // 継承進化の値段の元になる継承版。使うときまで引かない（継承進化を数えない呼び出しが大半）。
+  let inheritByGroup: Map<number, SkillData> | undefined;
+  /** 継承進化なら、値段とヒントの元になる継承版。それ以外と、継承版が無い継承進化は undefined。 */
+  const inheritOf = (skill: SkillData): SkillData | undefined => {
+    if (skill.sp > 0 || skill.rarity !== 'special') return undefined;
+    if (inheritByGroup === undefined) {
+      inheritByGroup = new Map();
+      for (const candidate of skills.values()) {
+        if (candidate.rarity === 'inherit' && !inheritByGroup.has(candidate.group)) {
+          inheritByGroup.set(candidate.group, candidate);
+        }
+      }
+    }
+    return inheritByGroup.get(skill.group);
+  };
+
   const cost = (skillId: string): number => {
     const skill = skills.get(skillId);
     if (skill === undefined) return 0;
-    const level = hintLevels[skillId] ?? 0;
+    const source = inheritOf(skill);
+    const level = hintLevels[skillId] ?? (source === undefined ? undefined : hintLevels[source.id]) ?? 0;
     const factor = skillLvToFactor[Math.max(0, Math.min(skillLvToFactor.length - 1, level))]!;
-    return Math.trunc(skill.sp * factor);
+    return Math.trunc((source ?? skill).sp * factor);
   };
 
   const group = (skillId: string): number => skills.get(skillId)?.group ?? -1;

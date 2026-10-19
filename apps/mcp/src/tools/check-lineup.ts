@@ -1,6 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { distanceFitOf, surfaceFitOf } from '../../../../packages/sim/src/multi/lineup.ts';
+import type { CostModel } from '../../../../packages/solver/src/cost.ts';
 import type { McpContext } from '../context.ts';
 import {
   describeResolution,
@@ -13,7 +14,7 @@ import { markdownTable, toolResult } from '../result.ts';
 import { lineupEntrySchema, trackSchema } from '../schemas.ts';
 
 /** 点検の応答 1 頭ぶん。`save_individual` からも使う。 */
-export function describeRunner(prepared: PreparedRunner): Record<string, unknown> {
+export function describeRunner(prepared: PreparedRunner, costModel: CostModel): Record<string, unknown> {
   const { runner, skills, style } = prepared;
   return {
     index: prepared.index,
@@ -23,7 +24,7 @@ export function describeRunner(prepared: PreparedRunner): Record<string, unknown
     skillCount: skills.skills.length,
     unresolvedCount: skills.unresolved.length,
     // 入力した順。画像と見比べられるよう、畳む前のまま並べる。
-    skills: skills.entries.map(describeResolution),
+    skills: skills.entries.map((entry) => describeResolution(entry, costModel)),
     warnings: [
       ...skills.warnings.map((w) => ({ code: w.code, message: w.message })),
       ...prepared.issues.map((i) => ({ code: i.code, message: i.message })),
@@ -58,7 +59,7 @@ export function registerCheckLineup(server: McpServer, context: McpContext): voi
       const prepared = prepareLineup(lineup, context.resolver, context.individuals);
       const detail = track === undefined ? undefined : context.data.trackData[track.location]?.courses[track.course];
       const runners = prepared.runners.map((p) => {
-        const base = describeRunner(p);
+        const base = describeRunner(p, context.costModel);
         if (detail === undefined) return base;
         return {
           ...base,
