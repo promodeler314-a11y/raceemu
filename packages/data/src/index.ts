@@ -25,3 +25,4 @@ export function buildGameData(coursesJson: unknown, skillsJson: unknown): GameDa
 export * from './skill-match.ts';
 
 export * from './deck.ts';
+export * from './roster.ts';

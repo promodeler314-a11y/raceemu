@@ -23,14 +23,17 @@ describe('スキル分類', () => {
 });
 
 describe('番号→スキル ID の対応表', () => {
-  it('1832 件ぶんあり、大半がうちのスキルに対応付いている', () => {
+  it('2026-09-21 のモデルの 1832 件より減っておらず、大半がうちのスキルに対応付いている', () => {
+    // 件数そのものは固定しない。配布元が学習し直すたびに増える
+    // （2026-09-28 に 1897 件）。週次の取り直しのたびにここが落ちていた。
     const map: readonly (string | null)[] = JSON.parse(
       readFileSync('apps/api/assets/skill-classifier/label-map.json', 'utf8'),
     );
-    expect(map.length).toBe(1832);
+    expect(map.length).toBeGreaterThanOrEqual(1832);
     const matched = map.filter((id) => id !== null).length;
-    // 対応が無いのは対戦相手にしか掛からない debuff など（57 件）。
-    // scripts/build-skill-classifier-labels.ts の出力を参照。
-    expect(matched).toBeGreaterThan(1700);
+    // 対応が無いのは対戦相手にしか掛からない debuff など（57 件）。モデルが
+    // データより先に新しいスキルを覚えた週は、データが追いつくまでその分も増える。
+    // 件数と名前は scripts/update-skill-classifier.py の出力（取り直しの PR の本文）にある。
+    expect(matched / map.length).toBeGreaterThan(0.9);
   });
 });

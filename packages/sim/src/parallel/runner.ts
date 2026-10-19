@@ -39,6 +39,8 @@ function resolveField(
 ): FieldBundle | null {
   if (spec === null || spec === undefined) return null;
   // 相手を自分と同格にする指定のときは、束が自分のステータスに依る。鍵に混ぜる。
+  // 名簿（spec.roster）も JSON の中に入る。100 KB を超えうるので塊のたびに費用はかかるが、
+  // 束を作る費用（数百ミリ秒）に比べれば小さい。
   const key = JSON.stringify(
     spec.profile.matchSelf === true
       ? [spec, self.speed, self.stamina, self.power, self.guts, self.wisdom, self.condition,
@@ -53,6 +55,7 @@ function resolveField(
       self,
       skillPool: opponentSkillPool(data.skillsById),
       skillsById: data.skillsById,
+      roster: spec.roster ?? null,
     });
   }
   // Map は入れた順を覚えている。読んだものを入れ直して末尾へ送り、

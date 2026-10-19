@@ -1,11 +1,23 @@
 /**
  * 順位条件の判定が、相手の作り方でどう変わるかの実測。
  *   pnpm order-field [--trials 200] [--exp all|base|skills|together|redraw|live] [--level weak|strong|both] [--skipstart]
+ *   pnpm order-field --exp redraw --level strong --opponents roster --location 10008 --course 10808
  *
  * 脚質ごとに、代表的な順位条件が各フェーズで「1 フレームでも満たされた」試行の割合と、
  * 中盤末・終盤末・ゴールでの順位分布を出す。docs/order-field.md を参照。
+ *
+ * `--opponents roster` は D（redraw）の相手を、実在のカードから組んだものに替える
+ * （docs/order-field.md 4.7 節）。ほかに `--sp-budget`、`--unique-level`、`--roster-file`。
+ * A、B、C、E は相手を自前で組むので、この指定は効かない。
  */
 import { loadGameData } from '../../../data/src/node.ts';
+import {
+  prepareRoster,
+  ROSTER_FALLBACK_NOTE,
+  rosterFieldProfile,
+  rosterSettingsFromArgv,
+  type RosterCliSettings,
+} from '../../../solver/src/opponent-roster-setup.ts';
 import { RaceCalculator, goal, updateFrame } from '../calculator.ts';
 import type { Style } from '../data/constants.ts';
 import { runMultiRace, type MultiEntry } from '../multi/race.ts';
@@ -34,6 +46,14 @@ const levelArg = arg('level', 'both');
 const skipStart = process.argv.includes('--skipstart');
 const SAMPLES = 64;
 const SEED = 4649;
+
+let rosterSettings: RosterCliSettings;
+try {
+  rosterSettings = rosterSettingsFromArgv(process.argv);
+} catch (error) {
+  console.error((error as Error).message);
+  process.exit(1);
+}
 
 const data = loadGameData();
 const system = defaultSystemSetting();
@@ -292,7 +312,14 @@ const levels: Record<string, readonly number[]> = {
   weak: [1100, 900, 900, 600, 900],
   strong: [1400, 1100, 1100, 900, 1100],
 };
-const profile = defaultFieldProfile(track.gateCount);
+/** 名簿の相手は、そのコースの順位表と名簿が作れたときだけ使う。作れなければ典型スキルで回す。 */
+const prepared =
+  rosterSettings.model === 'roster'
+    ? prepareRoster(data, rosterSettings, track)
+    : { roster: null, notes: [] };
+for (const note of prepared.notes) console.error(note);
+if (rosterSettings.model === 'roster' && prepared.roster === null) console.error(ROSTER_FALLBACK_NOTE);
+const profile = rosterFieldProfile(defaultFieldProfile(track.gateCount), rosterSettings, prepared.roster);
 /** A の相手。引き直さず、1100-900-900-600-900 で同一。 */
 const fixed = fixedFieldProfile(track.gateCount);
 const lineup: Style[] = [];
@@ -300,6 +327,12 @@ for (const st of styles) for (let i = 0; i < fixed.counts[st]; i++) lineup.push(
 console.log(`${data.trackData[track.location]!.name} ${data.trackData[track.location]!.courses[track.course]!.name} / ${track.gateCount} 頭 / ${trials} 試行`);
 console.log(`相手の脚質構成（既定）: ${lineup.map((s) => label[s]).join(' ')}`);
 console.log(`相手のスキル: ${genericSkills.map((s) => s.name).join(', ')} ＋ 脚質ごとのもの`);
+if (profile.opponentModel === 'roster') {
+  console.log(
+    `D の相手: 実在のカードの名簿（SP 予算 ${rosterSettings.profile.spBudget}、固有 Lv${rosterSettings.profile.uniqueLevel}）。` +
+      'A、B、C、E は今までどおり。',
+  );
+}
 if (skipStart) console.log('出走前のフレームは判定から外している');
 
 const enabled = (name: string) => which === 'all' || which === name;
@@ -332,9 +365,13 @@ for (const [level, stats] of Object.entries(levels)) {
         seed: SEED,
         self,
         skillPool: opponentSkillPool(data.skillsById),
+        // 名簿の相手のときだけ渡す。typical の束は今までと同じ引数で作る。
+        ...(profile.opponentModel === 'roster'
+          ? { skillsById: data.skillsById, roster: prepared.roster }
+          : {}),
       });
       report(
-        `【D 引き直し】束ごとに構成・強さ・やる気・スキルを引き直して一緒に走らせ、自分も位置取りする / ${head}`,
+        `【D 引き直し${profile.opponentModel === 'roster' ? '・名簿' : ''}】束ごとに構成・強さ・やる気・スキルを引き直して一緒に走らせ、自分も位置取りする / ${head}`,
         runPaced(self, bundle, (i) => bundle.samples[i]!.styles, selfSkills),
       );
     }

@@ -5,14 +5,22 @@ import { defaultSystemSetting, type TrackRef } from '../../../../packages/sim/sr
 import { assignPopularity, buildRaceSetting, STYLE_LABEL } from '../../../../packages/sim/src/multi/lineup.ts';
 import { OrderTally } from '../../../../packages/sim/src/multi/summary.ts';
 import { MULTI_FIELDS, toSerializable, unpackMultiEntry } from '../../../../packages/sim/src/parallel/protocol.ts';
-import { SimulationCancelled } from '../../../../packages/sim/src/parallel/pool.ts';
+import { SimulationCancelled, type MultiOutput } from '../../../../packages/sim/src/parallel/pool.ts';
 import type { McpContext } from '../context.ts';
+import { buildFillGroups, describeOpponents, fillNotes, planFill, type FillGroup } from '../fill-opponents.ts';
 import { describeFailure } from './check-lineup.ts';
 import { prepareLineup, round, unresolvedOf } from '../lineup-service.ts';
 import { assignMarks, winRateStandardError, type Mark } from '../marks.ts';
 import { markdownTable, toolError, toolResult } from '../result.ts';
 import { progressReporter } from '../runtime.ts';
-import { lineupEntrySchema, trackSchema, type LineupEntry, type TrackInput } from '../schemas.ts';
+import {
+  fillOpponentsSchema,
+  lineupEntrySchema,
+  trackSchema,
+  type FillOpponentsInput,
+  type LineupEntry,
+  type TrackInput,
+} from '../schemas.ts';
 
 /** 1 回の呼び出しで引き受ける試行数の上限。仮の値（docs/mcp-design.md 9 節） */
 export const MAX_TRIALS = 20000;
@@ -29,6 +37,8 @@ export interface WinRateArgs {
   readonly trials: number;
   readonly seed: number;
   readonly skip_unresolved: boolean;
+  /** 渡すと、出走表が `gate_count` 頭に足りない分の相手を名簿から補う。省くと今までどおり。 */
+  readonly fill_opponents?: FillOpponentsInput;
 }
 
 interface Extra {
@@ -66,8 +76,30 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
     );
   }
 
-  const gateCount = prepared.runners.length;
-  if (gateCount < 2) return toolError('出走頭数は 2 頭以上にしてください。');
+  // 頭数が足りないときは、相手を名簿から補う（fill_opponents）。補えなければ、理由を持って出走表の頭だけで回す。
+  const lineupSize = prepared.runners.length;
+  const fillDecision =
+    args.fill_opponents === undefined
+      ? null
+      : planFill(
+          data,
+          args.fill_opponents,
+          prepared.runners.map((p) => p.runner),
+          args.track,
+          context.skillListDir,
+          prepared.runners.map((p) =>
+            p.skills.skills
+              .filter((skill) => skill.rarity === 'normal' || skill.rarity === 'rare')
+              .reduce((sum, skill) => sum + skill.sp, 0),
+          ),
+        );
+  const plan = fillDecision?.kind === 'fill' ? fillDecision.plan : null;
+  const fillSkipped = fillDecision?.kind === 'none' ? fillDecision.notes : [];
+
+  const gateCount = plan === null ? lineupSize : plan.gateCount;
+  if (gateCount < 2) {
+    return toolError(['出走頭数は 2 頭以上にしてください。', ...fillSkipped].join('\n'));
+  }
   const trackRef: TrackRef = {
     location: args.track.location,
     course: args.track.course,
@@ -82,39 +114,73 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
     buildRaceSetting(p.runner, p.skills.skills, trackRef, data.trackData, popularity[i]!),
   );
   const entries = built.map((b) => toSerializable(b.setting));
+
+  // 回す単位。補わないときは 1 つで、今までと同じ呼び出しになる。
+  // 補うときは、相手の組ごとに 1 つ。組ごとに相手と乱数の種が違い、試行を等分して持つ。
+  const fillGroups: FillGroup[] =
+    plan === null ? [] : buildFillGroups(plan, data, trackRef, args.seed, args.trials);
+  // 組は 1 つずつ順に回す（プールは同時に 2 つの実行を受けない）。1 組の試行数は少ないので、
+  // 既定の塊（32 試行）のままだと、空く Worker が出る。組の中を Worker の数で割って配る。
+  const runGroups =
+    plan === null
+      ? [{ entries, seed: args.seed, count: args.trials }]
+      : fillGroups.map((g) => ({
+          entries: [...entries, ...g.opponents.map(toSerializable)],
+          seed: g.raceSeed,
+          count: g.count,
+        }));
   const report = progressReporter(extra, '全頭同時のレースを回しています');
 
   const started = performance.now();
-  let output;
+  let outputs: MultiOutput[];
   try {
-    output = await context.runtime.run(
-      () =>
-        context.runtime.getPool().runMulti(entries, defaultSystemSetting(), {
-          count: args.trials,
-          seed: args.seed,
-          onProgress: report,
-          signal: extra.signal,
-        }),
-      extra.signal,
-    );
+    // 組をまたいで 1 つの順番待ちに入れる。間に別の呼び出しが割り込まないように。
+    outputs = await context.runtime.run(async () => {
+      const pool = context.runtime.getPool();
+      const done: MultiOutput[] = [];
+      let finished = 0;
+      for (const group of runGroups) {
+        const offset = finished;
+        done.push(
+          await pool.runMulti(group.entries, defaultSystemSetting(), {
+            count: group.count,
+            seed: group.seed,
+            ...(plan === null ? {} : { chunkSize: Math.max(1, Math.min(32, Math.ceil(group.count / pool.concurrency))) }),
+            // 進捗は全組を通した試行数で知らせる。
+            onProgress: (count) => report(offset + count, args.trials),
+            signal: extra.signal,
+          }),
+        );
+        finished += group.count;
+      }
+      return done;
+    }, extra.signal);
   } catch (error) {
     if (error instanceof SimulationCancelled || extra.signal.aborted) return toolError('中断されました。');
     throw error;
   }
   const elapsedMs = performance.now() - started;
 
-  const width = output.entries;
-  const tally = new OrderTally(width);
-  const trials = width === 0 ? 0 : output.packed.length / (width * MULTI_FIELDS);
-  for (let t = 0; t < trials; t++) {
-    const results = [...Array(width).keys()].map((index) => ({
-      index,
-      ...unpackMultiEntry(output.packed, (t * width + index) * MULTI_FIELDS),
-    }));
-    tally.add({ entries: results, states: [], frames: 0 });
+  // 全組の試行を 1 つの集計に足す。着順の回数は足し算で合わせられる。
+  // 出走表の頭は全組で同じ添字（0 から lineupSize - 1）にいる。補った相手は組ごとに別の馬なので、頭ごとには読まない。
+  const tally = new OrderTally(gateCount);
+  for (const output of outputs) {
+    const width = output.entries;
+    const groupTrials = width === 0 ? 0 : output.packed.length / (width * MULTI_FIELDS);
+    for (let t = 0; t < groupTrials; t++) {
+      const results = [...Array(width).keys()].map((index) => ({
+        index,
+        ...unpackMultiEntry(output.packed, (t * width + index) * MULTI_FIELDS),
+      }));
+      tally.add({ entries: results, states: [], frames: 0 });
+    }
   }
+  const trials = tally.trials;
   const summaries = tally.summarizeAll();
-  const markResult = assignMarks(summaries.map((s) => ({ winRate: s.winRate, trials: s.trials })));
+  // 印は、出走表の頭どうしの勝率の順位で付ける。補った相手は入れない。
+  const markResult = assignMarks(summaries.slice(0, lineupSize).map((s) => ({ winRate: s.winRate, trials: s.trials })));
+  // 出走表が 1 頭だけなら、順位づける相手がいない。◎ を付けると、勝率が 0 % でも本命に見える。
+  const marks: readonly Mark[] = plan !== null && lineupSize < 2 ? [''] : markResult.marks;
 
   const rows = prepared.runners.map((p, i) => {
     const s = summaries[i]!;
@@ -135,7 +201,7 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
       showRate: round(s.showRate, 4),
       meanOrder: round(s.meanOrder, 2),
       meanTime: round(s.meanTime, 3),
-      mark: markResult.marks[i] as Mark,
+      mark: marks[i] as Mark,
     };
   });
   // 勝率の高い順に並べて返す。
@@ -147,6 +213,22 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
   ];
   if (args.track.condition >= 2 && args.track.weather === 1) {
     notes.push(`馬場状態は ${CONDITION_LABEL[args.track.condition]} ですが、天候は晴のままです。雨を再現するなら weather を指定してください。`);
+  }
+  // 補った相手の説明。補えなかったときも、そう書く（指定したのに黙って補われていない、を避ける）。
+  const opponentsWinRate = summaries.slice(lineupSize).reduce((sum, s) => sum + s.winRate, 0);
+  const fillExample = plan === null ? [] : describeOpponents(fillGroups[0]!.opponents);
+  if (plan !== null) {
+    notes.push(
+      ...fillNotes(plan, {
+        lineupSize,
+        groups: fillGroups,
+        trials,
+        requestedLineups: plan.input.lineups,
+        opponentsWinRate,
+      }),
+    );
+  } else {
+    notes.push(...fillSkipped);
   }
   const dropped = prepared.runners.flatMap((p) => p.skills.unresolved.map((u) => ({ runner: p.runner.name, name: u.input })));
   if (dropped.length > 0) {
@@ -172,7 +254,7 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
 
   const pct = (x: number) => `${(100 * x).toFixed(1)}%`;
   const text = [
-    `${data.trackData[args.track.location]!.name} ${detail.name}（${CONDITION_LABEL[args.track.condition]}） / ${gateCount} 頭 / ${trials} 試行 / seed ${args.seed} / ${(elapsedMs / 1000).toFixed(1)} 秒`,
+    `${data.trackData[args.track.location]!.name} ${detail.name}（${CONDITION_LABEL[args.track.condition]}） / ${gateCount} 頭${plan === null ? '' : `（出走表 ${lineupSize} + 補った ${plan.filled}）`} / ${trials} 試行 / seed ${args.seed} / ${(elapsedMs / 1000).toFixed(1)} 秒`,
     '',
     markdownTable(
       ['印', '名前', '脚質', '勝率', '連対率', '複勝率', '平均着順', '平均タイム'],
@@ -188,6 +270,17 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
       ]),
     ),
     ...(closeNotes.length > 0 ? ['', '接戦:', ...closeNotes.map((n) => `- ${n}`)] : []),
+    ...(plan === null
+      ? []
+      : [
+          '',
+          '補った相手の例（1 組目。組ごとに引き直している）:',
+          '',
+          markdownTable(
+            ['枠', 'ウマ娘', '脚質', 'スキル数', '固有 Lv'],
+            fillExample.map((e) => [e.slot, e.charaName ?? '（典型スキル）', e.styleLabel, e.skillCount, e.uniqueLevel]),
+          ),
+        ]),
     '',
     '注意:',
     ...notes.map((n) => `- ${n}`),
@@ -214,6 +307,32 @@ export async function runWinRate(context: McpContext, args: WinRateArgs, extra: 
         gap: round(c.gap, 4),
       })),
       notes,
+      ...(args.fill_opponents === undefined
+        ? {}
+        : {
+            fillOpponents:
+              plan === null
+                ? { filled: 0, gateCount, reasons: fillSkipped }
+                : {
+                    gateCount: plan.gateCount,
+                    lineupSize,
+                    filled: plan.filled,
+                    lineups: fillGroups.length,
+                    trialsPerLineup: fillGroups.map((g) => g.count),
+                    keys: fillGroups.map((g) => ({ lineup: g.index, sample: g.sample, raceSeed: g.raceSeed })),
+                    profile: plan.profile,
+                    center: {
+                      speed: plan.center.speed,
+                      stamina: plan.center.stamina,
+                      power: plan.center.power,
+                      guts: plan.center.guts,
+                      wisdom: plan.center.wisdom,
+                      sigma: plan.fieldProfile.sigma ?? 0,
+                    },
+                    opponentsWinRate: round(opponentsWinRate, 4),
+                    example: fillExample,
+                  },
+          }),
     },
     text,
   );
@@ -228,9 +347,15 @@ export function registerWinRate(server: McpServer, context: McpContext): void {
         '出走する全頭を同時に走らせて、勝率・連対率（2 着以内）・複勝率（3 着以内）・平均着順を出し、予想印（◎○▲△☆）を付ける。' +
         '画面の「全頭同時」と同じ計算で、同じ出走表と seed なら画面と同じ数値になる。' +
         '2〜18 頭。数十秒から数分かかる。画像から書き起こした出走表は、先に check_lineup で点検すること。' +
-        '解決できないスキル名があれば、回さずに名前と近い候補を返す。他馬に効くデバフは計算できない。',
+        '解決できないスキル名があれば、回さずに名前と近い候補を返す。他馬に効くデバフは計算できない。' +
+        '出走表が実際の頭数に足りないときは fill_opponents で相手を補える（1 頭だけの出走表でもよい）。' +
+        '補う相手は、実在のカードの名簿から引いた推定の想定で、複数の組を引いて合算する。結果の notes に、相手の組み方が載る。',
       inputSchema: {
-        lineup: z.array(lineupEntrySchema).min(2).max(18).describe('出走表。全項目を書くか、保存した個体を individual で指す'),
+        lineup: z
+          .array(lineupEntrySchema)
+          .min(1)
+          .max(18)
+          .describe('出走表。全項目を書くか、保存した個体を individual で指す。2 頭以上（fill_opponents があれば 1 頭から）'),
         track: trackSchema,
         trials: z.number().int().min(1).max(MAX_TRIALS).default(DEFAULT_TRIALS).describe('試行回数。多いほど勝率の誤差が小さい'),
         seed: z.number().int().default(DEFAULT_SEED).describe('乱数の種。同じ値なら同じ結果になる'),
@@ -238,6 +363,12 @@ export function registerWinRate(server: McpServer, context: McpContext): void {
           .boolean()
           .default(false)
           .describe('true なら、解決できないスキルを落として回す。落としたものは notes に載る。利用者に確かめてから使う'),
+        fill_opponents: fillOpponentsSchema
+          .optional()
+          .describe(
+            '渡すと、出走表が gate_count 頭（既定 9）に足りない分の相手を、実在のカードの名簿から補う。' +
+              '固有 Lv・SP 予算・引く組の数を指定できる（全部省いてよい）。補った相手は推定で、表には出ない。省くと補わない',
+          ),
       },
       annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
     },
