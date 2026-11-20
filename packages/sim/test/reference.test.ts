@@ -101,6 +101,22 @@ settings['C_tokyo2400_sen_skills'] = {
   skills: referenceSkills,
 };
 
+/**
+ * 人気条件を無視させる効果（本家 2026-09-28）を通すケース。
+ *
+ * 中距離なので「All-in!!」の旗が立ち、1 番人気でも、勝負師の人気で排他だった 2 つの枠
+ * （共有の抽選）と伏兵○（人気>=4）が乗る。導出値はパッシブ無しで比べるので A と同じになり、
+ * 効くのはタイムの分布のほうである。
+ */
+settings['D_tokyo2400_sen_ignore_popularity'] = {
+  ...settings['A_tokyo2400_sen']!,
+  skills: ['All-in!!', '勝負師', '伏兵○'].map((name) => {
+    const found = data.skillsByName.get(name);
+    if (found === undefined || found.length === 0) throw new Error(`スキルが見つからない: ${name}`);
+    return found[0]!;
+  }),
+};
+
 function derivedValues(setting: RaceSetting): Record<string, number | number[]> {
   // 参照値は PassiveBonus() 無しで出力しているため、こちらも passive 無しで比較する。
   const s = new DerivedSetting(setting, emptyPassiveBonus(), data.trackData);

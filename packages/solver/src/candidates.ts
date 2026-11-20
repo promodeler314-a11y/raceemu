@@ -151,6 +151,12 @@ const CANDIDATE_RARITIES = new Set(['normal', 'rare', 'inherit']);
  * 人気の条件で落としてよいかは、候補どうしの組み合わせで変わる（人気条件を無視させる
  * 効果を持つスキルが候補にあれば、人気では落とせない）。そこで、候補になりうる
  * スキル全体と持っているスキルから、判定の前提を 1 回だけ作る。
+ *
+ * ただし、いまのデータで人気条件を無視させる効果を持つのは進化スキル（rarity evo）の
+ * 「All-in!!」だけで、候補（`CANDIDATE_RARITIES`）にも基準（固有だけ）にも入らない。
+ * 呼び出し側も持っているスキルを空にした設定を渡すので、育成計画と全スキルの経路では
+ * 人気で落とす判定は従来どおりになる。前提が効くのは、名簿の相手（持っているスキルで
+ * 判定する）と、前提を明示して `canTrigger` を呼ぶ場合である。
  */
 function createScreen(setting: DerivedSetting, options: PlanOptions, skills: readonly SkillData[]) {
   const includeIgnoredOnly = options.includeIgnoredOnly ?? false;

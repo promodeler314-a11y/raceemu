@@ -14,7 +14,9 @@
 2. Gradle のツールチェーン指定を、手元の JDK に合わせる。
    本家は JDK 17 を要求するが、手元に 21 しか無い場合は `gradle/libs.versions.toml` の `jvmTarget` を書き換える。
 
-3. `race/src/commonTest/kotlin/io/github/mee1080/umasim/race/calc2/` に、参照値を標準出力へ書き出すテストを置く。
+3. `race/src/commonTest/kotlin/io/github/mee1080/umasim/race/calc2/` に、隣の `RefDumpTest.kt` を写して置く。
+   2026-11 に本家 b33877ae で回し、既存の参照値を導出値はビット単位、タイムは誤差の範囲で再現できることを確かめてある。
+   ケースを足すときはこのファイルと `reference.test.ts` の両方に足す。
    出力する内容は次の三つである。
 
    - `=== DERIVED <ラベル>` に続けて `RaceSettingWithPassive` の導出値を `キー=値` の形で並べる。
@@ -27,8 +29,11 @@
    ./gradlew :race:jvmTest --tests '*RefDumpTest*' --rerun-tasks
    ```
 
+   Maven Central が 429 を返して依存の取得に失敗することがある。`--max-workers=1` を付けて回し直すと通る。
+
 5. `race/build/test-results/jvmTest/TEST-*.xml` の `system-out` から値を取り出し、
    `{ ラベル: { derived: {...}, times: {...} } }` の形の JSON にして本ファイルの隣に置く。
+   隣の `parse_refdump.py` がこれを行う（`python3 -I parse_refdump.py <TEST-*.xml> umasim-reference.json`）。
 
 ## いつ作り直すか
 
@@ -62,5 +67,13 @@
 | `A_tokyo2400_sen` | 東京 芝2400m | 先行 | なし |
 | `B_sapporo1200_nige` | 札幌 芝1200m | 逃げ | なし |
 | `C_tokyo2400_sen_skills` | 東京 芝2400m | 先行 | 6 種類 |
+| `D_tokyo2400_sen_ignore_popularity` | 東京 芝2400m | 先行 | All-in!!、勝負師、伏兵○ |
 
 C のスキルは、パッシブ、回復、目標速度上昇、ランダム発動区間、近似条件を一通り含むように選んである。
+
+D は、本家 2026-09-28 の人気条件を無視させる効果（`ignorePopularity`）と、共有の抽選（`random_lot_shared`）を通す。
+中距離なので「All-in!!」の旗が立ち、1 番人気でも勝負師の 2 つの枠と伏兵○が乗る。
+導出値はパッシブ無しで比べるので A と同じになり、効くのはタイムの分布のほうである。
+旗を立てないように移植側を壊すと、平均の差は 0.16 秒になり、許容幅（約 0.02 秒）を大きく超えて落ちる。
+
+いまの参照値は本家 e9bb2939（2026-11-16）で作った。A〜C の導出値はそれより前の版と小数第 9 位まで同じで、タイムの差は乱数の揺れの範囲だった。

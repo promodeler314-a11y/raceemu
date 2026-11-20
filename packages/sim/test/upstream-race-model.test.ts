@@ -137,6 +137,27 @@ describe('人気条件を無視する効果（ignorePopularity、「All-in!!」�
     expect(gambler.invokes.some((invoke) => invoke.isIgnorePopularity)).toBe(false);
   });
 
+  /**
+   * 旗が立つと両方の枝が成り立つスキル。docs/race-emulator-analysis.md の列挙と揃える。
+   * データの取り直しで増えたらここが落ちるので、文書の列挙も直す。
+   */
+  it('人気で二分された枝を持つスキルは、パッシブ 3 つとレース中の 2 種（固有と継承版）である', () => {
+    const split = data.skills.filter(
+      (skill) =>
+        skill.invokes.filter((invoke) =>
+          [...invoke.preConditions, ...invoke.conditions].flat().some((c) => c.type === 'popularity'),
+        ).length >= 2,
+    );
+    const passive = split.filter((skill) => skill.invokes.every((invoke) => invoke.isPassive));
+    const inRace = split.filter((skill) => !passive.includes(skill));
+    expect(passive.map((s) => s.name).sort()).toEqual(['やまっけ', '勝負師', '鉄火のギャンブラー'].sort());
+    expect(inRace.map((s) => `${s.name}|${s.rarity}`).sort()).toEqual(
+      ['Go☆Go☆for it!|inherit', 'Go☆Go☆for it!|unique', '剣ヶ峰より、狂気に嗤え|inherit', '剣ヶ峰より、狂気に嗤え|unique'].sort(),
+    );
+    // レース中のほうは 2 つの枠が同じクールダウンの ID を持つので、先の枠だけが発動する。
+    for (const skill of inRace) expect(new Set(skill.invokes.map((invoke) => invoke.coolDownId)).size).toBe(1);
+  });
+
   it('人気の条件は、合っていれば常に真、合っていなければ旗を見る', () => {
     const condition = new SkillCondition('popularity', '>=', 4);
     const stateWith = (flag: boolean) => ({ simulation: { ignorePopularity: flag } }) as unknown as RaceState;
@@ -178,9 +199,27 @@ describe('人気条件を無視する効果（ignorePopularity、「All-in!!」�
     expect(passiveOf([allIn, gambler], TOKYO_1600)).toEqual({ ignorePopularity: false, gamblerInvokes: [2] });
   });
 
-  it('旗の判定は乱数を引かない（効かない人気条件のスキルを足しても他の出目が変わらない）', () => {
-    const a = calculator.simulate(settingWith({ skills: [named('末脚')] }), { seed: 3, trial: 7 });
-    const b = calculator.simulate(settingWith({ skills: [named('末脚'), named('伏兵○')] }), { seed: 3, trial: 7 });
+  /**
+   * マイルでは「All-in!!」の 2 つの枠はどちらも条件（中距離）を満たさず、能力も旗も乗らない。
+   * 持たせると旗の判定（applyPassive の冒頭の `check`）だけが走るので、出目が一致すれば
+   * 旗の判定が他の乱数を動かしていないと言える。
+   */
+  it('旗の判定は乱数を引かない（旗の立たない「All-in!!」を足しても出目が変わらない）', () => {
+    const mile = (skills: SkillData[]) => settingWith({ skills, track: TOKYO_1600 });
+    for (const trial of [0, 7, 19]) {
+      const option = { seed: 3, trial };
+      const a = calculator.simulate(mile([named('末脚')]), option);
+      const b = calculator.simulate(mile([allIn, named('末脚')]), option);
+      expect(b.state.simulation.ignorePopularity).toBe(false);
+      expect(b.result.raceTime).toBe(a.result.raceTime);
+    }
+  });
+
+  it('旗が立たなければ、効かない人気条件のスキルを足しても差が 0 になる', () => {
+    const mile = (skills: SkillData[]) => settingWith({ skills, track: TOKYO_1600 });
+    const option = { seed: 3, trial: 7 };
+    const a = calculator.simulate(mile([allIn, named('末脚')]), option);
+    const b = calculator.simulate(mile([allIn, named('末脚'), named('伏兵○')]), option);
     expect(b.result.raceTime).toBe(a.result.raceTime);
   });
 });
@@ -297,5 +336,82 @@ describe('効果値の special 40 / 41 / 42', () => {
   it('42 はマイルか中距離なら 500 足す（灰雪の冠）', () => {
     const effect = new SkillEffect('targetSpeed', 3500, 42);
     expect([1, 2, 3, 4].map((type) => effect.calcValue(stateAt(type)))).toEqual([3500, 4000, 4000, 3500]);
+  });
+});
+
+describe('灰雪の冠の連鎖（is_activate_other_skill_detail を実データで）', () => {
+  /** 発動した枠の番号を、試行ごとに集める。 */
+  function firedInvokes(skill: SkillData, trial: number): number[] {
+    const { state } = calculator.simulate(settingWith({ skills: [skill] }), { seed: 11, trial, recordFrames: true });
+    const seen = new Set<number>();
+    for (const frame of state.simulation.frames) {
+      for (const triggered of frame.triggeredSkills) {
+        if (triggered.invoke.skill.id === skill.id) seen.add(triggered.invoke.invoke.index);
+      }
+    }
+    return [...seen].sort((a, b) => a - b);
+  }
+
+  const phaseLaterHalfTurf: RawSkillCondition[][] = [
+    [
+      { type: 'phase_laterhalf', operator: '==', value: 1 },
+      { type: 'ground_type', operator: '==', value: 1 },
+    ],
+  ];
+  const effects: RawSkillEffect[] = [{ type: 'targetSpeed', value: 2500, special: 42 }];
+
+  /** 本家 2026-11-16（e9bb2939）のデータの固有「灰雪の冠」の形。3 番の枠が 2 番の発動を見る。 */
+  function haiyuki(secondRate: [number, number]): SkillData {
+    return SkillData.fromRaw({
+      id: '100751',
+      name: '灰雪の冠',
+      rarity: 'unique',
+      group: 10075,
+      type: 'speed',
+      activateLot: 0,
+      invokes: [
+        { skillId: '100751', index: 1, conditions: phaseLaterHalfTurf, effects, duration: 3.0 },
+        {
+          skillId: '100751',
+          index: 2,
+          conditions: [
+            [
+              { type: 'is_activate_other_skill_detail', operator: '==', value: 1 },
+              { type: 'distance_rate', operator: '>=', value: secondRate[0] },
+              { type: 'distance_rate', operator: '<=', value: secondRate[1] },
+            ],
+          ],
+          effects,
+          duration: 3.0,
+        },
+        {
+          skillId: '100751',
+          index: 3,
+          conditions: [
+            [
+              { type: 'is_activate_other_skill_detail', operator: '==', value: 2 },
+              { type: 'phase', operator: '==', value: 3 },
+            ],
+          ],
+          effects,
+          duration: 3.0,
+        },
+      ],
+    });
+  }
+
+  it('手元のデータの灰雪の冠は、どの枠も毎回発動する', () => {
+    const skill = data.skills.find((s) => s.id === '100751')!;
+    const all = skill.invokes.map((invoke) => invoke.index);
+    for (const trial of [0, 1, 2, 3, 4]) expect(firedInvokes(skill, trial)).toEqual(all);
+  });
+
+  it('本家の 3 段の形では、3 つの枠が順に発動する', () => {
+    for (const trial of [0, 1, 2, 3, 4]) expect(firedInvokes(haiyuki([50, 51]), trial)).toEqual([1, 2, 3]);
+  });
+
+  it('2 番の枠が発動しなければ、3 番の枠も発動しない（値をスキル ID ではなく枠の番号として読む）', () => {
+    // 2 番の枠の区間を、来ない距離割合にする。値をスキル ID として読むと 3 番は 1 番の発動で通ってしまう。
+    for (const trial of [0, 1, 2]) expect(firedInvokes(haiyuki([200, 201]), trial)).toEqual([1]);
   });
 });
