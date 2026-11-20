@@ -190,6 +190,20 @@ export class SkillEffect {
       case 37:
         specialValue = value * 1.2;
         break;
+      case 40:
+        // 総盛り上がり Pt が高いほど効果が増える（極上の感謝を！）。最大値前提で固定する。
+        specialValue = value * 1.2;
+        break;
+      case 41:
+        // 合計演目 Lv が 30 以上なら効果が増える（名にし負う夢）。満たしている前提で固定する。
+        specialValue = value * 1.2;
+        break;
+      case 42: {
+        // マイルか中距離なら効果が増える（灰雪の冠）
+        const distanceType = state.setting.trackDetail.distanceType;
+        specialValue = distanceType === 2 || distanceType === 3 ? value + 500.0 : value;
+        break;
+      }
       default:
         specialValue = value;
         break;
@@ -234,6 +248,11 @@ export class Invoke {
   readonly isEvoDurationUp: boolean;
   readonly oonige: boolean;
   readonly isRunAtFullSpeedRandom: boolean;
+  /**
+   * 所持スキルの人気条件を無視させる効果（「All-in!!」）を持つか。
+   * 本家の `Invoke.isIgnorePopularity` にあたり、`calculator.ts` の `applyPassive` が見る。
+   */
+  readonly isIgnorePopularity: boolean;
   readonly coolDownId: string;
 
   constructor(
@@ -278,6 +297,7 @@ export class Invoke {
     this.isRunAtFullSpeedRandom = conditions.some((list) =>
       list.some((c) => c.type === 'run_at_full_speed_random'),
     );
+    this.isIgnorePopularity = has('ignorePopularity');
     this.coolDownId = conditions.some((list) =>
       list.some((c) => c.type === 'is_activate_other_skill_detail'),
     )

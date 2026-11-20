@@ -158,8 +158,13 @@ function rosterStyleOf(style: Style): RosterStyle {
   return style === 'OONIGE' ? 'NIGE' : style;
 }
 
-/** その脚質の相手がそのスキルを使えるか。出走前に決まる条件で絞る口（`field.ts` が組む）。 */
-export type RosterSkillFilter = (skill: SkillData, style: RosterStyle) => boolean;
+/**
+ * その脚質の相手がそのスキルを使えるか。出走前に決まる条件で絞る口（`field.ts` が組む）。
+ *
+ * `owned` はカードで決まって持っているスキル（固有と進化）である。人気条件を無視させる
+ * 効果（「All-in!!」）を持っていれば人気では絞らないので、判定に要る。
+ */
+export type RosterSkillFilter = (skill: SkillData, style: RosterStyle, owned: readonly SkillData[]) => boolean;
 
 interface Buyable {
   readonly skill: SkillData;
@@ -289,8 +294,10 @@ function buildSkills(
   usable: RosterSkillFilter | undefined,
 ): SkillData[] {
   const pool = poolOf(roster.ranking[style], skillsById);
-  const ok = (skill: SkillData): boolean => usable === undefined || usable(skill, style);
   const skills: SkillData[] = [];
+  // 固有と進化を積んだ時点の持ち物。絞り込みの判定に渡す（RosterSkillFilter の注記）。
+  let owned: readonly SkillData[] = [];
+  const ok = (skill: SkillData): boolean => usable === undefined || usable(skill, style, owned);
   const held = new Set<number>();
   const take = (skill: SkillData): void => {
     skills.push(skill);
@@ -304,6 +311,7 @@ function buildSkills(
     const evo = skillsById.get(id);
     if (evo !== undefined) take(evo);
   }
+  owned = [...skills];
   // 自分の継承固有は持てない。固有に無いときも、同じ group は飛ばす。
   const ownInherit = card.inheritId === null ? undefined : skillsById.get(card.inheritId);
   if (ownInherit !== undefined) held.add(ownInherit.group);

@@ -3,7 +3,7 @@ import { skillLvToFactor } from '../../sim/src/data/constants.ts';
 import type { DerivedSetting } from '../../sim/src/setting.ts';
 import { classifySkill } from '../../sim/src/skill/classify.ts';
 import type { SkillData } from '../../sim/src/skill/types.ts';
-import { canTrigger, dependsOnlyOnIgnored } from './screen.ts';
+import { canTrigger, dependsOnlyOnIgnored, screenContext } from './screen.ts';
 
 /**
  * 育成計画から候補を組み立てる。
@@ -139,20 +139,31 @@ function purchasableByName(
   return skillsByName.get(name)?.find((skill) => skill.sp > 0 && PURCHASABLE.has(skill.rarity));
 }
 
+/** 候補になりうるレア度。どの経路でも、買うスキルはこのどれかである。 */
+const CANDIDATE_RARITIES = new Set(['normal', 'rare', 'inherit']);
+
 /**
  * 走らせる前に候補から落とす判定。
  *
  * 育成計画からでも全スキルからでも、落とし方は同じである。
  * 落とした理由ごとに分けて持ち、画面が「何個を何の理由で外したか」を出せるようにする。
+ *
+ * 人気の条件で落としてよいかは、候補どうしの組み合わせで変わる（人気条件を無視させる
+ * 効果を持つスキルが候補にあれば、人気では落とせない）。そこで、候補になりうる
+ * スキル全体と持っているスキルから、判定の前提を 1 回だけ作る。
  */
-function createScreen(setting: DerivedSetting, options: PlanOptions) {
+function createScreen(setting: DerivedSetting, options: PlanOptions, skills: readonly SkillData[]) {
   const includeIgnoredOnly = options.includeIgnoredOnly ?? false;
   const excludeDropped = options.excludeDropped ?? false;
   const hasField = options.hasField ?? false;
   const byIgnored: string[] = [];
   const byFidelity: string[] = [];
+  const context = screenContext(
+    setting,
+    skills.filter((skill) => skill.sp > 0 && CANDIDATE_RARITIES.has(skill.rarity)),
+  );
   const usable = (skill: SkillData): boolean => {
-    if (!canTrigger(skill, setting)) return false;
+    if (!canTrigger(skill, setting, context)) return false;
     if (!includeIgnoredOnly && dependsOnlyOnIgnored(skill, setting)) {
       byIgnored.push(skill.id);
       return false;
@@ -224,7 +235,7 @@ export function buildAllSkillCandidates(
   const openWhites = options.openWhites ?? true;
   const openGolds = options.openGolds ?? true;
   const openInheritedUniques = options.openInheritedUniques ?? true;
-  const screen = createScreen(setting, options);
+  const screen = createScreen(setting, options, skills);
   const { best, offer } = createOffer();
 
   for (const skill of skills) {
@@ -260,7 +271,7 @@ export function buildPlanCandidates(
 ): PlanCandidates {
   const openWhites = options.openWhites ?? true;
   const openInheritedUniques = options.openInheritedUniques ?? true;
-  const screen = createScreen(setting, options);
+  const screen = createScreen(setting, options, skills);
   const usable = screen.usable;
   const { best, offer } = createOffer();
 

@@ -206,6 +206,11 @@ export class RaceSimulationState {
   skillTriggerCount = new SkillTriggerCount();
   passiveTriggered = 0;
   healTriggerCount = 0;
+  /**
+   * 所持スキルの人気条件を無視するか。出走前に `applyPassive` が立てる（「All-in!!」）。
+   * 立っていれば `popularity` の条件は常に満たす（本家 `RaceSimulationState.ignorePopularity`）。
+   */
+  ignorePopularity = false;
   sectionTargetSpeedRandoms: Record<number, number> = {};
   evoDurationMultiplier = 1.0;
 

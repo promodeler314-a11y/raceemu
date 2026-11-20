@@ -298,7 +298,9 @@ export const ignoreConditions: Readonly<Record<string, string>> = {
   season: '季節条件は無視',
   weather: '天候条件は無視',
   is_dirtgrade: '交流重賞条件はレース場のみ判定',
-  fan_count: 'ファン数条件は無視',
+  // 本家は 2026-11-16 に重複していた「ファン数条件は無視」を消し、後ろの文だけを残した。
+  // 重複した鍵は後ろが勝つので、本家の表示はもともとこちらの文である。
+  fan_count: 'ファン数は満たす前提',
   order: '順位条件。フィールドが無ければ満たしている前提',
   order_rate: '順位条件。フィールドが無ければ満たしている前提',
   order_rate_in10_continue: '順位条件。フィールドが無ければ満たしている前提',
