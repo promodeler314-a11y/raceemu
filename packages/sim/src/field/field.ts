@@ -10,7 +10,7 @@ import {
   type TrackRef,
   type UmaStatus,
 } from '../setting.ts';
-import { canTriggerStatic } from '../skill/static-screen.ts';
+import { canTriggerStatic, staticScreenContext } from '../skill/static-screen.ts';
 import type { SkillData } from '../skill/types.ts';
 import {
   DEFAULT_ROSTER_PROFILE,
@@ -363,10 +363,7 @@ function rosterSkillFilter(
 ): RosterSkillFilter {
   const derived = new Map<RosterStyle, DerivedSetting>();
   const memo = new Map<string, boolean>();
-  return (skill, style) => {
-    const key = `${style}:${skill.id}`;
-    const hit = memo.get(key);
-    if (hit !== undefined) return hit;
+  const settingOf = (style: RosterStyle): DerivedSetting => {
     let setting = derived.get(style);
     if (setting === undefined) {
       setting = new DerivedSetting(
@@ -385,7 +382,16 @@ function rosterSkillFilter(
       );
       derived.set(style, setting);
     }
-    const ok = canTriggerStatic(skill, setting);
+    return setting;
+  };
+  return (skill, style, owned) => {
+    const setting = settingOf(style);
+    // 人気で絞ってよいかは、持っている固有と進化に人気条件を無視させる効果があるかで変わる。
+    const context = staticScreenContext(setting, [...owned, skill]);
+    const key = `${style}:${context.popularityFixed ? 1 : 0}:${skill.id}`;
+    const hit = memo.get(key);
+    if (hit !== undefined) return hit;
+    const ok = canTriggerStatic(skill, setting, context);
     memo.set(key, ok);
     return ok;
   };

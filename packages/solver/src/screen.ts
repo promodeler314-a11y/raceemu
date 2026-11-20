@@ -1,7 +1,12 @@
 import type { DerivedSetting } from '../../sim/src/setting.ts';
 import { ignoreConditions } from '../../sim/src/skill/approximate.ts';
 import { staticConditionTarget } from '../../sim/src/skill/condition.ts';
-import type { SkillCondition, SkillData } from '../../sim/src/skill/types.ts';
+import {
+  canTriggerStatic,
+  staticScreenContext,
+  type StaticScreenContext,
+} from '../../sim/src/skill/static-screen.ts';
+import type { SkillData } from '../../sim/src/skill/types.ts';
 
 /**
  * 走らせずに候補から外せるスキルを落とす。
@@ -14,35 +19,39 @@ import type { SkillCondition, SkillData } from '../../sim/src/skill/types.ts';
  * 判定は片側だけ確かである。ここで落としたものは確かに発動しないが、
  * 残ったものが発動するとは限らない。走ってみないと決まらない条件は
  * 満たされうるものとして扱う。
+ *
+ * 判定の本体は `packages/sim/src/skill/static-screen.ts` にある。名簿の相手も同じものを使う。
  */
 
-/** 条件の並びは、グループ内が「かつ」、グループどうしが「または」である。 */
-function groupPossible(group: readonly SkillCondition[], setting: DerivedSetting): boolean {
-  return group.every((condition) => {
-    const target = staticConditionTarget(condition.type, setting);
-    return target === null || condition.check(target);
-  });
+export type ScreenContext = StaticScreenContext;
+
+/**
+ * 判定の前提を作る。`pool` には一緒に持ちうる候補をすべて渡す。
+ *
+ * 人気は、人気条件を無視させる効果（「All-in!!」）を設定か候補のどれかが持ちうるなら
+ * 判定しない。持っているだけで人気の条件が満たされるので、人気で落とすと片側の保証が崩れる。
+ */
+export function screenContext(setting: DerivedSetting, pool: Iterable<SkillData> = []): ScreenContext {
+  return staticScreenContext(setting, pool);
 }
 
-function listPossible(groups: readonly SkillCondition[][], setting: DerivedSetting): boolean {
-  if (groups.length === 0) return true;
-  return groups.some((group) => groupPossible(group, setting));
+/**
+ * この設定で発動しうるか。発動しようがないときだけ false を返す。
+ *
+ * `context` を省くと「このスキルを 1 つ足したとき」の前提で判定する。
+ */
+export function canTrigger(skill: SkillData, setting: DerivedSetting, context?: ScreenContext): boolean {
+  return canTriggerStatic(skill, setting, context);
 }
 
-/** この設定で発動しうるか。発動しようがないときだけ false を返す。 */
-export function canTrigger(skill: SkillData, setting: DerivedSetting): boolean {
-  return skill.invokes.some(
-    (invoke) =>
-      listPossible(invoke.preConditions, setting) && listPossible(invoke.conditions, setting),
-  );
-}
-
-/** 発動しようがないものを落とす。 */
+/** 発動しようがないものを落とす。渡したスキルが互いに一緒に持たれうるものとして判定する。 */
 export function screenSkills(
   skills: Iterable<SkillData>,
   setting: DerivedSetting,
 ): SkillData[] {
-  return [...skills].filter((skill) => canTrigger(skill, setting));
+  const list = [...skills];
+  const context = screenContext(setting, list);
+  return list.filter((skill) => canTrigger(skill, setting, context));
 }
 
 /**

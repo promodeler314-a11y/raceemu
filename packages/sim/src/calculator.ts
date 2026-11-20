@@ -117,7 +117,8 @@ export class RaceCalculator {
     const passiveBonus = applyPassive(setting, emptyDerived, simulation, this.system, rng, this.trackData);
     const derived = new DerivedSetting(setting, passiveBonus, this.trackData);
     simulation.passiveTriggered = passiveBonus.skills.length;
-    for (const skill of passiveBonus.skills) simulation.coolDownMap.set(skill.invoke.coolDownId, 0);
+    // パッシブをクールダウンの記録に入れるのは、ここではなく triggerStartSkills で
+    // 発動させたときである（本家 2026-09-28 の変更。同じ記録の ID を持つ枠は 1 回しか発動しない）。
 
     // フィールドがあるときの先頭馬は束から取る。自前の仮想先頭馬は作らない。
     let virtualLeader: RaceState | null = null;
@@ -260,6 +261,12 @@ function applyPassive(
     null,
     false,
   );
+  // 人気条件を無視させる効果。パッシブの判定より先に立てるので、人気を条件に持つ
+  // パッシブ（勝負師など）にも効く。本家と同じく `check`（conditions）だけを見て、
+  // preConditions は見ない。
+  if (simulation.invokedSkills.some((skill) => skill.invoke.isIgnorePopularity && skill.check(stateForCheck))) {
+    simulation.ignorePopularity = true;
+  }
   for (const skill of simulation.invokedSkills) {
     if (skill.invoke.isPassive && skill.check(stateForCheck)) {
       const invoke = skill.invoke;
@@ -312,16 +319,29 @@ function pushFrame(state: RaceState, frame: RaceFrame): void {
   if (state.recordFrames) state.simulation.frames.push(frame);
 }
 
+/**
+ * 出走時に発動するもの（パッシブと出遅れ系）を発動させる。
+ *
+ * 同じクールダウンの ID（多くはスキル ID）を持つ枠は、最初の 1 つだけを発動させる。
+ * 枠が 2 つあるスキルで 2 回発動として数えたり、出遅れの倍率を二重に掛けたりしないためで、
+ * 本家の 2026-09-28 の変更（RaceCalculator.kt の triggerStartSkills）に合わせた。
+ * パッシブの能力加算（applyPassive）は枠ごとのままで、ここでは変わらない。
+ */
 function triggerStartSkills(state: RaceState): void {
   const skills: TriggeredSkill[] = [];
+  const coolDownMap = state.simulation.coolDownMap;
   for (const skill of state.setting.passiveBonus.skills) {
-    if (!skill.invoke.isStart) skills.push(...triggerSkill(state, skill as InvokedSkill));
+    if (!skill.invoke.isStart && !coolDownMap.has(skill.invoke.coolDownId)) {
+      skills.push(...triggerSkill(state, skill as InvokedSkill));
+      coolDownMap.set(skill.invoke.coolDownId, 0);
+    }
   }
   for (const skill of state.simulation.invokedSkills) {
-    if (skill.invoke.isStart) {
+    if (skill.invoke.isStart && !coolDownMap.has(skill.invoke.coolDownId)) {
       state.simulation.startDelay *= skill.invoke.startMultiply(state);
       state.simulation.startDelay += skill.invoke.startAdd(state);
       skills.push(...triggerSkill(state, skill));
+      coolDownMap.set(skill.invoke.coolDownId, 0);
     }
   }
   const frame = newFrame(state);

@@ -84,8 +84,15 @@ export interface FidelityOptions {
  * `compileCondition` の `default` に落ち、`unsupportedConditions` に貯まる。
  * ここに載せておくのは、走らせる前から「この型は落ちる」と分かるようにするためである。
  * `packages/sim/test/skill-coverage.test.ts` がこの表と実際に貯まる集合を突き合わせる。
+ *
+ * - `activate_count_param_skill`：能力を引き出すスキル（緑）の発動回数（「熱烈峻厳」の 3 倍の枝）。
+ *   本家 SkillChecker.kt も分岐を持たず、条件ごと落とす。満たした扱いになるので、
+ *   この枝は常に効く。
+ *
+ * 以前ここにあった `succession_skill_count`（「連綿」）は、本家が 2026-09-28 に実装したので
+ * 移植版も実装した（condition.ts）。
  */
-export const knownUnsupportedTypes: readonly string[] = ['succession_skill_count'];
+export const knownUnsupportedTypes: readonly string[] = ['activate_count_param_skill'];
 
 /** 順位と距離差の族。フィールドを渡したときだけ判定できる。 */
 const FIELD_DEPENDENT_TYPES: ReadonlySet<string> = new Set([

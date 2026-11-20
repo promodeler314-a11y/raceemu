@@ -112,6 +112,8 @@ describe('スキルの再現度の分類', () => {
   it('条件を落としている型が既知のものだけである（順位条件を判定するとき）', () => {
     expect(typesByFidelity(true).dropped).toEqual([
       'activate_count_all_team',
+      // 緑の発動回数（「熱烈峻厳」）。本家も分岐を持たず、条件ごと落とす。
+      'activate_count_param_skill',
       'fan_count',
       'grade',
       'is_behind_in',
@@ -123,7 +125,6 @@ describe('スキルの再現度の分類', () => {
       'same_skill_horse_count',
       // 季節・天候・時刻は指定が無ければ落ちる。baseSetting は指定していない。
       'season',
-      'succession_skill_count',
       'time',
       'visiblehorse',
       'weather',
@@ -189,8 +190,10 @@ describe('スキルの再現度の分類', () => {
     );
     // 同じ作戦の頭数は、そもそも持っていない情報なので落としている。
     expect(classifySkill(named('おひとり様◎'), derived, withField).fidelity).toBe('dropped');
-    // 本家も未対応の型を持つスキル。
-    expect(classifySkill(named('連綿'), derived, withField).fidelity).toBe('dropped');
+    // 本家も未対応の型（緑の発動回数）を持つスキル。
+    expect(classifySkill(named('熱烈峻厳'), derived, withField).fidelity).toBe('dropped');
+    // 継承スキルの数は、本家が実装したので移植版も判定している。
+    expect(classifySkill(named('連綿'), derived, withField).fidelity).toBe('exact');
   });
 
   it('順位条件を判定するかどうかで、順位条件つきスキルの分類が動く', () => {

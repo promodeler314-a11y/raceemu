@@ -21,7 +21,10 @@ export interface RandomEntry {
 export interface SkillScratch {
   /** ランダム発動区間。同じ区間を何度も計算し直さないために覚えておく。 */
   readonly areas: Map<string, RandomEntry[]>;
-  /** `random_lot_shared` の抽選結果（0 から 99）。まだ引いていなければ null。 */
+  /**
+   * `random_lot_shared` の抽選結果（0 から 99）。まだ引いていなければ null。
+   * 本家の `CalculatedConditions.sharedLot` にあたる。
+   */
   sharedLot: number | null;
 }
 
@@ -176,8 +179,10 @@ export function staticConditionTarget(type: string, setting: DerivedSetting): nu
       return base.uma.wisdom;
     case 'course_distance':
       return setting.courseLength;
-    case 'popularity':
-      return base.uma.popularity;
+    // 人気（popularity）はここに載せない。出走前に値は決まるが、「All-in!!」が
+    // 人気条件を無視させるとレース中に満たす側へ倒れる（compileCondition の注記）。
+    // ここに載せると、走らせずに候補を落とす判定が、人気を無視されて発動するものまで落とす。
+    // 人気で落とす判定は static-screen.ts が、無視されうるかを見てから行う。
     case 'corner_count':
       return track.corners.length;
     case 'is_tight_track':
@@ -245,6 +250,31 @@ function compileCondition(
       return checkInRace(condition, (s) => (s.simulation.hasTemptation ? 1 : 0));
     case 'remain_distance':
       return checkInRace(condition, (s) => Math.trunc(setting.courseLength - s.simulation.startPosition));
+
+    /**
+     * 人気。値は出走前に決まるが、`simulation.ignorePopularity` が立っていれば常に満たす。
+     *
+     * 旗は出走前に `applyPassive`（calculator.ts）が、人気条件を無視させる効果
+     * （「All-in!!」）を持つ枠の条件を見て立てる。組み立ての時点ではまだ決まって
+     * いないので、レース中の判定にしてある（本家 SkillChecker.kt の 2026-09-28 の変更）。
+     * 人気が合っていれば旗を見るまでもないので、そのときは常に真を返す。
+     */
+    case 'popularity': {
+      if (condition.check(base.uma.popularity)) return ALWAYS;
+      return (s) => s.simulation.ignorePopularity;
+    }
+
+    /**
+     * 所持している継承スキルの数（「連綿」）。
+     *
+     * 本家と同じく、持っているスキルのうち rarity 'inherit'（固有の継承版）だけを数える。
+     * 継承進化（rarity 'special'）と、継承で足した白は数えない。
+     *
+     * 出走前に値が決まるが、`staticConditionTarget` には載せない。あちらは候補を 1 つずつ
+     * 足して見る判定にも使われ、組み合わせで継承スキルが増えると答えが変わるためである。
+     */
+    case 'succession_skill_count':
+      return preChecked(condition, base.skills.filter((s) => s.rarity === 'inherit').length);
 
     case 'distance_rate_after_random':
       return withAssert(condition, '==', null, () =>
@@ -424,11 +454,13 @@ function compileCondition(
      *
      * いま持っているのは「勝負師」「やまっけ」「鉄火のギャンブラー」の 3 つで、
      * どれも人気で二分された枝を持つ（人気 4 番以下なら 60%、3 番以内なら 30%
-     * など）。枝は人気で排他なので、実のところ引く回数の違いは結果に出ない。
-     * それでも 1 回にしておくのは、名前のとおりの意味だからである。
+     * など）。ふだんは枝が人気で排他だが、「All-in!!」で人気条件が無視されると
+     * 両方の枝が成り立ち、同じ出目と比べることが結果に効く。
      *
-     * 本家（`SkillChecker.kt`）はこの型に分岐を持たず、条件ごと落としている。
-     * 落とすと条件を満たした扱いになるので、この 3 つは必ず発動していた。
+     * 本家（`SkillChecker.kt`）は 2026-09-28 に同じ扱いを入れた（それまでは条件ごと
+     * 落とし、この 3 つは必ず発動していた）。本家はスキルごとに `CalculatedConditions`
+     * を作るときに 1 回引く。こちらはスキル専用の乱数列から、最初に要ったときに 1 回引く。
+     * 列が他と独立しているので、引く時機の違いは出目の分布にも他の乱数にも効かない。
      */
     case 'random_lot_shared':
       return withAssert(condition, '==', null, () => {
@@ -481,8 +513,21 @@ function compileCondition(
         return (s) => (s.simulation.specialState[key] ?? 0) > 0;
       });
 
+    /**
+     * 同じスキルの別の枠が発動したか。値は枠の番号（`Invoke.index`）である。
+     *
+     * 見るのはその枠のクールダウンの ID で、枠が見つからなければスキル ID にする
+     * （本家 SkillChecker.kt の 2026-11-16 の変更）。この条件を持つ枠のクールダウンの ID は
+     * 「スキル ID-枠の番号」になる（`Invoke.coolDownId`）。1 番の枠はこの条件を持たないので
+     * ID はスキル ID のままで、値が 1 なら以前の判定と同じ答えになる。
+     * 2 以上の値は 2 番以降の枠の発動を見る。本家 2026-11-16 のデータでは「灰雪の冠」の
+     * 3 番の枠が `==2` を持ち、2 番の枠（ID は「スキル ID-2」）の発動を待つ。
+     */
     case 'is_activate_other_skill_detail':
-      return withAssert(condition, '==', 1, () => (s) => s.simulation.coolDownMap.has(skill.id));
+      return withAssert(condition, '==', null, () => {
+        const target = skill.invokes.find((invoke) => invoke.index === condition.value)?.coolDownId ?? skill.id;
+        return (s) => s.simulation.coolDownMap.has(target);
+      });
 
     case 'order':
       // フィールドが無いときは、本家と同じく満たしている前提にする。

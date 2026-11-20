@@ -45,8 +45,11 @@ const baseSetting: RaceSetting = {
   positionKeepRate: 100,
 };
 
-/** 状態を見ない述語なので、渡す状態は使われない。 */
-const NO_STATE = undefined as unknown as RaceState;
+/**
+ * 抽選の条件は状態を見ないが、人気の条件は人気が合わないとき
+ * `simulation.ignorePopularity`（「All-in!!」で立つ旗）を見る。旗の立っていない状態だけを渡す。
+ */
+const NO_STATE = { simulation: { ignorePopularity: false } } as unknown as RaceState;
 
 const TRIALS = 2000;
 

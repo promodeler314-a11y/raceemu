@@ -92,9 +92,10 @@ describe('スキル条件の網羅', () => {
    * 存在に気付けない**。条件（`unsupportedConditions`）と違い、落ちたことが
    * 記録されないためである。
    *
-   * `(50)` は「All-in!!」（[死中求活]ナカヤマフェスタの進化）が持つ、
-   * 所持スキルの人気条件を無視する効果である。本家も移植版も未対応で、
-   * この 1 つだけが分かっている。
+   * 以前は `(50)`（「All-in!!」の、所持スキルの人気条件を無視する効果）が 1 つだけ
+   * ここに残っていた。本家が 2026-09-28 に `ignorePopularity` と名前を付けて `effects` に
+   * 載せ、移植版も実装した（`Invoke.isIgnorePopularity`、calculator.ts の `applyPassive`）。
+   * いまは名前の付いていない効果は 1 つも無い。
    *
    * データを取り直して新しい番号が現れたらここが落ちる。そのとき、本家が
    * 名前を付けて `effects` に載せたのなら、代わりに実装する。
@@ -113,7 +114,35 @@ describe('スキル条件の網羅', () => {
         }
       }
     }
-    expect([...found].sort()).toEqual(['104901311 All-in!! (50)']);
+    expect([...found].sort()).toEqual([]);
+  });
+
+  /**
+   * 効果値の special の番号。
+   *
+   * `SkillEffect.calcValue` は知らない番号を `default` で素の値のまま計算するので、
+   * データに新しい番号が増えても**何も落ちず、黙って値がずれる**。実際、special 40/41/42 は
+   * データに先に載り、分岐が無いまま緑だった（本家 2026-11-16 の変更で気付いた）。
+   *
+   * 分岐の一覧を実装と試験の 2 か所に持つとずれるので、`calcValue` の最初の `switch` から
+   * `case` の番号を直に読み、データに現れる番号がその中に収まることを見る。
+   */
+  it('データに現れる special の番号に、すべて calcValue の分岐がある', () => {
+    const source = readFileSync('packages/sim/src/skill/types.ts', 'utf8');
+    const start = source.indexOf('calcValue(state: RaceState): number {');
+    expect(start, 'calcValue が見つからない').toBeGreaterThan(0);
+    const body = source.slice(start, source.indexOf('default:', start));
+    expect(body).toContain('switch (this.special)');
+    const handled = new Set([...body.matchAll(/case (\d+):/g)].map((match) => Number(match[1])));
+    const used = new Set<number>();
+    for (const skill of data.skills) {
+      for (const invoke of skill.invokes) {
+        for (const effect of invoke.effects) used.add(effect.special);
+      }
+    }
+    expect([...used].filter((special) => !handled.has(special)).sort((a, b) => a - b)).toEqual([]);
+    // 読み取りが壊れて空の集合になり、素通りするのを防ぐ。
+    expect(handled.has(42)).toBe(true);
   });
 });
 
